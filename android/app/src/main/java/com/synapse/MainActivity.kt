@@ -19,9 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.requestNotificationPermissionIfNeeded
-import com.synapse.notifications.NotificationHelper
 import com.synapse.auth.AuthState
-import com.synapse.auth.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -31,8 +29,7 @@ private const val TAG = "MainActivity"
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    @javax.inject.Inject lateinit var notificationHelper: NotificationHelper
-    private val authViewModel: AuthViewModel by viewModels()
+    private val mainVm: MainActivityViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,11 +43,11 @@ class MainActivity : ComponentActivity() {
                             .padding(innerPadding)
                             .fillMaxSize()
                     ) {
-                        Button(onClick = { notificationHelper.showMessageNotification("Alex", "Sent you a message", "test_chat_123", "m1") }) {
+                        Button(onClick = { mainVm.sendTestNotification() }) {
                             Text("Send test notification")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        when (val s = authViewModel.currentState()) {
+                        when (val s = mainVm.currentAuthState()) {
                             is AuthState.SignedOut -> {
                                 Button(onClick = { startGoogleSignIn() }) { Text("Sign in with Google") }
                             }
@@ -58,7 +55,7 @@ class MainActivity : ComponentActivity() {
                                 Text("Signed in: ${s.email}")
                             Spacer(modifier = Modifier.height(8.dp))
                                 Button(onClick = {
-                                    authViewModel.signOut()
+                                    mainVm.signOut()
                                     recreate()
                                 }) { Text("Sign out") }
                             }
@@ -76,10 +73,12 @@ class MainActivity : ComponentActivity() {
     private fun startGoogleSignIn() {
         lifecycleScope.launch {
             try {
-                val idToken = authViewModel.requestGoogleIdToken(this@MainActivity)
+                val idToken = mainVm.requestGoogleIdToken(this@MainActivity)
                 if (idToken != null) {
-                    authViewModel.signInWithIdToken(idToken) { success ->
-                        if (success) recreate()
+                    mainVm.signInWithIdToken(idToken) { success ->
+                        if (success) {
+                            mainVm.registerCurrentToken()
+                        }
                     }
                 } else {
                     Log.w(TAG, "Google sign-in returned null idToken")

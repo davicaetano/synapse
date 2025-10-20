@@ -8,12 +8,25 @@ import com.synapse.notifications.NotificationExtras
 import com.synapse.notifications.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import com.synapse.tokens.TokenRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class SynapseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var notificationHelper: NotificationHelper
+    @Inject lateinit var tokenRepository: TokenRepository
     override fun onNewToken(token: String) {
-        // TODO: later - upsert token under users/{userId}/fcmTokens/{token}
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (user != null) {
+                    tokenRepository.saveToken(user.uid, token)
+                }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
