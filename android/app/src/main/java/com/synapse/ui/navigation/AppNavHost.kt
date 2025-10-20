@@ -1,7 +1,9 @@
 package com.synapse.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -21,7 +23,9 @@ fun AppNavHost(
     mainVm: MainActivityViewModel,
     navController: NavHostController = rememberNavController()
 ) {
-    val start = if (mainVm.currentAuthState() is AuthState.SignedIn) Routes.Inbox else Routes.Inbox
+    val authState: AuthState by mainVm.authState.collectAsStateWithLifecycle()
+
+    val start = if (authState is AuthState.SignedIn) Routes.Inbox else Routes.Inbox
     NavHost(navController = navController, startDestination = start) {
         composable(Routes.Inbox) {
             InboxScreen(onOpenConversation = { id ->

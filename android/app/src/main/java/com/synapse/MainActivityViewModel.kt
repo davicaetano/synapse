@@ -9,6 +9,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.launch
 import com.synapse.auth.AuthRepository
 import com.synapse.auth.AuthState
+import kotlinx.coroutines.flow.StateFlow
 
 @HiltViewModel
 class MainActivityViewModel @Inject constructor(
@@ -16,6 +17,7 @@ class MainActivityViewModel @Inject constructor(
     private val tokenRepository: TokenRepository,
     private val authRepository: AuthRepository
 ) : ViewModel() {
+    val authState: StateFlow<AuthState> = authRepository.authState
 
     fun refreshOnStartIfLoggedIn() {
         viewModelScope.launch { tokenRepository.getAndSaveCurrentToken() }
@@ -33,10 +35,6 @@ class MainActivityViewModel @Inject constructor(
             messageId = "m1"
         )
     }
-
-    fun currentAuthState(): AuthState = if (authRepository.isSignedIn()) {
-        AuthState.SignedIn(authRepository.userEmail())
-    } else AuthState.SignedOut
 
     suspend fun requestGoogleIdToken(activity: android.app.Activity): String? =
         authRepository.requestGoogleIdToken(activity)

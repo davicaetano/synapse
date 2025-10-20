@@ -7,10 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
@@ -21,13 +24,17 @@ import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.requestNotificationPermissionIfNeeded
 import com.synapse.auth.AuthState
 import com.synapse.ui.navigation.AppNavHost
+import androidx.compose.runtime.getValue
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 private const val TAG = "MainActivity"
 
+@OptIn(ExperimentalMaterial3Api::class)
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val mainVm: MainActivityViewModel by viewModels()
@@ -38,25 +45,43 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SynapseTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Column(
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .fillMaxSize()
-                    ) {
-                        Button(onClick = { mainVm.sendTestNotification() }) {
-                            Text("Send test notification")
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        when (val s = mainVm.currentAuthState()) {
-                            is AuthState.SignedOut -> {
+                val authState by mainVm.authState.collectAsStateWithLifecycle()
+                when (authState) {
+                    is AuthState.SignedOut -> {
+                        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                            Column(
+                                modifier = Modifier
+                                    .padding(innerPadding)
+                                    .fillMaxSize()
+                            ) {
+                                Text("Please sign in to continue")
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Button(onClick = { startGoogleSignIn() }) { Text("Sign in with Google") }
                             }
-                            is AuthState.SignedIn -> {
-                                Text("Signed in: ${s.email}")
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = { mainVm.signOut() }) { Text("Sign out") }
-                                Spacer(modifier = Modifier.height(16.dp))
+                        }
+                    }
+                    is AuthState.SignedIn -> {
+                        Scaffold(
+                            topBar = {
+                                TopAppBar(
+                                    title = { Text("Synapse") },
+                                    actions = {
+                                        Row(modifier = Modifier.padding(end = 8.dp)) {
+                                            Button(onClick = { mainVm.sendTestNotification() }) { Text("Test notif") }
+                                            Spacer(modifier = Modifier.height(0.dp))
+                                            Button(onClick = { mainVm.signOut() }) { Text("Sign out") }
+                                        }
+                                    },
+                                    colors = TopAppBarDefaults.topAppBarColors()
+                                )
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        ) { innerPadding ->
+                            Column(
+                                modifier = Modifier
+                                    .padding(innerPadding)
+                                    .fillMaxSize()
+                            ) {
                                 AppNavHost(mainVm = mainVm)
                             }
                         }
