@@ -1,0 +1,30 @@
+# Monorepo ignores
+
+# Firebase
+**/google-services.json
+**/firebase-adminsdk-*.json
+**/service-account*.json
+
+# Environment variables
+**/.env
+**/.env.*
+!**/.env.example
+
+# API Keys
+**/*credentials*.json
+**/*secret*.json
+
+# Android
+*.jks
+*.keystore
+local.properties
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
