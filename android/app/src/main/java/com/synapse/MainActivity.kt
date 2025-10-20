@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private const val MESSAGES_CHANNEL_ID = "messages"
+const val MESSAGES_CHANNEL_ID = NotificationChannels.MESSAGES
 
 private fun ComponentActivity.createNotificationChannel() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
