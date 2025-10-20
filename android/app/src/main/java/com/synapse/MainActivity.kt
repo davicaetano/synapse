@@ -13,7 +13,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
@@ -28,11 +27,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
+import com.synapse.notifications.NotificationHelper
 import com.google.android.gms.common.api.ApiException
 import com.synapse.auth.AuthState
 import com.synapse.auth.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
+import com.google.android.gms.auth.api.signin.GoogleSignIn
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -127,16 +128,7 @@ private fun ComponentActivity.sendTestNotification() {
     val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
     val pending = PendingIntent.getActivity(this, 0, openIntent, flags)
 
-    val notification = NotificationCompat.Builder(this, MESSAGES_CHANNEL_ID)
-        .setSmallIcon(R.mipmap.ic_launcher)
-        .setContentTitle(title)
-        .setContentText(body)
-        .setAutoCancel(true)
-        .setContentIntent(pending)
-        .build()
-
-    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    manager.notify(1002, notification)
+    NotificationHelper.showMessageNotification(this, title, body, "test_chat_123", "m1")
 }
 
 private fun ComponentActivity.requestNotificationPermissionIfNeeded() {
