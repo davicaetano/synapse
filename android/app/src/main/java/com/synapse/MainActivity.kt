@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.requestNotificationPermissionIfNeeded
 import com.synapse.auth.AuthState
+import com.synapse.ui.navigation.AppNavHost
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
@@ -53,17 +54,12 @@ class MainActivity : ComponentActivity() {
                             }
                             is AuthState.SignedIn -> {
                                 Text("Signed in: ${s.email}")
-                            Spacer(modifier = Modifier.height(8.dp))
-                                Button(onClick = {
-                                    mainVm.signOut()
-                                    recreate()
-                                }) { Text("Sign out") }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(onClick = { mainVm.signOut() }) { Text("Sign out") }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                AppNavHost(mainVm = mainVm)
                             }
                         }
-                        Greeting(
-                            name = "Android",
-                            modifier = Modifier
-                        )
                     }
                 }
             }
