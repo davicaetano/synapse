@@ -1,9 +1,8 @@
 package com.synapse.di
 
 import android.content.Context
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import androidx.credentials.CredentialManager
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.R
 import dagger.Module
@@ -23,15 +22,16 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideGoogleSignInClient(
-        @ApplicationContext context: Context
-    ): GoogleSignInClient {
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(context.getString(R.string.default_web_client_id))
-            .requestEmail()
+    fun provideCredentialManager(@ApplicationContext context: Context): CredentialManager =
+        CredentialManager.create(context)
+
+    @Provides
+    @Singleton
+    fun provideGoogleIdOption(@ApplicationContext context: Context): GetGoogleIdOption =
+        GetGoogleIdOption.Builder()
+            .setFilterByAuthorizedAccounts(false)
+            .setServerClientId(context.getString(R.string.default_web_client_id))
             .build()
-        return GoogleSignIn.getClient(context, gso)
-    }
 }
 
 

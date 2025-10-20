@@ -23,7 +23,8 @@ class AuthViewModel @Inject constructor(
 
     fun signOut() = repository.signOut()
 
-    fun signInIntent() = repository.getSignInIntent()
+    suspend fun requestGoogleIdToken(activity: android.app.Activity): String? =
+        repository.requestGoogleIdToken(activity)
 }
 
 

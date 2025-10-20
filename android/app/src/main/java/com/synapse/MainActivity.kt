@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,12 +29,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.NotificationHelper
-import com.google.android.gms.common.api.ApiException
 import com.synapse.auth.AuthState
 import com.synapse.auth.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
-import com.google.android.gms.auth.api.signin.GoogleSignIn
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -79,29 +80,26 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val signInLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-        try {
-            val account = task.getResult(ApiException::class.java)
-            val idToken = account.idToken
-            if (idToken != null) {
-                authViewModel.signInWithIdToken(idToken) { success ->
-                    if (success) recreate()
-                }
-            }
-        } catch (_: ApiException) {
-        }
-    }
-
     private fun startGoogleSignIn() {
-        val intent = authViewModel.signInIntent()
-        signInLauncher.launch(intent)
+        lifecycleScope.launch {
+            try {
+                val idToken = authViewModel.requestGoogleIdToken(this@MainActivity)
+                if (idToken != null) {
+                    authViewModel.signInWithIdToken(idToken) { success ->
+                        if (success) recreate()
+                    }
+                } else {
+                    Log.w(TAG, "Google sign-in returned null idToken")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Google sign-in failed", e)
+            }
+        }
     }
 }
 
 const val MESSAGES_CHANNEL_ID = NotificationChannels.MESSAGES
+private const val TAG = "MainActivity"
 
 private fun ComponentActivity.createNotificationChannel() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
