@@ -40,11 +40,19 @@ class MessageRepository @Inject constructor(
             "senderId" to uid,
             "createdAtMs" to System.currentTimeMillis()
         )
-        firestore.collection("conversations")
+        val convRef = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
-            .add(msg)
-            .await()
+        convRef.add(msg).await()
+        // upsert conversation summary
+        firestore.collection("conversations").document(conversationId)
+            .set(
+                mapOf(
+                    "updatedAtMs" to System.currentTimeMillis(),
+                    "lastMessageText" to text
+                ),
+                com.google.firebase.firestore.SetOptions.merge()
+            ).await()
     }
 }
 
