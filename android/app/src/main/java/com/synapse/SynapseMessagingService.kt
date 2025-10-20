@@ -6,8 +6,12 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.synapse.notifications.NotificationExtras
 import com.synapse.notifications.NotificationHelper
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class SynapseMessagingService : FirebaseMessagingService() {
+    @Inject lateinit var notificationHelper: NotificationHelper
     override fun onNewToken(token: String) {
         // TODO: later - upsert token under users/{userId}/fcmTokens/{token}
     }
@@ -24,7 +28,7 @@ class SynapseMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["preview"] ?: "New message"
         val chatId = message.data[NotificationExtras.CHAT_ID]
         val msgId = message.data[NotificationExtras.MESSAGE_ID]
-        NotificationHelper.showMessageNotification(this, title, body, chatId, msgId)
+        notificationHelper.showMessageNotification(title, body, chatId, msgId)
     }
 
     companion object {
