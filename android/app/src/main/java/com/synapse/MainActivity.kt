@@ -28,12 +28,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 
 class MainActivity : ComponentActivity() {
+    private lateinit var auth: FirebaseAuth
+    private lateinit var gsiClient: GoogleSignInClient
+    private var currentUserEmail: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNotificationChannel()
         requestNotificationPermissionIfNeeded()
+        setupGoogleSignIn()
         enableEdgeToEdge()
         setContent {
             SynapseTheme {
@@ -47,6 +59,18 @@ class MainActivity : ComponentActivity() {
                             Text("Send test notification")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
+                        if (currentUserEmail == null) {
+                            Button(onClick = { startGoogleSignIn() }) { Text("Sign in with Google") }
+                        } else {
+                            Text("Signed in: $currentUserEmail")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(onClick = {
+                                auth.signOut()
+                                gsiClient.signOut()
+                                currentUserEmail = null
+                                recreate()
+                            }) { Text("Sign out") }
+                        }
                         Greeting(
                             name = "Android",
                             modifier = Modifier
@@ -55,6 +79,38 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun setupGoogleSignIn() {
+        auth = FirebaseAuth.getInstance()
+        currentUserEmail = auth.currentUser?.email
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+        gsiClient = GoogleSignIn.getClient(this, gso)
+    }
+
+    private val signInLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account: GoogleSignInAccount = task.getResult(ApiException::class.java)
+            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+            auth.signInWithCredential(credential).addOnCompleteListener { authTask ->
+                if (authTask.isSuccessful) {
+                    currentUserEmail = auth.currentUser?.email
+                    recreate()
+                }
+            }
+        } catch (_: ApiException) {
+        }
+    }
+
+    private fun startGoogleSignIn() {
+        val intent = gsiClient.signInIntent
+        signInLauncher.launch(intent)
     }
 }
 
