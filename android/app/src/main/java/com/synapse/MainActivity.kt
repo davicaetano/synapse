@@ -28,24 +28,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synapse.ui.theme.SynapseTheme
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
+import com.synapse.auth.AuthState
+import com.synapse.auth.AuthViewModel
+import dagger.hilt.android.AndroidEntryPoint
+import androidx.activity.viewModels
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private lateinit var auth: FirebaseAuth
-    private lateinit var gsiClient: GoogleSignInClient
-    private var currentUserEmail: String? = null
+    private val authViewModel: AuthViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNotificationChannel()
         requestNotificationPermissionIfNeeded()
-        setupGoogleSignIn()
         enableEdgeToEdge()
         setContent {
             SynapseTheme {
@@ -59,17 +55,18 @@ class MainActivity : ComponentActivity() {
                             Text("Send test notification")
                         }
                         Spacer(modifier = Modifier.height(16.dp))
-                        if (currentUserEmail == null) {
-                            Button(onClick = { startGoogleSignIn() }) { Text("Sign in with Google") }
-                        } else {
-                            Text("Signed in: $currentUserEmail")
+                        when (val s = authViewModel.currentState()) {
+                            is AuthState.SignedOut -> {
+                                Button(onClick = { startGoogleSignIn() }) { Text("Sign in with Google") }
+                            }
+                            is AuthState.SignedIn -> {
+                                Text("Signed in: ${s.email}")
                             Spacer(modifier = Modifier.height(8.dp))
-                            Button(onClick = {
-                                auth.signOut()
-                                gsiClient.signOut()
-                                currentUserEmail = null
-                                recreate()
-                            }) { Text("Sign out") }
+                                Button(onClick = {
+                                    authViewModel.signOut()
+                                    recreate()
+                                }) { Text("Sign out") }
+                            }
                         }
                         Greeting(
                             name = "Android",
@@ -81,27 +78,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setupGoogleSignIn() {
-        auth = FirebaseAuth.getInstance()
-        currentUserEmail = auth.currentUser?.email
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken(getString(R.string.default_web_client_id))
-            .requestEmail()
-            .build()
-        gsiClient = GoogleSignIn.getClient(this, gso)
-    }
-
     private val signInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
-            val account: GoogleSignInAccount = task.getResult(ApiException::class.java)
-            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-            auth.signInWithCredential(credential).addOnCompleteListener { authTask ->
-                if (authTask.isSuccessful) {
-                    currentUserEmail = auth.currentUser?.email
-                    recreate()
+            val account = task.getResult(ApiException::class.java)
+            val idToken = account.idToken
+            if (idToken != null) {
+                authViewModel.signInWithIdToken(idToken) { success ->
+                    if (success) recreate()
                 }
             }
         } catch (_: ApiException) {
@@ -109,7 +95,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startGoogleSignIn() {
-        val intent = gsiClient.signInIntent
+        val intent = authViewModel.signInIntent()
         signInLauncher.launch(intent)
     }
 }
