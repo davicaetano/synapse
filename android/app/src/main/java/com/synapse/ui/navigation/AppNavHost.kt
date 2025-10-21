@@ -70,7 +70,9 @@ fun AppNavHost(
         }
         composable(Routes.Conversation) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
-            ConversationScreen()
+            ConversationScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
         composable(Routes.CreateGroup) {
             CreateGroupScreen(

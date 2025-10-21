@@ -4,19 +4,26 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,10 +38,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synapse.domain.conversation.ConversationType
+import com.synapse.ui.components.GroupAvatar
+import com.synapse.ui.components.UserAvatar
 import com.synapse.ui.theme.SynapseTheme
 import kotlinx.coroutines.launch
 
@@ -42,12 +54,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
+    onNavigateBack: () -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
 
     ConversationScreen(
         ui = ui,
         onSendClick = { text: String -> vm.send(text) },
+        onBackClick = onNavigateBack
     )
 
 }
@@ -57,6 +71,7 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     onSendClick: (text: String) -> Unit,
+    onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var input by remember { mutableStateOf("") }
@@ -74,9 +89,16 @@ fun ConversationScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(ui.title) },
-                colors = TopAppBarDefaults.topAppBarColors()
+            ConversationTopAppBar(
+                title = ui.title,
+                subtitle = ui.subtitle,
+                convType = ui.convType,
+                otherUserPhotoUrl = ui.otherUserPhotoUrl,
+                otherUserOnline = ui.otherUserOnline,
+                isUserAdmin = ui.isUserAdmin,
+                onBackClick = onBackClick,
+                onAddMemberClick = { /* TODO: Add member to group */ },
+                onMenuClick = { /* TODO: Show conversation menu */ }
             )
         },
         modifier = Modifier
@@ -90,15 +112,20 @@ fun ConversationScreen(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    top = 8.dp,
+                    bottom = 8.dp
+                )
             ) {
                 items(ui.messages) { m ->
                     MessageBubble(
                         text = m.text,
                         displayTime = m.displayTime,
                         isMine = m.isMine,
-                        isReadByEveryone = m.isReadByEveryone
+                        isReadByEveryone = m.isReadByEveryone,
+                        senderName = m.senderName
                     )
                 }
             }
@@ -143,49 +170,188 @@ fun ConversationScreen(
     }
 }
 
+// ============================================================
+// TOP APP BAR (adapts based on conversation type)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationTopAppBar(
+    title: String,
+    subtitle: String?,
+    convType: ConversationType,
+    otherUserPhotoUrl: String?,
+    otherUserOnline: Boolean?,
+    isUserAdmin: Boolean,
+    onBackClick: () -> Unit,
+    onAddMemberClick: () -> Unit,
+    onMenuClick: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Show avatar for DIRECT and GROUP
+                when (convType) {
+                    ConversationType.DIRECT -> {
+                        UserAvatar(
+                            photoUrl = otherUserPhotoUrl,
+                            displayName = title,
+                            size = 36.dp,
+                            showPresence = true,
+                            isOnline = otherUserOnline ?: false
+                        )
+                    }
+                    ConversationType.GROUP -> {
+                        GroupAvatar(
+                            groupName = title,
+                            size = 36.dp
+                        )
+                    }
+                    else -> {} // SELF - no avatar
+                }
+                
+                if (convType != ConversationType.SELF) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+                
+                // Title + subtitle
+                Column {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (subtitle == "online") {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        },
+        navigationIcon = {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back"
+                )
+            }
+        },
+        actions = {
+            // Show "Add member" for group admins
+            if (convType == ConversationType.GROUP && isUserAdmin) {
+                IconButton(onClick = onAddMemberClick) {
+                    Icon(
+                        imageVector = Icons.Filled.PersonAdd,
+                        contentDescription = "Add member"
+                    )
+                }
+            }
+            
+            // Menu button
+            IconButton(onClick = onMenuClick) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "More options"
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors()
+    )
+}
+
+// ============================================================
+// MESSAGE BUBBLE (shows sender name for groups)
+// ============================================================
+
 @Composable
 private fun MessageBubble(
     text: String,
     displayTime: String,
     isMine: Boolean,
     isReadByEveryone: Boolean = false,
+    senderName: String? = null
 ) {
-    val bg = if (isMine) Color(0xFF0B93F6) else Color(0xFFE5E5EA)
-    val fg = if (isMine) Color.White else Color.Black
+    // Material You colors - adapts to theme
+    val bg = if (isMine) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val fg = if (isMine) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    
+    // Rounded corners with pointer
     val shape = if (isMine)
-        RoundedCornerShape(12.dp, 0.dp, 12.dp, 12.dp)
+        RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
     else
-        RoundedCornerShape(0.dp, 12.dp, 12.dp, 12.dp)
+        RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),  // Don't stick to edges
         horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
     ) {
+        // Show sender name for group messages (only for others' messages)
+        if (!isMine && senderName != null) {
+            Text(
+                text = senderName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 12.dp, bottom = 2.dp),
+                fontSize = 11.sp
+            )
+        }
+        
+        // Message bubble
         Column(
             modifier = Modifier
+                .widthIn(min = 80.dp, max = 280.dp)  // Dynamic width with limits
                 .clip(shape)
                 .background(bg)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            Text(text = text, color = fg)
+            // Message text
+            Text(
+                text = text,
+                color = fg,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            
+            Spacer(modifier = Modifier.height(2.dp))
+            
+            // Time + read receipt
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = displayTime,
-                    color = fg.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.labelSmall
+                    color = fg.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp
                 )
-                if (isReadByEveryone) {
-                    androidx.compose.material3.Icon(
+                
+                // Show check mark only for your messages if read by everyone
+                if (isReadByEveryone && isMine) {
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = "Read by everyone",
-                        tint = fg.copy(alpha = 0.8f),
-                        modifier = Modifier
-                            .padding(start = 4.dp)
-                            .size(12.dp)
+                        tint = fg.copy(alpha = 0.6f),
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
@@ -203,6 +369,8 @@ private fun ConversationScreenPreview() {
                 ui = ConversationUIState(
                     conversationId = "123",
                     title = "Alice",
+                    subtitle = "online",
+                    convType = com.synapse.domain.conversation.ConversationType.DIRECT,
                     messages = listOf(
                         ConversationUIMessage(
                             id = "m1",
@@ -221,18 +389,15 @@ private fun ConversationScreenPreview() {
                     )
                 ),
                 onSendClick = {}
-
             )
             Column(
                 modifier = Modifier
                     .defaultMinSize(minHeight = 50.dp)
                     .weight(1.0f)
-
             ) {
                 Text(text = "abc")
             }
         }
-
     }
 }
 
