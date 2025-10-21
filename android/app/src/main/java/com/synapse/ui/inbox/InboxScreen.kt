@@ -6,17 +6,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
@@ -26,10 +28,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +42,7 @@ import com.synapse.MainActivityViewModel
 import com.synapse.ui.components.EmptyState
 import com.synapse.ui.components.ErrorState
 import com.synapse.ui.components.LoadingState
+import com.synapse.ui.components.PresenceIndicator
 import com.synapse.ui.components.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,15 +53,87 @@ fun InboxScreen(
     mainVm: MainActivityViewModel = hiltViewModel(),
 ) {
     val uiState by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
+    var showMenu by remember { mutableStateOf(false) }
+    
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Synapse") },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Synapse")
+                        Spacer(modifier = Modifier.size(8.dp))
+                        // User's own online status
+                        PresenceIndicator(isOnline = true)
+                    }
+                },
                 actions = {
-                    Row(modifier = Modifier.padding(end = 8.dp)) {
-                        Button(onClick = { mainVm.sendTestNotification() }) { Text("Test notif") }
-                        Spacer(modifier = Modifier.height(0.dp))
-                        Button(onClick = { mainVm.signOut() }) { Text("Sign out") }
+                    // Search icon (disabled for now, visual only)
+                    IconButton(
+                        onClick = { /* TODO: Implement search */ },
+                        enabled = false
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = "Search conversations",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                    
+                    // Menu button (3 dots)
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More options"
+                            )
+                        }
+                        
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            // Status indicator
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        PresenceIndicator(isOnline = true)
+                                        Spacer(modifier = Modifier.size(8.dp))
+                                        Text("Online")
+                                    }
+                                },
+                                onClick = { /* TODO: Change status */ },
+                                enabled = false
+                            )
+                            
+                            HorizontalDivider()
+                            
+                            DropdownMenuItem(
+                                text = { Text("New Group") },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenConversation("userPicker")
+                                }
+                            )
+                            
+                            DropdownMenuItem(
+                                text = { Text("Settings") },
+                                onClick = {
+                                    showMenu = false
+                                    // TODO: Navigate to settings
+                                },
+                                enabled = false
+                            )
+                            
+                            HorizontalDivider()
+                            
+                            DropdownMenuItem(
+                                text = { Text("Sign Out") },
+                                onClick = {
+                                    showMenu = false
+                                    mainVm.signOut()
+                                }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors()
