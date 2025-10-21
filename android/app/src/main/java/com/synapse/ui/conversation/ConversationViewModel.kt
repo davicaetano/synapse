@@ -4,12 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.firestore.ConversationRepository
+import com.synapse.data.repository.ConversationRepository
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
-import com.synapse.domain.user.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,7 +37,7 @@ class ConversationViewModel @Inject constructor(
         }
     }
 
-    val conversation: StateFlow<Conversation> = convRepo.listenConversation(conversationId)
+    val conversation: StateFlow<Conversation> = convRepo.observeConversationWithMessages(conversationId)
         .stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
@@ -54,7 +53,7 @@ class ConversationViewModel @Inject constructor(
             )
         )
 
-    val uiState: StateFlow<ConversationUIState> = convRepo.listenConversation(conversationId)
+    val uiState: StateFlow<ConversationUIState> = convRepo.observeConversationWithMessages(conversationId)
         .map { conv ->
             ConversationUIState(
                 conversationId = conv.summary.id,

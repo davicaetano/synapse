@@ -3,8 +3,7 @@ package com.synapse.ui.inbox
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.firestore.ConversationRepository
-import com.synapse.data.firestore.UserRepository
+import com.synapse.data.repository.ConversationRepository
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,13 +17,12 @@ import kotlinx.coroutines.flow.stateIn
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     private val conversationsRepo: ConversationRepository,
-    private val usersRepo: UserRepository,
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
     fun observeInbox(userId: String): StateFlow<InboxUIState> {
-        // Use the new method that already includes complete user data
-        val conversationsFlow = conversationsRepo.listenUserConversationsWithUsers(userId)
+        // Use the new method that already includes complete user data + presence
+        val conversationsFlow = conversationsRepo.observeConversationsWithUsers(userId)
 
         return conversationsFlow.map { convs: List<ConversationSummary> ->
             val items = convs.map { c ->

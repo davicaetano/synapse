@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 import com.synapse.data.auth.AuthRepository
 import com.synapse.data.auth.AuthState
 import kotlinx.coroutines.flow.StateFlow
-import com.synapse.data.firestore.UserRepository
+import com.synapse.data.repository.UserRepository
 
 @HiltViewModel
 class MainActivityViewModel @Inject constructor(

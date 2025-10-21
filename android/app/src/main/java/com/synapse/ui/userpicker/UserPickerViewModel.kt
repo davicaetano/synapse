@@ -2,8 +2,8 @@ package com.synapse.ui.userpicker
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synapse.data.firestore.UserRepository
-import com.synapse.data.firestore.ConversationRepository
+import com.synapse.data.repository.UserRepository
+import com.synapse.data.repository.ConversationRepository
 import com.synapse.domain.user.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,7 +17,7 @@ class UserPickerViewModel @Inject constructor(
     private val usersRepo: UserRepository,
     private val conversationRepo: ConversationRepository
 ) : ViewModel() {
-    val pickerItems: StateFlow<List<UserPickerItem>> = usersRepo.listenUsers()
+    val pickerItems: StateFlow<List<UserPickerItem>> = usersRepo.observeUsersWithPresence()
         .map { users ->
             // Add the option to create a group at the top
             listOf(UserPickerItem.CreateGroupItem) + users.map { UserPickerItem.UserItem(it) }
@@ -42,10 +42,10 @@ class UserPickerViewModel @Inject constructor(
         conversationRepo.createGroupConversation(memberIds)
 
     suspend fun addUserToGroup(conversationId: String, userId: String) =
-        conversationRepo.addUserToGroupConversation(conversationId, userId)
+        conversationRepo.addUserToGroup(conversationId, userId)
 
     suspend fun removeUserFromGroup(conversationId: String, userId: String) =
-        conversationRepo.removeUserFromGroupConversation(conversationId, userId)
+        conversationRepo.removeUserFromGroup(conversationId, userId)
 
     // Function to handle picker item selection
     fun onItemSelected(item: UserPickerItem, onGroupCreationRequested: () -> Unit, onUserSelected: (User) -> Unit) {
