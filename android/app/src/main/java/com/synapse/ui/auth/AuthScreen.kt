@@ -19,7 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.synapse.ui.theme.SynapseTheme
 
 /**
  * Authentication screen.
@@ -83,6 +85,35 @@ fun AuthScreen(
                 Text("Sign in with Google")
             }
         }
+    }
+}
+
+// ============================================================
+// PREVIEWS
+// ============================================================
+
+@Preview(
+    name = "Auth Screen - Light",
+    showBackground = true,
+    showSystemUi = true
+)
+@Composable
+private fun AuthScreenPreview() {
+    SynapseTheme {
+        AuthScreen(onSignIn = {})
+    }
+}
+
+@Preview(
+    name = "Auth Screen - Dark",
+    showBackground = true,
+    showSystemUi = true,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES
+)
+@Composable
+private fun AuthScreenDarkPreview() {
+    SynapseTheme {
+        AuthScreen(onSignIn = {})
     }
 }
 
