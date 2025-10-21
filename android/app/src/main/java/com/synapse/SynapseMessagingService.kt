@@ -8,7 +8,7 @@ import com.synapse.notifications.NotificationExtras
 import com.synapse.notifications.NotificationHelper
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import com.synapse.tokens.TokenRepository
+import com.synapse.data.tokens.TokenRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

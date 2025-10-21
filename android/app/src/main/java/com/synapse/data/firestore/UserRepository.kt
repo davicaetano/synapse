@@ -1,7 +1,7 @@
 package com.synapse.data.firestore
 
 import com.synapse.data.firebase.FirebaseDataSource
-import com.synapse.data.presence.PresenceDataSource
+import com.synapse.data.firebase.PresenceDataSource
 import com.synapse.domain.user.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine

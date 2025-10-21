@@ -3,7 +3,7 @@ package com.synapse
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synapse.notifications.NotificationHelper
-import com.synapse.tokens.TokenRepository
+import com.synapse.data.tokens.TokenRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch

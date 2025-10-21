@@ -1,7 +1,8 @@
-package com.synapse.tokens
+package com.synapse.data.tokens
 
 import android.os.Build
 import android.util.Log
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
@@ -30,7 +31,7 @@ class TokenRepository @Inject constructor(
         val docRef = firestore.collection("users").document(userId)
             .collection("fcmTokens").document(token)
         val data = mapOf(
-            "createdAt" to com.google.firebase.Timestamp.now(),
+            "createdAt" to Timestamp.now(),
             "platform" to "android",
             "brand" to Build.BRAND,
             "model" to Build.MODEL,
