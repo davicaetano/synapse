@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
@@ -23,13 +25,18 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.synapse.MainActivityViewModel
+import com.synapse.domain.conversation.ConversationType
 import com.synapse.ui.inbox.InboxItem
 import com.synapse.ui.inbox.InboxUIState
 
@@ -82,12 +89,10 @@ fun InboxScreen(
                         modifier = Modifier
                             .fillMaxSize()
                     ) {
-                        items(uiState.items) { c ->
+                        items(uiState.items) { item ->
                             ConversationRow(
-                                title = c.title,
-                                lastMessage = c.lastMessageText ?: "",
-                                displayTime = c.displayTime,
-                                onClick = { onOpenConversation(c.id) })
+                                item = item,
+                                onClick = { onOpenConversation(item.id) })
                             Divider()
                         }
                     }
@@ -99,33 +104,45 @@ fun InboxScreen(
 
 @Composable
 private fun ConversationRow(
-    title: String,
-    lastMessage: String,
-    displayTime: String,
+    item: InboxItem,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .clickable { onClick() }
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+        // Foto do usuário (apenas para conversas diretas)
+        if (item.convType == ConversationType.DIRECT && item.otherUser?.photoUrl != null) {
+            AsyncImage(
+                model = item.otherUser.photoUrl,
+                contentDescription = "Foto de ${item.otherUser.displayName}",
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
+            )
+            Spacer(modifier = Modifier.padding(start = 12.dp))
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = title,
+                text = item.title,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = lastMessage,
+                text = item.lastMessageText ?: "",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Text(
-            text = displayTime,
+            text = item.displayTime,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(start = 8.dp)
         )

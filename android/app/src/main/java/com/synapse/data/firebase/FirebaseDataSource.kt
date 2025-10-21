@@ -2,6 +2,7 @@ package com.synapse.data.firebase
 
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.synapse.domain.conversation.Conversation
@@ -167,7 +168,7 @@ class FirebaseDataSource @Inject constructor(
 
                     // Buscar dados dos usuários para incluir no ConversationSummary
                     firestore.collection("users")
-                        .whereIn("id", memberIds)
+                        .whereIn(FieldPath.documentId(), memberIds)
                         .get()
                         .addOnSuccessListener { usersSnapshot ->
                             val usersMap = usersSnapshot.documents.associate { userDoc ->
@@ -209,10 +210,10 @@ class FirebaseDataSource @Inject constructor(
                         .addOnFailureListener { e ->
                             Log.e(TAG, "Failed to load users for conversation", e)
                             // Fallback sem dados dos usuários
-                            val summary = ConversationSummary(
-                                id = conversationId,
-                                lastMessageText = d.getString("lastMessageText"),
-                                updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                    val summary = ConversationSummary(
+                        id = conversationId,
+                        lastMessageText = d.getString("lastMessageText"),
+                        updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
                                 members = emptyList(),
                                 convType = try {
                                     ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
@@ -221,19 +222,19 @@ class FirebaseDataSource @Inject constructor(
                                 }
                             )
 
-                            val messages = msgsSnap?.documents?.mapNotNull { doc ->
-                                val text = doc.getString("text") ?: return@mapNotNull null
-                                val senderId = doc.getString("senderId") ?: return@mapNotNull null
-                                val createdAt = doc.getLong("createdAtMs") ?: 0L
-                                Message(
-                                    id = doc.id,
-                                    text = text,
-                                    senderId = senderId,
-                                    createdAtMs = createdAt,
-                                    isMine = (myId != null && senderId == myId)
-                                )
-                            } ?: emptyList()
-                            trySend(Conversation(summary = summary, messages = messages))
+                    val messages = msgsSnap?.documents?.mapNotNull { doc ->
+                        val text = doc.getString("text") ?: return@mapNotNull null
+                        val senderId = doc.getString("senderId") ?: return@mapNotNull null
+                        val createdAt = doc.getLong("createdAtMs") ?: 0L
+                        Message(
+                            id = doc.id,
+                            text = text,
+                            senderId = senderId,
+                            createdAtMs = createdAt,
+                            isMine = (myId != null && senderId == myId)
+                        )
+                    } ?: emptyList()
+                    trySend(Conversation(summary = summary, messages = messages))
                         }
                 }
             }
@@ -281,7 +282,7 @@ class FirebaseDataSource @Inject constructor(
 
             // Buscar dados de todos os usuários necessários
             firestore.collection("users")
-                .whereIn("id", allMemberIds)
+                .whereIn(FieldPath.documentId(), allMemberIds)
                 .get()
                 .addOnSuccessListener { usersSnapshot ->
                     val usersMap = usersSnapshot.documents.associate { userDoc ->
@@ -374,7 +375,7 @@ class FirebaseDataSource @Inject constructor(
 
             // Buscar dados de todos os usuários necessários
             firestore.collection("users")
-                .whereIn("id", allMemberIds)
+                .whereIn(FieldPath.documentId(), allMemberIds)
                 .get()
                 .addOnSuccessListener { usersSnapshot ->
                     val usersMap = usersSnapshot.documents.associate { userDoc ->
@@ -407,10 +408,10 @@ class FirebaseDataSource @Inject constructor(
                     Log.e(TAG, "Failed to load users for conversations by type", e)
                     // Fallback sem dados dos usuários
                     val list = conversations.map { d ->
-                        ConversationSummary(
-                            id = d.id,
-                            lastMessageText = d.getString("lastMessageText"),
-                            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                ConversationSummary(
+                    id = d.id,
+                    lastMessageText = d.getString("lastMessageText"),
+                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
                             members = emptyList(),
                             convType = try {
                                 ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
@@ -419,7 +420,7 @@ class FirebaseDataSource @Inject constructor(
                             }
                         )
                     }
-                    trySend(list)
+            trySend(list)
                 }
         }
         awaitClose { reg.remove() }

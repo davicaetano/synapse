@@ -47,7 +47,9 @@ class InboxViewModel @Inject constructor(
                     title = title,
                     lastMessageText = c.lastMessageText,
                     updatedAtMs = c.updatedAtMs,
-                    displayTime = formatTime(c.updatedAtMs)
+                    displayTime = formatTime(c.updatedAtMs),
+                    otherUser = if (c.convType == ConversationType.DIRECT) peerUser else null,
+                    convType = c.convType
                 )
             }.sortedByDescending { it.updatedAtMs }
 
