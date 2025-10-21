@@ -25,7 +25,7 @@ class InboxViewModel @Inject constructor(
         val conversationsFlow = conversationsRepo.observeConversationsWithUsers(userId)
 
         return conversationsFlow.map { convs: List<ConversationSummary> ->
-            val items = convs.map { c ->
+            val items = convs.mapNotNull { c ->  // Use mapNotNull to filter out invalid conversations
                 val title = when (c.convType) {
                     ConversationType.SELF -> "AI Assistant"
                     ConversationType.DIRECT -> {
@@ -51,15 +51,23 @@ class InboxViewModel @Inject constructor(
                         displayTime = formatTime(c.updatedAtMs),
                         convType = c.convType
                     )
-                    ConversationType.DIRECT -> InboxItem.OneOnOneConversation(
-                        id = c.id,
-                        title = title,
-                        lastMessageText = c.lastMessageText,
-                        updatedAtMs = c.updatedAtMs,
-                        displayTime = formatTime(c.updatedAtMs),
-                        convType = c.convType,
-                        otherUser = c.members.firstOrNull { it.id != userId }!!
-                    )
+                    ConversationType.DIRECT -> {
+                        // SAFE: Only create item if other user exists
+                        val otherUser = c.members.firstOrNull { it.id != userId }
+                        if (otherUser != null) {
+                            InboxItem.OneOnOneConversation(
+                                id = c.id,
+                                title = title,
+                                lastMessageText = c.lastMessageText,
+                                updatedAtMs = c.updatedAtMs,
+                                displayTime = formatTime(c.updatedAtMs),
+                                convType = c.convType,
+                                otherUser = otherUser
+                            )
+                        } else {
+                            null  // Skip this conversation if other user not found
+                        }
+                    }
                     ConversationType.GROUP -> InboxItem.GroupConversation(
                         id = c.id,
                         title = title,

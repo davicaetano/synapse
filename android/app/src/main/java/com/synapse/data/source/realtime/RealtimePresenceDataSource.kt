@@ -45,7 +45,12 @@ class RealtimePresenceDataSource @Inject constructor(
                 val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
                 val lastSeenMs = snapshot.child("lastSeenMs").getValue(Long::class.java)
                 
-                trySend(PresenceEntity(online = online, lastSeenMs = lastSeenMs))
+                // Safe send - only send if channel is not closed
+                try {
+                    trySend(PresenceEntity(online = online, lastSeenMs = lastSeenMs)).isSuccess
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send presence update for $userId", e)
+                }
             }
             
             override fun onCancelled(error: DatabaseError) {
@@ -82,7 +87,13 @@ class RealtimePresenceDataSource @Inject constructor(
                     val lastSeenMs = snapshot.child("lastSeenMs").getValue(Long::class.java)
                     
                     presenceMap[userId] = PresenceEntity(online = online, lastSeenMs = lastSeenMs)
-                    trySend(presenceMap.toMap())
+                    
+                    // Safe send - only send if channel is not closed
+                    try {
+                        trySend(presenceMap.toMap()).isSuccess
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send presence update for $userId", e)
+                    }
                 }
                 
                 override fun onCancelled(error: DatabaseError) {
