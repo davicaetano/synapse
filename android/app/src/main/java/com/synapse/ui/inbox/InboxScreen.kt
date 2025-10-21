@@ -35,11 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.synapse.MainActivityViewModel
-import com.synapse.domain.conversation.ConversationType
-import com.synapse.ui.components.LastSeenText
-import com.synapse.ui.components.PresenceIndicator
+import com.synapse.ui.components.EmptyState
+import com.synapse.ui.components.ErrorState
+import com.synapse.ui.components.LoadingState
+import com.synapse.ui.components.UserAvatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,13 +77,16 @@ fun InboxScreen(
         ) {
             when {
                 uiState.isLoading -> {
-                    Text("Loading conversations...")
+                    LoadingState(text = "Loading conversations...")
                 }
                 uiState.error != null -> {
-                    Text("Error: ${uiState.error}")
+                    ErrorState(message = uiState.error ?: "Unknown error")
                 }
                 uiState.items.isEmpty() -> {
-                    Text("No conversations yet")
+                    EmptyState(
+                        title = "No conversations yet",
+                        subtitle = "Start a new conversation by tapping the + button"
+                    )
                 }
                 else -> {
                     LazyColumn(
@@ -164,27 +167,14 @@ private fun OneOnOneConversationRow(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Show the other user's profile picture for direct conversations with presence indicator
-        Box {
-            if (item.otherUser.photoUrl != null) {
-                AsyncImage(
-                    model = item.otherUser.photoUrl,
-                    contentDescription = "Profile picture of ${item.otherUser.displayName}",
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Spacer(modifier = Modifier.size(48.dp))
-            }
-            
-            // Presence indicator in bottom-right corner
-            PresenceIndicator(
-                isOnline = item.otherUser.isOnline,
-                modifier = Modifier.align(Alignment.BottomEnd)
-            )
-        }
+        // User avatar with presence indicator
+        UserAvatar(
+            photoUrl = item.otherUser.photoUrl,
+            displayName = item.otherUser.displayName,
+            size = 48.dp,
+            showPresence = true,
+            isOnline = item.otherUser.isOnline
+        )
         
         Spacer(modifier = Modifier.padding(start = 12.dp))
 
