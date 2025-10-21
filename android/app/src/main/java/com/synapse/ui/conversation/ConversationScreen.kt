@@ -12,8 +12,13 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -21,19 +26,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.ui.theme.SynapseTheme
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,8 +59,18 @@ fun ConversationScreen(
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-
     var input by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(ui.messages.size) {
+        if (ui.messages.isNotEmpty()) {
+            scope.launch {
+                listState.animateScrollToItem(ui.messages.size - 1)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -74,11 +87,13 @@ fun ConversationScreen(
             modifier = modifier.padding(padding)
         ) {
             LazyColumn(
-                modifier = Modifier.weight(1f),
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(ui.messages) { m ->
-
                     MessageBubble(
                         text = m.text,
                         displayTime = m.displayTime,
@@ -87,22 +102,41 @@ fun ConversationScreen(
                     )
                 }
             }
-            Row {
+            
+            // Input row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Type a message...") },
+                    maxLines = 4
                 )
-                Button(
+                
+                IconButton(
                     onClick = {
                         if (input.isNotBlank()) {
                             onSendClick(input)
                             input = ""
                         }
                     },
-                    modifier = Modifier.padding(start = 8.dp)
+                    modifier = Modifier.padding(start = 4.dp),
+                    enabled = input.isNotBlank()
                 ) {
-                    Text("Send")
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send message",
+                        tint = if (input.isNotBlank()) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        }
+                    )
                 }
             }
         }
