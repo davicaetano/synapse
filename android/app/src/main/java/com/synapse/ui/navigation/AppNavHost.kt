@@ -53,7 +53,7 @@ fun AppNavHost(
                         navController.navigate("conversation/$convId")
                     }
                 }
-            })
+            }, onClose = { navController.popBackStack() })
         }
         composable(Routes.Conversation) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""

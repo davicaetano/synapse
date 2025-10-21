@@ -5,10 +5,6 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.requestNotificationPermissionIfNeeded
 import com.synapse.ui.navigation.AppNavHost
