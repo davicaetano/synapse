@@ -1,5 +1,6 @@
-package com.synapse.auth
+package com.synapse.data.auth
 
+import android.app.Activity
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
@@ -37,7 +38,7 @@ class AuthRepository @Inject constructor(
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential).addOnCompleteListener { onComplete(it.isSuccessful) }
     }
-    suspend fun requestGoogleIdToken(activity: android.app.Activity): String? {
+    suspend fun requestGoogleIdToken(activity: Activity): String? {
         val request = GetCredentialRequest.Builder()
             .addCredentialOption(googleIdOption)
             .build()

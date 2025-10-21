@@ -82,7 +82,6 @@ class FirebaseDataSource @Inject constructor(
                 convRef.get().addOnSuccessListener { d ->
                     val summary = ConversationSummary(
                         id = conversationId,
-                        title = d.getString("title"),
                         lastMessageText = d.getString("lastMessageText"),
                         updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
                         memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
@@ -113,7 +112,6 @@ class FirebaseDataSource @Inject constructor(
             val list = snap?.documents?.map { d ->
                 ConversationSummary(
                     id = d.id,
-                    title = d.getString("title"),
                     lastMessageText = d.getString("lastMessageText"),
                     updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
                     memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()

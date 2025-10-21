@@ -1,4 +1,4 @@
-package com.synapse.auth
+package com.synapse.data.auth
 
 sealed interface AuthState {
     data object SignedOut : AuthState

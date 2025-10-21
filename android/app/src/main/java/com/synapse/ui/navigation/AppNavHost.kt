@@ -10,7 +10,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.synapse.auth.AuthState
+import com.synapse.data.auth.AuthState
 import com.synapse.MainActivityViewModel
 import com.synapse.ui.inbox.InboxScreen
 import com.synapse.ui.conversation.ConversationScreen

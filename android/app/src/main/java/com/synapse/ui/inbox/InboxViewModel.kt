@@ -36,7 +36,7 @@ class InboxViewModel @Inject constructor(
         return combine(conversationsFlow, usersMapFlow) { convs: List<ConversationSummary>, usersMap: Map<String, String> ->
             convs.map { c ->
                 val peerId = c.memberIds.firstOrNull { it != userId }
-                val title = c.title ?: (peerId?.let { usersMap[it] } ?: c.id)
+                val title = "temp tittle"
                 InboxItem(
                     id = c.id,
                     title = title,

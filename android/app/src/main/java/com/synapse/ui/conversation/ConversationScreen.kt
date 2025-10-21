@@ -30,32 +30,26 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synapse.domain.conversation.Conversation
-import com.synapse.domain.conversation.ConversationSummary
-import com.synapse.domain.conversation.Message
 import com.synapse.ui.theme.SynapseTheme
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
 ) {
-    val conversation: Conversation by vm.conversation.collectAsStateWithLifecycle()
+    val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
 
-        ConversationScreen(
-            conversation = conversation,
-            onSendClick = { text: String -> vm.send(text) },
-        )
+    ConversationScreen(
+        ui = ui,
+        onSendClick = { text: String -> vm.send(text) },
+    )
 
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
-    conversation: Conversation,
+    ui: ConversationUIState,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -65,7 +59,7 @@ fun ConversationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(conversation.summary.title ?: "") },
+                title = { Text(ui.title) },
                 colors = TopAppBarDefaults.topAppBarColors()
             )
         },
@@ -80,11 +74,11 @@ fun ConversationScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(conversation.messages) { m ->
+                items(ui.messages) { m ->
 
                     MessageBubble(
                         text = m.text,
-                        timeMs = m.createdAtMs,
+                        displayTime = m.displayTime,
                         isMine = m.isMine
                     )
                 }
@@ -114,7 +108,7 @@ fun ConversationScreen(
 @Composable
 private fun MessageBubble(
     text: String,
-    timeMs: Long,
+    displayTime: String,
     isMine: Boolean,
 ) {
     val bg = if (isMine) Color(0xFF0B93F6) else Color(0xFFE5E5EA)
@@ -136,7 +130,7 @@ private fun MessageBubble(
         ) {
             Text(text = text, color = fg)
             Text(
-                text = formatTime(timeMs),
+                text = displayTime,
                 color = fg.copy(alpha = 0.8f),
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.fillMaxWidth(),
@@ -146,13 +140,6 @@ private fun MessageBubble(
     }
 }
 
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return ""
-    val date = Date(ms)
-    val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return fmt.format(date)
-}
-
 @Preview(showBackground = true)
 @Composable
 private fun ConversationScreenPreview() {
@@ -160,37 +147,23 @@ private fun ConversationScreenPreview() {
         Column {
             ConversationScreen(
                 modifier = Modifier.weight(1.0f),
-                conversation = Conversation(
-                    summary = ConversationSummary(
-                        id = "123",
-                        lastMessageText = "123",
-                        updatedAtMs = 123,
-                        title = "as",
-                        memberIds = listOf()
-                    ),
+                ui = ConversationUIState(
+                    conversationId = "123",
+                    title = "Alice",
                     messages = listOf(
-                        Message(
-                            id = "123",
+                        ConversationUIMessage(
+                            id = "m1",
                             text = "Hello!",
-                            senderId = "123",
                             isMine = true,
-                            createdAtMs = 123
+                            displayTime = "09:12"
                         ),
-                        Message(
-                            id = "123",
-                            text = "Hello!",
-                            senderId = "123",
-                            isMine = true,
-                            createdAtMs = 123
-                        ),
-                        Message(
-                            id = "123",
-                            text = "Hello!",
-                            senderId = "123",
-                            isMine = true,
-                            createdAtMs = 123
+                        ConversationUIMessage(
+                            id = "m2",
+                            text = "Hi!",
+                            isMine = false,
+                            displayTime = "09:13"
                         )
-                    ),
+                    )
                 ),
                 onSendClick = {}
 

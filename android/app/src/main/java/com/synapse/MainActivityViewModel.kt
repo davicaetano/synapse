@@ -7,8 +7,8 @@ import com.synapse.tokens.TokenRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.launch
-import com.synapse.auth.AuthRepository
-import com.synapse.auth.AuthState
+import com.synapse.data.auth.AuthRepository
+import com.synapse.data.auth.AuthState
 import kotlinx.coroutines.flow.StateFlow
 import com.synapse.data.firestore.UserRepository
 
