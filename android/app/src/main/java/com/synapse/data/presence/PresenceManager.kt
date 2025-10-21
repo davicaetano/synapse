@@ -1,61 +1,36 @@
 package com.synapse.data.presence
 
-import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.database.DatabaseReference
+import com.synapse.data.source.realtime.RealtimePresenceDataSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Manager for user presence operations.
+ * 
+ * DEPRECATED: This is a temporary adapter to maintain compatibility.
+ * New code should use RealtimePresenceDataSource directly.
+ * 
+ * This will be removed in Phase 2 of the refactoring when we update MainActivity.
+ */
 @Singleton
 class PresenceManager @Inject constructor(
-    private val auth: FirebaseAuth,
-    private val realtimeDb: DatabaseReference
+    private val presenceDataSource: RealtimePresenceDataSource
 ) {
+    private val scope = CoroutineScope(Dispatchers.IO)
     
     fun markOnline() {
-        val uid = auth.currentUser?.uid ?: return
-        val presenceRef = realtimeDb.child("presence").child(uid)
-        
-        val presenceData = mapOf(
-            "online" to true,
-            "lastSeenMs" to System.currentTimeMillis()
-        )
-        
-        presenceRef.setValue(presenceData)
-            .addOnSuccessListener {
-                Log.d(TAG, "Marked user $uid as online")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to mark online", e)
-            }
-        
-        // Auto-disconnect handler: marca offline quando cliente desconectar
-        presenceRef.onDisconnect().setValue(
-            mapOf(
-                "online" to false,
-                "lastSeenMs" to System.currentTimeMillis()
-            )
-        )
-    }
-    
-    fun markOffline() {
-        val uid = auth.currentUser?.uid ?: return
-        val presenceRef = realtimeDb.child("presence").child(uid)
-        
-        presenceRef.setValue(
-            mapOf(
-                "online" to false,
-                "lastSeenMs" to System.currentTimeMillis()
-            )
-        ).addOnSuccessListener {
-            Log.d(TAG, "Marked user $uid as offline")
-        }.addOnFailureListener { e ->
-            Log.e(TAG, "Failed to mark offline", e)
+        scope.launch {
+            presenceDataSource.markOnline()
         }
     }
     
-    companion object {
-        private const val TAG = "PresenceManager"
+    fun markOffline() {
+        scope.launch {
+            presenceDataSource.markOffline()
+        }
     }
 }
 

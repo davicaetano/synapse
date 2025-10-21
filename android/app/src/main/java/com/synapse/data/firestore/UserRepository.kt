@@ -1,8 +1,9 @@
 package com.synapse.data.firestore
 
 import com.synapse.data.firebase.FirebaseDataSource
-import com.synapse.data.firebase.PresenceDataSource
+import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.domain.user.User
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -10,10 +11,11 @@ import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class UserRepository @Inject constructor(
     private val firebaseDataSource: FirebaseDataSource,
-    private val presenceDataSource: PresenceDataSource
+    private val presenceDataSource: RealtimePresenceDataSource
 ) {
     fun listenUsers(): Flow<List<User>> = firebaseDataSource.listenUsers()
 

@@ -1,7 +1,7 @@
 package com.synapse.data.firestore
 
 import com.synapse.data.firebase.FirebaseDataSource
-import com.synapse.data.firebase.PresenceDataSource
+import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
@@ -17,7 +17,7 @@ import javax.inject.Singleton
 @Singleton
 class ConversationRepository @Inject constructor(
     private val firebaseDataSource: FirebaseDataSource,
-    private val presenceDataSource: PresenceDataSource
+    private val presenceDataSource: RealtimePresenceDataSource
 ) {
 
     suspend fun sendMessage(conversationId: String, text: String) {
