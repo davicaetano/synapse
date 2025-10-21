@@ -1,6 +1,7 @@
 package com.synapse.ui.conversation
 
 import com.synapse.domain.conversation.ConversationType
+import com.synapse.domain.conversation.MessageStatus
 import com.synapse.domain.user.User
 
 data class ConversationUIMessage(
@@ -10,7 +11,8 @@ data class ConversationUIMessage(
     val displayTime: String,
     val isReadByEveryone: Boolean = false,
     val senderName: String? = null,      // For group messages - who sent it
-    val senderPhotoUrl: String? = null   // For group messages - sender's photo
+    val senderPhotoUrl: String? = null,  // For group messages - sender's photo
+    val status: MessageStatus = MessageStatus.DELIVERED  // Message delivery status
 )
 
 data class ConversationUIState(

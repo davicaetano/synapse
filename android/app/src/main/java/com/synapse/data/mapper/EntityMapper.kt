@@ -7,6 +7,7 @@ import com.synapse.data.source.realtime.entity.PresenceEntity
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
+import com.synapse.domain.conversation.MessageStatus
 import com.synapse.domain.user.User
 
 /**
@@ -50,6 +51,24 @@ fun MessageEntity.toDomain(
     currentUserId: String?,
     memberCount: Int
 ): Message {
+    // Calculate how many other members should receive/read this message
+    // (exclude the sender from the count)
+    val otherMembersCount = memberCount - 1
+    
+    // Determine message status based on WhatsApp logic:
+    // Order matters! Check from most restrictive to least restrictive:
+    // 1. PENDING: serverTimestamp is null (never reached server)
+    // 2. SENT: Only sender in receivedBy (receivedBy <= 1)
+    // 3. READ: Everyone read (readBy >= memberCount, includes sender)
+    // 4. DELIVERED: Others received but not everyone read yet
+    val status = when {
+        serverTimestamp == null -> MessageStatus.PENDING
+        receivedBy.size <= 1 -> MessageStatus.SENT          // Only sender received
+        readBy.size >= memberCount -> MessageStatus.READ    // Everyone read (includes sender)
+        receivedBy.size > 1 -> MessageStatus.DELIVERED      // Someone else received
+        else -> MessageStatus.SENT
+    }
+    
     return Message(
         id = this.id,
         text = this.text,
@@ -58,7 +77,8 @@ fun MessageEntity.toDomain(
         isMine = (currentUserId != null && this.senderId == currentUserId),
         receivedBy = emptyList(), // For now, we don't populate full User objects
         readBy = emptyList(),
-        isReadByEveryone = this.readBy.size >= memberCount
+        isReadByEveryone = this.readBy.size >= memberCount,
+        status = status
     )
 }
 

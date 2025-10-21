@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -125,7 +127,8 @@ fun ConversationScreen(
                         displayTime = m.displayTime,
                         isMine = m.isMine,
                         isReadByEveryone = m.isReadByEveryone,
-                        senderName = m.senderName
+                        senderName = m.senderName,
+                        status = m.status
                     )
                 }
             }
@@ -276,7 +279,8 @@ private fun MessageBubble(
     displayTime: String,
     isMine: Boolean,
     isReadByEveryone: Boolean = false,
-    senderName: String? = null
+    senderName: String? = null,
+    status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED
 ) {
     // Material You colors - adapts to theme
     val bg = if (isMine) {
@@ -331,7 +335,7 @@ private fun MessageBubble(
             
             Spacer(modifier = Modifier.height(2.dp))
             
-            // Time + read receipt
+            // Time + status indicators (WhatsApp-style)
             Row(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
@@ -344,15 +348,66 @@ private fun MessageBubble(
                     fontSize = 10.sp
                 )
                 
-                // Show check mark only for your messages if read by everyone
-                if (isReadByEveryone && isMine) {
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Read by everyone",
-                        tint = fg.copy(alpha = 0.6f),
-                        modifier = Modifier.size(12.dp)
-                    )
+                // Show status indicators only for your messages
+                if (isMine) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    
+                    when (status) {
+                        com.synapse.domain.conversation.MessageStatus.PENDING -> {
+                            // ⏱️ Clock icon - message pending (offline/not sent)
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = "Sending",
+                                tint = fg.copy(alpha = 0.5f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        com.synapse.domain.conversation.MessageStatus.SENT -> {
+                            // ✓ Single gray check - sent to server
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Sent",
+                                tint = fg.copy(alpha = 0.7f),
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        com.synapse.domain.conversation.MessageStatus.DELIVERED -> {
+                            // ✓✓ Double gray checks - delivered to device
+                            Row {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = fg.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Delivered",
+                                    tint = fg.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(12.dp).offset(x = (-6).dp)
+                                )
+                            }
+                        }
+                        com.synapse.domain.conversation.MessageStatus.READ -> {
+                            // ✓✓ Double blue checks - read by all
+                            // Using a visible blue that works on both light/dark backgrounds
+                            val readBlue = Color(0xFF2196F3)  // Material Blue 500
+                            Row {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = readBlue,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Read by everyone",
+                                    tint = readBlue,
+                                    modifier = Modifier.size(12.dp).offset(x = (-6).dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

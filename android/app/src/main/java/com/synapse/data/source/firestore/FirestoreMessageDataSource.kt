@@ -59,7 +59,8 @@ class FirestoreMessageDataSource @Inject constructor(
                             ?: emptyList(),
                         readBy = (doc.get("readBy") as? List<*>)
                             ?.mapNotNull { it as? String } 
-                            ?: emptyList()
+                            ?: emptyList(),
+                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing message ${doc.id}", e)
@@ -97,7 +98,8 @@ class FirestoreMessageDataSource @Inject constructor(
                     ?: emptyList(),
                 readBy = (doc.get("readBy") as? List<*>)
                     ?.mapNotNull { it as? String } 
-                    ?: emptyList()
+                    ?: emptyList(),
+                serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error getting message $messageId", e)
@@ -130,7 +132,8 @@ class FirestoreMessageDataSource @Inject constructor(
                             ?: emptyList(),
                         readBy = (doc.get("readBy") as? List<*>)
                             ?.mapNotNull { it as? String } 
-                            ?: emptyList()
+                            ?: emptyList(),
+                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing message ${doc.id}", e)
@@ -163,12 +166,13 @@ class FirestoreMessageDataSource @Inject constructor(
             return null
         }
         
-        val messageData = mapOf(
+        val messageData = hashMapOf(
             "text" to text,
             "senderId" to userId,
             "createdAtMs" to System.currentTimeMillis(),
             "receivedBy" to listOf(userId),  // Sender has received their own message
-            "readBy" to listOf(userId)       // Sender has read their own message
+            "readBy" to listOf(userId),      // Sender has read their own message
+            "serverTimestamp" to FieldValue.serverTimestamp()  // Server assigns actual timestamp
         )
         
         return try {
@@ -181,7 +185,9 @@ class FirestoreMessageDataSource @Inject constructor(
             Log.d(TAG, "Message sent successfully: ${docRef.id}")
             docRef.id
         } catch (e: Exception) {
-            Log.e(TAG, "Error sending message to $conversationId", e)
+            // Even if there's an error (e.g. offline), Firestore should have cached it
+            // The listener will pick it up and show it as PENDING
+            Log.w(TAG, "Error sending message to $conversationId (may be offline): ${e.message}")
             null
         }
     }
@@ -207,18 +213,23 @@ class FirestoreMessageDataSource @Inject constructor(
     
     /**
      * Mark a message as read by the current user.
-     * Adds current user ID to the readBy array.
+     * Also marks as received (you can't read without receiving first).
+     * Adds current user ID to both readBy and receivedBy arrays.
      */
     suspend fun markMessageAsRead(conversationId: String, messageId: String) {
         val userId = auth.currentUser?.uid ?: return
         
         try {
-            firestore.collection("conversations")
+            val docRef = firestore.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
                 .document(messageId)
-                .update("readBy", FieldValue.arrayUnion(userId))
-                .await()
+            
+            // Batch update both fields atomically
+            firestore.runTransaction { transaction ->
+                transaction.update(docRef, "readBy", FieldValue.arrayUnion(userId))
+                transaction.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+            }.await()
         } catch (e: Exception) {
             Log.e(TAG, "Error marking message $messageId as read", e)
         }
@@ -226,6 +237,7 @@ class FirestoreMessageDataSource @Inject constructor(
     
     /**
      * Mark multiple messages as read by the current user.
+     * Also marks them as received (you can't read without receiving first).
      * Batch operation for efficiency.
      */
     suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
@@ -242,11 +254,13 @@ class FirestoreMessageDataSource @Inject constructor(
                     .collection("messages")
                     .document(messageId)
                 
+                // Update BOTH readBy and receivedBy
                 batch.update(docRef, "readBy", FieldValue.arrayUnion(userId))
+                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
             }
             
             batch.commit().await()
-            Log.d(TAG, "Marked ${messageIds.size} messages as read")
+            Log.d(TAG, "Marked ${messageIds.size} messages as read and received")
         } catch (e: Exception) {
             Log.e(TAG, "Error marking messages as read", e)
         }

@@ -10,6 +10,7 @@ data class MessageEntity(
     val senderId: String,
     val createdAtMs: Long,
     val receivedBy: List<String>,  // List of user IDs who received this message
-    val readBy: List<String>       // List of user IDs who read this message
+    val readBy: List<String>,      // List of user IDs who read this message
+    val serverTimestamp: Long? = null  // Server-assigned timestamp (null = never reached server)
 )
 

@@ -1,7 +1,11 @@
 package com.synapse
 
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.synapse.notifications.NotificationExtras
@@ -12,11 +16,19 @@ import com.synapse.data.tokens.TokenRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @AndroidEntryPoint
 class SynapseMessagingService : FirebaseMessagingService() {
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var tokenRepository: TokenRepository
+    @Inject lateinit var firestore: FirebaseFirestore
+    @Inject lateinit var auth: FirebaseAuth
+    
+    companion object {
+        private const val TAG = "SynapseMessagingService"
+        private const val NOTIFICATION_ID_BASE = 1001
+    }
     override fun onNewToken(token: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -36,13 +48,46 @@ class SynapseMessagingService : FirebaseMessagingService() {
 
         val title = message.notification?.title ?: message.data["title"] ?: "Synapse"
         val body = message.notification?.body ?: message.data["preview"] ?: "New message"
-        val chatId = message.data[NotificationExtras.CHAT_ID]
-        val msgId = message.data[NotificationExtras.MESSAGE_ID]
-        notificationHelper.showMessageNotification(title, body, chatId, msgId)
+        val conversationId = message.data[NotificationExtras.CHAT_ID]
+        val messageId = message.data[NotificationExtras.MESSAGE_ID]
+        
+        // Mark message as received (DELIVERED status)
+        // This happens as soon as FCM delivers the notification to the device
+        markMessageAsReceived(conversationId, messageId)
+        
+        notificationHelper.showMessageNotification(title, body, conversationId, messageId)
     }
-
-    companion object {
-        private const val NOTIFICATION_ID_BASE = 1001
+    
+    /**
+     * Marks a message as received by adding the current user to receivedBy array.
+     * This triggers the ✓✓ DELIVERED status in the sender's UI.
+     */
+    private fun markMessageAsReceived(conversationId: String?, messageId: String?) {
+        if (conversationId == null || messageId == null) {
+            Log.w(TAG, "Cannot mark as received: missing conversationId or messageId")
+            return
+        }
+        
+        val currentUserId = auth.currentUser?.uid
+        if (currentUserId == null) {
+            Log.w(TAG, "Cannot mark as received: user not authenticated")
+            return
+        }
+        
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .document(messageId)
+                    .update("receivedBy", FieldValue.arrayUnion(currentUserId))
+                    .await()
+                
+                Log.d(TAG, "Message $messageId marked as received by $currentUserId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error marking message as received", e)
+            }
+        }
     }
 }
 

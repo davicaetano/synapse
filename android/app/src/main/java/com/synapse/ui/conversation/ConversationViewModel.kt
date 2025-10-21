@@ -129,7 +129,8 @@ class ConversationViewModel @Inject constructor(
             displayTime = formatTime(createdAtMs),
             isReadByEveryone = isReadByEveryone,
             senderName = sender?.displayName,
-            senderPhotoUrl = sender?.photoUrl
+            senderPhotoUrl = sender?.photoUrl,
+            status = status  // Pass through message status
         )
     }
     
