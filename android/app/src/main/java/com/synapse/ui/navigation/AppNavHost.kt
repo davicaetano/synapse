@@ -12,8 +12,10 @@ import com.synapse.auth.AuthState
 import com.synapse.MainActivityViewModel
 import com.synapse.ui.inbox.InboxScreen
 import com.synapse.ui.conversation.ConversationScreen
+import com.synapse.ui.auth.AuthScreen
 
 object Routes {
+    const val Auth = "auth"
     const val Inbox = "inbox"
     const val Conversation = "conversation/{conversationId}"
 }
@@ -24,9 +26,11 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController()
 ) {
     val authState: AuthState by mainVm.authState.collectAsStateWithLifecycle()
-
-    val start = if (authState is AuthState.SignedIn) Routes.Inbox else Routes.Inbox
+    val start = if (authState is AuthState.SignedIn) Routes.Inbox else Routes.Auth
     NavHost(navController = navController, startDestination = start) {
+        composable(Routes.Auth) {
+            AuthScreen(onSignIn = { /* triggered by Activity button previously; keep simple */ })
+        }
         composable(Routes.Inbox) {
             InboxScreen(onOpenConversation = { id ->
                 navController.navigate("conversation/$id")

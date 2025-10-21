@@ -3,10 +3,13 @@ package com.synapse.data.firestore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 import com.synapse.domain.conversation.ConversationSummary
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -37,6 +40,18 @@ class ConversationRepository @Inject constructor(
             trySend(list)
         }
         awaitClose { reg.remove() }
+    }
+
+    suspend fun ensureConversation(conversationId: String, title: String? = null) {
+        val uid = auth.currentUser?.uid ?: return
+        val data = mutableMapOf<String, Any>(
+            "updatedAtMs" to System.currentTimeMillis(),
+            "memberIds" to FieldValue.arrayUnion(uid)
+        )
+        if (title != null) data["title"] = title
+        firestore.collection("conversations").document(conversationId)
+            .set(data, SetOptions.merge())
+            .await()
     }
 }
 

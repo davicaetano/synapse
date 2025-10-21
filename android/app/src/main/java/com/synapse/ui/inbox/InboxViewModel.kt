@@ -9,13 +9,18 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
-    repo: ConversationRepository
+    private val repo: ConversationRepository
 ) : ViewModel() {
     val conversations: StateFlow<List<ConversationSummary>> =
         repo.listenConversations().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun createOrTouch(conversationId: String) {
+        viewModelScope.launch { repo.ensureConversation(conversationId) }
+    }
 }
 
 
