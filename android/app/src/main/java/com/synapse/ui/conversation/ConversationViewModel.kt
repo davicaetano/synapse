@@ -7,7 +7,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.firestore.ConversationRepository
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
+import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
+import com.synapse.domain.user.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,7 +31,13 @@ class ConversationViewModel @Inject constructor(
             viewModelScope,
             SharingStarted.WhileSubscribed(5000),
             Conversation(
-                summary = ConversationSummary(conversationId, null, 0L, emptyList()),
+                summary = ConversationSummary(
+                    id = conversationId,
+                    lastMessageText = null,
+                    updatedAtMs = 0L,
+                    members = emptyList(),
+                    convType = ConversationType.DIRECT
+                ),
                 messages = emptyList()
             )
         )

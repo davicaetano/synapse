@@ -9,8 +9,10 @@ import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import com.synapse.domain.user.User
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -161,30 +163,74 @@ class FirebaseDataSource @Inject constructor(
                 }
                 // Read current summary snapshot
                 convRef.get().addOnSuccessListener { d ->
-                    val summary = ConversationSummary(
-                        id = conversationId,
-                        lastMessageText = d.getString("lastMessageText"),
-                        updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
-                        memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-                        convType = try {
-                            ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
-                        } catch (e: IllegalArgumentException) {
-                            ConversationType.DIRECT // fallback para conversas existentes
+                    val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+
+                    // Buscar dados dos usuários para incluir no ConversationSummary
+                    firestore.collection("users")
+                        .whereIn("id", memberIds)
+                        .get()
+                        .addOnSuccessListener { usersSnapshot ->
+                            val usersMap = usersSnapshot.documents.associate { userDoc ->
+                                userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
+                            }
+
+                            val members = memberIds.mapNotNull { userId -> usersMap[userId] }
+
+                            val summary = ConversationSummary(
+                                id = conversationId,
+                                lastMessageText = d.getString("lastMessageText"),
+                                updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                                members = members,
+                                convType = try {
+                                    ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                                } catch (e: IllegalArgumentException) {
+                                    ConversationType.DIRECT // fallback para conversas existentes
+                                }
+                            )
+
+                            val messages = msgsSnap?.documents?.mapNotNull { doc ->
+                                val text = doc.getString("text") ?: return@mapNotNull null
+                                val senderId = doc.getString("senderId") ?: return@mapNotNull null
+                                val createdAt = doc.getLong("createdAtMs") ?: 0L
+                                Message(
+                                    id = doc.id,
+                                    text = text,
+                                    senderId = senderId,
+                                    createdAtMs = createdAt,
+                                    isMine = (myId != null && senderId == myId)
+                                )
+                            } ?: emptyList()
+                            trySend(Conversation(summary = summary, messages = messages))
                         }
-                    )
-                    val messages = msgsSnap?.documents?.mapNotNull { doc ->
-                        val text = doc.getString("text") ?: return@mapNotNull null
-                        val senderId = doc.getString("senderId") ?: return@mapNotNull null
-                        val createdAt = doc.getLong("createdAtMs") ?: 0L
-                        Message(
-                            id = doc.id,
-                            text = text,
-                            senderId = senderId,
-                            createdAtMs = createdAt,
-                            isMine = (myId != null && senderId == myId)
-                        )
-                    } ?: emptyList()
-                    trySend(Conversation(summary = summary, messages = messages))
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "Failed to load users for conversation", e)
+                            // Fallback sem dados dos usuários
+                            val summary = ConversationSummary(
+                                id = conversationId,
+                                lastMessageText = d.getString("lastMessageText"),
+                                updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                                members = emptyList(),
+                                convType = try {
+                                    ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                                } catch (e: IllegalArgumentException) {
+                                    ConversationType.DIRECT // fallback para conversas existentes
+                                }
+                            )
+
+                            val messages = msgsSnap?.documents?.mapNotNull { doc ->
+                                val text = doc.getString("text") ?: return@mapNotNull null
+                                val senderId = doc.getString("senderId") ?: return@mapNotNull null
+                                val createdAt = doc.getLong("createdAtMs") ?: 0L
+                                Message(
+                                    id = doc.id,
+                                    text = text,
+                                    senderId = senderId,
+                                    createdAtMs = createdAt,
+                                    isMine = (myId != null && senderId == myId)
+                                )
+                            } ?: emptyList()
+                            trySend(Conversation(summary = summary, messages = messages))
+                        }
                 }
             }
         awaitClose { regSummary.remove(); regMsgs.remove() }
@@ -194,21 +240,86 @@ class FirebaseDataSource @Inject constructor(
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", userId)
         val reg = ref.addSnapshotListener { snap, err ->
-            if (err != null) Log.e(TAG, "listenConversations error", err)
-            val list = snap?.documents?.map { d ->
-                ConversationSummary(
-                    id = d.id,
-                    lastMessageText = d.getString("lastMessageText"),
-                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
-                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-                    convType = try {
-                        ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
-                    } catch (e: IllegalArgumentException) {
-                        ConversationType.DIRECT // fallback para conversas existentes
+            if (err != null) {
+                Log.e(TAG, "listenConversations error", err)
+                return@addSnapshotListener
+            }
+
+            val conversations = snap?.documents ?: emptyList()
+
+            if (conversations.isEmpty()) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+
+            // Coletar todos os memberIds únicos de todas as conversas
+            val allMemberIds = conversations.flatMap { d ->
+                (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+            }.distinct()
+
+            if (allMemberIds.isEmpty()) {
+                val list = conversations.map { d ->
+                    ConversationSummary(
+                        id = d.id,
+                        lastMessageText = d.getString("lastMessageText"),
+                        updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                        members = emptyList(),
+                        convType = try {
+                            ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                        } catch (e: IllegalArgumentException) {
+                            ConversationType.DIRECT
+                        }
+                    )
+                }
+                trySend(list)
+                return@addSnapshotListener
+            }
+
+            // Buscar dados de todos os usuários necessários
+            firestore.collection("users")
+                .whereIn("id", allMemberIds)
+                .get()
+                .addOnSuccessListener { usersSnapshot ->
+                    val usersMap = usersSnapshot.documents.associate { userDoc ->
+                        userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
                     }
-                )
-            } ?: emptyList()
-            trySend(list)
+
+                    val list = conversations.map { d ->
+                        val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                        val members = memberIds.mapNotNull { userId -> usersMap[userId] }
+
+                        ConversationSummary(
+                            id = d.id,
+                            lastMessageText = d.getString("lastMessageText"),
+                            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                            members = members,
+                            convType = try {
+                                ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                            } catch (e: IllegalArgumentException) {
+                                ConversationType.DIRECT
+                            }
+                        )
+                    }
+                    trySend(list)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to load users for conversations", e)
+                    // Fallback sem dados dos usuários
+                    val list = conversations.map { d ->
+                        ConversationSummary(
+                            id = d.id,
+                            lastMessageText = d.getString("lastMessageText"),
+                            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                            members = emptyList(),
+                            convType = try {
+                                ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                            } catch (e: IllegalArgumentException) {
+                                ConversationType.DIRECT
+                            }
+                        )
+                    }
+                    trySend(list)
+                }
         }
         awaitClose { reg.remove() }
     }
@@ -218,23 +329,132 @@ class FirebaseDataSource @Inject constructor(
             .whereArrayContains("memberIds", userId)
             .whereEqualTo("convType", convType.name)
         val reg = ref.addSnapshotListener { snap, err ->
-            if (err != null) Log.e(TAG, "listenConversationsByType error", err)
-            val list = snap?.documents?.map { d ->
-                ConversationSummary(
-                    id = d.id,
-                    lastMessageText = d.getString("lastMessageText"),
-                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
-                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-                    convType = try {
-                        ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
-                    } catch (e: IllegalArgumentException) {
-                        ConversationType.DIRECT // fallback para conversas existentes
+            if (err != null) {
+                Log.e(TAG, "listenConversationsByType error", err)
+                return@addSnapshotListener
+            }
+
+            val conversations = snap?.documents ?: emptyList()
+
+            if (conversations.isEmpty()) {
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+
+            // Coletar todos os memberIds únicos de todas as conversas
+            val allMemberIds = conversations.flatMap { d ->
+                (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+            }.distinct()
+
+            if (allMemberIds.isEmpty()) {
+                val list = conversations.map { d ->
+                    ConversationSummary(
+                        id = d.id,
+                        lastMessageText = d.getString("lastMessageText"),
+                        updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                        members = emptyList(),
+                        convType = try {
+                            ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                        } catch (e: IllegalArgumentException) {
+                            ConversationType.DIRECT
+                        }
+                    )
+                }
+                trySend(list)
+                return@addSnapshotListener
+            }
+
+            // Buscar dados de todos os usuários necessários
+            firestore.collection("users")
+                .whereIn("id", allMemberIds)
+                .get()
+                .addOnSuccessListener { usersSnapshot ->
+                    val usersMap = usersSnapshot.documents.associate { userDoc ->
+                        userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
                     }
-                )
-            } ?: emptyList()
-            trySend(list)
+
+                    val list = conversations.map { d ->
+                        val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                        val members = memberIds.mapNotNull { userId -> usersMap[userId] }
+
+                        ConversationSummary(
+                            id = d.id,
+                            lastMessageText = d.getString("lastMessageText"),
+                            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                            members = members,
+                            convType = try {
+                                ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                            } catch (e: IllegalArgumentException) {
+                                ConversationType.DIRECT
+                            }
+                        )
+                    }
+                    trySend(list)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Failed to load users for conversations by type", e)
+                    // Fallback sem dados dos usuários
+                    val list = conversations.map { d ->
+                        ConversationSummary(
+                            id = d.id,
+                            lastMessageText = d.getString("lastMessageText"),
+                            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                            members = emptyList(),
+                            convType = try {
+                                ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                            } catch (e: IllegalArgumentException) {
+                                ConversationType.DIRECT
+                            }
+                        )
+                    }
+                    trySend(list)
+                }
         }
         awaitClose { reg.remove() }
+    }
+
+    // Método auxiliar para converter dados do Firestore em ConversationSummary com dados completos dos usuários
+    private fun createConversationSummaryFromDocument(d: com.google.firebase.firestore.DocumentSnapshot, usersMap: Map<String, User>): ConversationSummary {
+        val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+        val members = memberIds.mapNotNull { userId -> usersMap[userId] }
+
+        return ConversationSummary(
+            id = d.id,
+            lastMessageText = d.getString("lastMessageText"),
+            updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+            members = members,
+            convType = try {
+                ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+            } catch (e: IllegalArgumentException) {
+                ConversationType.DIRECT // fallback para conversas existentes
+            }
+        )
+    }
+
+    // Método para combinar conversas com dados dos usuários
+    fun listenConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> {
+        val conversationsFlow = listenConversations(userId)
+        val usersFlow = listenUsers().map { users -> users.associateBy { it.id } }
+
+        return combine(conversationsFlow, usersFlow) { conversations, usersMap ->
+            conversations.map { conv ->
+                val members = conv.memberIds.mapNotNull { userId -> usersMap[userId] }
+                conv.copy(members = members)
+            }
+        }
+    }
+
+    // Método para combinar conversas filtradas por tipo com dados dos usuários
+    fun listenConversationsWithUsersByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> {
+        val conversationsFlow = listenConversationsByType(userId, convType)
+        val usersFlow = listenUsers().map { users -> users.associateBy { it.id } }
+
+        return combine(conversationsFlow, usersFlow) { conversations, usersMap ->
+            conversations.map { conv ->
+                val members = conv.memberIds.mapNotNull { userId -> usersMap[userId] }
+                conv.copy(members = members)
+            }
+        }
     }
 
     fun listenUsers(): Flow<List<User>> = callbackFlow {

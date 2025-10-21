@@ -42,6 +42,12 @@ class ConversationRepository @Inject constructor(
     fun listenUserConversationsByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> =
         firebaseDataSource.listenConversationsByType(userId, convType)
 
+    fun listenUserConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> =
+        firebaseDataSource.listenConversationsWithUsers(userId)
+
+    fun listenUserConversationsWithUsersByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> =
+        firebaseDataSource.listenConversationsWithUsersByType(userId, convType)
+
 }
 
 

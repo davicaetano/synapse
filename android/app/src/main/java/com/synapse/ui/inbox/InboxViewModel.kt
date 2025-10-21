@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.firestore.ConversationRepository
 import com.synapse.data.firestore.UserRepository
 import com.synapse.domain.conversation.ConversationSummary
+import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,13 +31,25 @@ class InboxViewModel @Inject constructor(
     )
 
     fun observeInbox(userId: String): StateFlow<List<InboxItem>> {
-        val conversationsFlow = conversationsRepo.listenUserConversations(userId)
-        val usersMapFlow = usersRepo.listenUsers().map { list -> list.associateBy({ it.id }, { it.displayName ?: it.id }) }
+        // Usar o novo método que já inclui dados completos dos usuários
+        val conversationsFlow = conversationsRepo.listenUserConversationsWithUsers(userId)
 
-        return combine(conversationsFlow, usersMapFlow) { convs: List<ConversationSummary>, usersMap: Map<String, String> ->
+        return conversationsFlow.map { convs: List<ConversationSummary> ->
             convs.map { c ->
-                val peerId = c.memberIds.firstOrNull { it != userId }
-                val title = "temp tittle"
+                val peerUser = c.members.firstOrNull { it.id != userId }
+                val title = when (c.convType) {
+                    ConversationType.SELF -> "AI Assistant"
+                    ConversationType.DIRECT -> peerUser?.displayName ?: "Unknown User"
+                    ConversationType.GROUP -> {
+                        val otherMembers = c.members.filter { it.id != userId }
+                        if (otherMembers.size <= 3) {
+                            otherMembers.joinToString(", ") { it.displayName ?: it.id }
+                        } else {
+                            "${otherMembers.take(2).joinToString(", ") { it.displayName ?: it.id }} + ${otherMembers.size - 2} more"
+                        }
+                    }
+                }
+
                 InboxItem(
                     id = c.id,
                     title = title,
