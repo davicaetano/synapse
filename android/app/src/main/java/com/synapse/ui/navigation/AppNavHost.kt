@@ -48,7 +48,7 @@ fun AppNavHost(
             UserPickerScreen(
                 onPickUser = { user ->
                     scope.launch {
-                        val convId = pickerVm.createDirectConversation(user.id)
+                        val convId = pickerVm.createConversation(user)
                         if (convId != null) {
                             navController.popBackStack()
                             navController.navigate("conversation/$convId")
@@ -56,8 +56,8 @@ fun AppNavHost(
                     }
                 },
                 onCreateGroup = {
-                    // TODO: Implementar navegação para tela de criação de grupo
-                    // Por exemplo: navController.navigate(Routes.CreateGroup)
+                    // TODO: Implement navigation to group creation screen
+                    // For example: navController.navigate(Routes.CreateGroup)
                 },
                 onClose = { navController.popBackStack() }
             )

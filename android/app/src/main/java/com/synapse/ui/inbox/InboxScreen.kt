@@ -105,6 +105,18 @@ private fun ConversationRow(
     item: InboxItem,
     onClick: () -> Unit,
 ) {
+    when (item) {
+        is InboxItem.SelfConversation -> SelfConversationRow(item, onClick)
+        is InboxItem.OneOnOneConversation -> OneOnOneConversationRow(item, onClick)
+        is InboxItem.GroupConversation -> GroupConversationRow(item, onClick)
+    }
+}
+
+@Composable
+private fun SelfConversationRow(
+    item: InboxItem.SelfConversation,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .clickable { onClick() }
@@ -112,8 +124,45 @@ private fun ConversationRow(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Foto do usuário (apenas para conversas diretas)
-        if (item.convType == ConversationType.DIRECT && item.otherUser?.photoUrl != null) {
+        // Self conversations don't show a profile picture
+        Spacer(modifier = Modifier.size(48.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = item.lastMessageText ?: "",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = item.displayTime,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun OneOnOneConversationRow(
+    item: InboxItem.OneOnOneConversation,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clickable { onClick() }
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Show the other user's profile picture for direct conversations
+        if (item.otherUser.photoUrl != null) {
             AsyncImage(
                 model = item.otherUser.photoUrl,
                 contentDescription = "Foto de ${item.otherUser.displayName}",
@@ -124,6 +173,44 @@ private fun ConversationRow(
             )
             Spacer(modifier = Modifier.padding(start = 12.dp))
         }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = item.lastMessageText ?: "",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = item.displayTime,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun GroupConversationRow(
+    item: InboxItem.GroupConversation,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clickable { onClick() }
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // For group conversations, show multiple profile pictures or a group icon
+        // For now, we'll show a placeholder for the group
+        Spacer(modifier = Modifier.size(48.dp)) // Placeholder for group icon
 
         Column(modifier = Modifier.weight(1f)) {
             Text(

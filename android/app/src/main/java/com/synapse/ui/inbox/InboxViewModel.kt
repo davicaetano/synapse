@@ -23,15 +23,17 @@ class InboxViewModel @Inject constructor(
 ) : ViewModel() {
 
     fun observeInbox(userId: String): StateFlow<InboxUIState> {
-        // Usar o novo método que já inclui dados completos dos usuários
+        // Use the new method that already includes complete user data
         val conversationsFlow = conversationsRepo.listenUserConversationsWithUsers(userId)
 
         return conversationsFlow.map { convs: List<ConversationSummary> ->
             val items = convs.map { c ->
-                val peerUser = c.members.firstOrNull { it.id != userId }
                 val title = when (c.convType) {
                     ConversationType.SELF -> "AI Assistant"
-                    ConversationType.DIRECT -> peerUser?.displayName ?: "Unknown User"
+                    ConversationType.DIRECT -> {
+                        val peerUser = c.members.firstOrNull { it.id != userId }
+                        peerUser?.displayName ?: "Unknown User"
+                    }
                     ConversationType.GROUP -> {
                         val otherMembers = c.members.filter { it.id != userId }
                         if (otherMembers.size <= 3) {
@@ -42,15 +44,34 @@ class InboxViewModel @Inject constructor(
                     }
                 }
 
-                InboxItem(
-                    id = c.id,
-                    title = title,
-                    lastMessageText = c.lastMessageText,
-                    updatedAtMs = c.updatedAtMs,
-                    displayTime = formatTime(c.updatedAtMs),
-                    otherUser = if (c.convType == ConversationType.DIRECT) peerUser else null,
-                    convType = c.convType
-                )
+                when (c.convType) {
+                    ConversationType.SELF -> InboxItem.SelfConversation(
+                        id = c.id,
+                        title = title,
+                        lastMessageText = c.lastMessageText,
+                        updatedAtMs = c.updatedAtMs,
+                        displayTime = formatTime(c.updatedAtMs),
+                        convType = c.convType
+                    )
+                    ConversationType.DIRECT -> InboxItem.OneOnOneConversation(
+                        id = c.id,
+                        title = title,
+                        lastMessageText = c.lastMessageText,
+                        updatedAtMs = c.updatedAtMs,
+                        displayTime = formatTime(c.updatedAtMs),
+                        convType = c.convType,
+                        otherUser = c.members.firstOrNull { it.id != userId }!!
+                    )
+                    ConversationType.GROUP -> InboxItem.GroupConversation(
+                        id = c.id,
+                        title = title,
+                        lastMessageText = c.lastMessageText,
+                        updatedAtMs = c.updatedAtMs,
+                        displayTime = formatTime(c.updatedAtMs),
+                        convType = c.convType,
+                        members = c.members
+                    )
+                }
             }.sortedByDescending { it.updatedAtMs }
 
             InboxUIState(

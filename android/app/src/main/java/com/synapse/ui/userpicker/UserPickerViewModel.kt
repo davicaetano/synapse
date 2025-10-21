@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synapse.data.firestore.UserRepository
 import com.synapse.data.firestore.ConversationRepository
-import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.user.User
-import com.synapse.ui.userpicker.UserPickerItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,16 +19,24 @@ class UserPickerViewModel @Inject constructor(
 ) : ViewModel() {
     val pickerItems: StateFlow<List<UserPickerItem>> = usersRepo.listenUsers()
         .map { users ->
-            // Adiciona a opção de criar grupo no topo
+            // Add the option to create a group at the top
             listOf(UserPickerItem.CreateGroupItem) + users.map { UserPickerItem.UserItem(it) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(UserPickerItem.CreateGroupItem))
 
-    suspend fun createDirectConversation(otherUserId: String): String? =
-        conversationRepo.getOrCreateDirectConversation(otherUserId)
+    suspend fun createDirectConversation(user: User): String? =
+        conversationRepo.getOrCreateDirectConversation(user.id)
 
     suspend fun createSelfConversation(): String? =
         conversationRepo.createSelfConversation()
+
+    // Main method that decides which type of conversation to create
+    suspend fun createConversation(user: User): String? {
+        return when {
+            user.isMyself -> createSelfConversation()
+            else -> createDirectConversation(user)
+        }
+    }
 
     suspend fun createGroupConversation(memberIds: List<String>): String? =
         conversationRepo.createGroupConversation(memberIds)
@@ -41,7 +47,7 @@ class UserPickerViewModel @Inject constructor(
     suspend fun removeUserFromGroup(conversationId: String, userId: String) =
         conversationRepo.removeUserFromGroupConversation(conversationId, userId)
 
-    // Função para lidar com a seleção de itens do picker
+    // Function to handle picker item selection
     fun onItemSelected(item: UserPickerItem, onGroupCreationRequested: () -> Unit, onUserSelected: (User) -> Unit) {
         when (item) {
             is UserPickerItem.CreateGroupItem -> onGroupCreationRequested()

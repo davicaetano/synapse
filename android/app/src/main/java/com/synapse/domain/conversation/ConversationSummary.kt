@@ -3,19 +3,19 @@ package com.synapse.domain.conversation
 import com.synapse.domain.user.User
 
 enum class ConversationType {
-    SELF,    // Conversa consigo mesmo (AI, lembretes, etc.)
-    DIRECT,  // Conversa entre duas pessoas (única)
-    GROUP    // Conversa em grupo (múltiplas pessoas)
+    SELF,    // Conversation with oneself (AI, reminders, etc.)
+    DIRECT,  // Conversation between two people (unique)
+    GROUP    // Group conversation (multiple people)
 }
 
 data class ConversationSummary constructor(
     val id: String,
     val lastMessageText: String?,
     val updatedAtMs: Long,
-    val members: List<User>,  // ← ALTERADO: Lista de objetos User completos ao invés de IDs
+    val members: List<User>,  // CHANGED: List of complete User objects instead of IDs
     val convType: ConversationType
 ) {
-    // Propriedade computada para manter compatibilidade onde memberIds ainda é usado
+    // Computed property to maintain compatibility where memberIds is still used
     val memberIds: List<String>
         get() = members.map { it.id }
 }

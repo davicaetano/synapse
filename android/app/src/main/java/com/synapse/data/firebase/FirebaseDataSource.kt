@@ -166,7 +166,7 @@ class FirebaseDataSource @Inject constructor(
                 convRef.get().addOnSuccessListener { d ->
                     val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
 
-                    // Buscar dados dos usuários para incluir no ConversationSummary
+                    // Fetch user data to include in ConversationSummary
                     firestore.collection("users")
                         .whereIn(FieldPath.documentId(), memberIds)
                         .get()
@@ -209,7 +209,7 @@ class FirebaseDataSource @Inject constructor(
                         }
                         .addOnFailureListener { e ->
                             Log.e(TAG, "Failed to load users for conversation", e)
-                            // Fallback sem dados dos usuários
+                            // Fallback without user data
                     val summary = ConversationSummary(
                         id = conversationId,
                         lastMessageText = d.getString("lastMessageText"),
@@ -257,7 +257,7 @@ class FirebaseDataSource @Inject constructor(
                 return@addSnapshotListener
             }
 
-            // Coletar todos os memberIds únicos de todas as conversas
+            // Collect all unique memberIds from all conversations
             val allMemberIds = conversations.flatMap { d ->
                 (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
             }.distinct()
@@ -280,7 +280,7 @@ class FirebaseDataSource @Inject constructor(
                 return@addSnapshotListener
             }
 
-            // Buscar dados de todos os usuários necessários
+            // Fetch data for all required users
             firestore.collection("users")
                 .whereIn(FieldPath.documentId(), allMemberIds)
                 .get()
@@ -313,7 +313,7 @@ class FirebaseDataSource @Inject constructor(
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "Failed to load users for conversations", e)
-                    // Fallback sem dados dos usuários
+                    // Fallback without user data
                     val list = conversations.map { d ->
                         ConversationSummary(
                             id = d.id,
@@ -350,7 +350,7 @@ class FirebaseDataSource @Inject constructor(
                 return@addSnapshotListener
             }
 
-            // Coletar todos os memberIds únicos de todas as conversas
+            // Collect all unique memberIds from all conversations
             val allMemberIds = conversations.flatMap { d ->
                 (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
             }.distinct()
@@ -373,7 +373,7 @@ class FirebaseDataSource @Inject constructor(
                 return@addSnapshotListener
             }
 
-            // Buscar dados de todos os usuários necessários
+            // Fetch data for all required users
             firestore.collection("users")
                 .whereIn(FieldPath.documentId(), allMemberIds)
                 .get()
@@ -406,7 +406,7 @@ class FirebaseDataSource @Inject constructor(
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "Failed to load users for conversations by type", e)
-                    // Fallback sem dados dos usuários
+                    // Fallback without user data
                     val list = conversations.map { d ->
                 ConversationSummary(
                     id = d.id,
@@ -426,7 +426,7 @@ class FirebaseDataSource @Inject constructor(
         awaitClose { reg.remove() }
     }
 
-    // Método auxiliar para converter dados do Firestore em ConversationSummary com dados completos dos usuários
+    // Helper method to convert Firestore data to ConversationSummary with complete user data
     private fun createConversationSummaryFromDocument(d: com.google.firebase.firestore.DocumentSnapshot, usersMap: Map<String, User>): ConversationSummary {
         val memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
         val members = memberIds.mapNotNull { userId -> usersMap[userId] }
@@ -444,7 +444,7 @@ class FirebaseDataSource @Inject constructor(
         )
     }
 
-    // Método para combinar conversas com dados dos usuários
+    // Method to combine conversations with user data
     fun listenConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> {
         val conversationsFlow = listenConversations(userId)
         val usersFlow = listenUsers().map { users -> users.associateBy { it.id } }
@@ -457,7 +457,7 @@ class FirebaseDataSource @Inject constructor(
         }
     }
 
-    // Método para combinar conversas filtradas por tipo com dados dos usuários
+    // Method to combine conversations filtered by type with user data
     fun listenConversationsWithUsersByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> {
         val conversationsFlow = listenConversationsByType(userId, convType)
         val usersFlow = listenUsers().map { users -> users.associateBy { it.id } }
@@ -472,13 +472,15 @@ class FirebaseDataSource @Inject constructor(
 
     fun listenUsers(): Flow<List<User>> = callbackFlow {
         val ref = firestore.collection("users")
+        val currentUserId = auth.currentUser?.uid
         val reg = ref.addSnapshotListener { snap, err ->
             if (err != null) Log.e(TAG, "listenUsers error", err)
             val list = snap?.documents?.map { d ->
                 User(
                     id = d.id,
                     displayName = d.getString("displayName"),
-                    photoUrl = d.getString("photoUrl")
+                    photoUrl = d.getString("photoUrl"),
+                    isMyself = (d.id == currentUserId)
                 )
             } ?: emptyList()
             trySend(list)

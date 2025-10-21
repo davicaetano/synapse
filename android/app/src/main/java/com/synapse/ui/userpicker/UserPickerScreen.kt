@@ -136,7 +136,7 @@ private fun UserRow(user: User, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Foto do usuário ou ícone padrão
+        // User's photo or default icon
         if (user.photoUrl != null) {
             AsyncImage(
                 model = user.photoUrl,

@@ -1,16 +1,45 @@
 package com.synapse.ui.inbox
 
 import com.synapse.domain.user.User
+import com.synapse.domain.conversation.ConversationType
 
-data class InboxItem(
-    val id: String,
-    val title: String,
-    val lastMessageText: String?,
-    val updatedAtMs: Long,
-    val displayTime: String,
-    val otherUser: User? = null, // ← Dados do outro usuário para conversas diretas
-    val convType: com.synapse.domain.conversation.ConversationType
-)
+sealed class InboxItem {
+    abstract val id: String
+    abstract val title: String
+    abstract val lastMessageText: String?
+    abstract val updatedAtMs: Long
+    abstract val displayTime: String
+    abstract val convType: ConversationType
+
+    data class SelfConversation(
+        override val id: String,
+        override val title: String,
+        override val lastMessageText: String?,
+        override val updatedAtMs: Long,
+        override val displayTime: String,
+        override val convType: ConversationType = ConversationType.SELF
+    ) : InboxItem()
+
+    data class OneOnOneConversation(
+        override val id: String,
+        override val title: String,
+        override val lastMessageText: String?,
+        override val updatedAtMs: Long,
+        override val displayTime: String,
+        override val convType: ConversationType = ConversationType.DIRECT,
+    val otherUser: User // Other user for direct conversations
+) : InboxItem()
+
+    data class GroupConversation(
+        override val id: String,
+        override val title: String,
+        override val lastMessageText: String?,
+        override val updatedAtMs: Long,
+        override val displayTime: String,
+        override val convType: ConversationType = ConversationType.GROUP,
+        val members: List<User>
+    ) : InboxItem()
+}
 
 data class InboxUIState(
     val items: List<InboxItem> = emptyList(),
