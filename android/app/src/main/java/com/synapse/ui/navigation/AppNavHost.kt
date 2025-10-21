@@ -45,15 +45,22 @@ fun AppNavHost(
         composable(Routes.UserPicker) {
             val pickerVm: com.synapse.ui.userpicker.UserPickerViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
-            UserPickerScreen(onPick = { user ->
-                scope.launch {
-                    val convId = pickerVm.createDirectConversation(user.id)
-                    if (convId != null) {
-                        navController.popBackStack()
-                        navController.navigate("conversation/$convId")
+            UserPickerScreen(
+                onPickUser = { user ->
+                    scope.launch {
+                        val convId = pickerVm.createDirectConversation(user.id)
+                        if (convId != null) {
+                            navController.popBackStack()
+                            navController.navigate("conversation/$convId")
+                        }
                     }
-                }
-            }, onClose = { navController.popBackStack() })
+                },
+                onCreateGroup = {
+                    // TODO: Implementar navegação para tela de criação de grupo
+                    // Por exemplo: navController.navigate(Routes.CreateGroup)
+                },
+                onClose = { navController.popBackStack() }
+            )
         }
         composable(Routes.Conversation) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""

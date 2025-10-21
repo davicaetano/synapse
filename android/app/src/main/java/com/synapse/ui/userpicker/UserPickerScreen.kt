@@ -5,16 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +27,7 @@ import androidx.compose.material3.Divider
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -39,11 +39,12 @@ import com.synapse.domain.user.User
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserPickerScreen(
-    onPick: (User) -> Unit,
+    onPickUser: (User) -> Unit,
+    onCreateGroup: () -> Unit,
     onClose: () -> Unit,
     vm: UserPickerViewModel = hiltViewModel()
 ) {
-    val users by vm.users.collectAsStateWithLifecycle()
+    val pickerItems by vm.pickerItems.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -63,14 +64,63 @@ fun UserPickerScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(users, key = { it.id }) { u ->
-                    UserRow(
-                        name = u.displayName ?: u.id,
-                        onClick = { onPick(u) }
-                    )
-                    Divider()
+                items(pickerItems, key = { item ->
+                    when (item) {
+                        is UserPickerItem.CreateGroupItem -> "create_group"
+                        is UserPickerItem.UserItem -> item.user.id
+                    }
+                }) { item ->
+                    when (item) {
+                        is UserPickerItem.CreateGroupItem -> {
+                            CreateGroupRow(onClick = onCreateGroup)
+                            Divider()
+                        }
+                        is UserPickerItem.UserItem -> {
+                            UserRow(
+                                name = item.user.displayName ?: item.user.id,
+                                onClick = { onPickUser(item.user) }
+                            )
+                            Divider()
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CreateGroupRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(48.dp).clip(CircleShape),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Group,
+                contentDescription = "Create Group",
+                modifier = Modifier.padding(8.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Create Group",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = "Start a group conversation",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

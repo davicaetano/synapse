@@ -37,8 +37,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.synapse.MainActivityViewModel
 import com.synapse.domain.conversation.ConversationType
-import com.synapse.ui.inbox.InboxItem
-import com.synapse.ui.inbox.InboxUIState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
