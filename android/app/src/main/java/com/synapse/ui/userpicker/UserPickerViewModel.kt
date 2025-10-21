@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synapse.data.firestore.UserRepository
 import com.synapse.data.firestore.ConversationRepository
+import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.user.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -21,6 +22,18 @@ class UserPickerViewModel @Inject constructor(
 
     suspend fun createDirectConversation(otherUserId: String): String? =
         conversationRepo.getOrCreateDirectConversation(otherUserId)
+
+    suspend fun createSelfConversation(): String? =
+        conversationRepo.createSelfConversation()
+
+    suspend fun createGroupConversation(memberIds: List<String>): String? =
+        conversationRepo.createGroupConversation(memberIds)
+
+    suspend fun addUserToGroup(conversationId: String, userId: String) =
+        conversationRepo.addUserToGroupConversation(conversationId, userId)
+
+    suspend fun removeUserFromGroup(conversationId: String, userId: String) =
+        conversationRepo.removeUserFromGroupConversation(conversationId, userId)
 }
 
 

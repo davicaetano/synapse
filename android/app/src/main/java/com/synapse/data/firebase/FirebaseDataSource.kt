@@ -6,6 +6,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
+import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import com.synapse.domain.user.User
 import kotlinx.coroutines.channels.awaitClose
@@ -41,25 +42,105 @@ class FirebaseDataSource @Inject constructor(
 
     suspend fun getOrCreateDirectConversation(otherUserId: String): String? {
         val myId = auth.currentUser?.uid ?: return null
-        val key = listOf(myId, otherUserId).sorted().joinToString("_")
-        // Check if a conversation already exists for this pair
+        val memberIds = listOf(myId, otherUserId).sorted()
+
+        // Check if a conversation already exists for this pair (using memberIds)
         val existing = firestore.collection("conversations")
-            .whereEqualTo("participantsKey", key)
+            .whereEqualTo("memberIds", memberIds)
             .limit(1)
             .get()
             .await()
         if (!existing.isEmpty) {
             return existing.documents.first().id
         }
+
         // Create with auto-generated ID to avoid collisions
         val data = mapOf(
-            "participantsKey" to key,
-            "memberIds" to listOf(myId, otherUserId),
+            "memberIds" to memberIds,
+            "convType" to ConversationType.DIRECT.name,
             "createdAtMs" to System.currentTimeMillis(),
             "updatedAtMs" to System.currentTimeMillis()
         )
         val newDoc = firestore.collection("conversations").add(data).await()
         return newDoc.id
+    }
+
+    suspend fun createSelfConversation(): String? {
+        val myId = auth.currentUser?.uid ?: return null
+
+        // Check if self conversation already exists
+        val existing = firestore.collection("conversations")
+            .whereEqualTo("memberIds", listOf(myId))
+            .whereEqualTo("convType", ConversationType.SELF.name)
+            .limit(1)
+            .get()
+            .await()
+
+        if (!existing.isEmpty) {
+            return existing.documents.first().id
+        }
+
+        // Create self conversation
+        val data = mapOf(
+            "memberIds" to listOf(myId),
+            "convType" to ConversationType.SELF.name,
+            "createdAtMs" to System.currentTimeMillis(),
+            "updatedAtMs" to System.currentTimeMillis()
+        )
+        val newDoc = firestore.collection("conversations").add(data).await()
+        return newDoc.id
+    }
+
+    suspend fun createGroupConversation(memberIds: List<String>): String? {
+        if (memberIds.isEmpty()) return null
+
+        val sortedMemberIds = memberIds.sorted()
+        val groupName = "Group_${sortedMemberIds.joinToString("_")}"
+
+        // Check if group conversation already exists
+        val existing = firestore.collection("conversations")
+            .whereEqualTo("memberIds", sortedMemberIds)
+            .whereEqualTo("convType", ConversationType.GROUP.name)
+            .limit(1)
+            .get()
+            .await()
+
+        if (!existing.isEmpty) {
+            return existing.documents.first().id
+        }
+
+        // Create group conversation
+        val data = mapOf(
+            "memberIds" to sortedMemberIds,
+            "convType" to ConversationType.GROUP.name,
+            "groupName" to groupName,
+            "createdAtMs" to System.currentTimeMillis(),
+            "updatedAtMs" to System.currentTimeMillis()
+        )
+        val newDoc = firestore.collection("conversations").add(data).await()
+        return newDoc.id
+    }
+
+    suspend fun addUserToGroupConversation(conversationId: String, userId: String) {
+        val convRef = firestore.collection("conversations").document(conversationId)
+
+        // Add user to memberIds array
+        convRef.update("memberIds", com.google.firebase.firestore.FieldValue.arrayUnion(userId))
+            .await()
+
+        // Update timestamp
+        convRef.update("updatedAtMs", System.currentTimeMillis()).await()
+    }
+
+    suspend fun removeUserFromGroupConversation(conversationId: String, userId: String) {
+        val convRef = firestore.collection("conversations").document(conversationId)
+
+        // Remove user from memberIds array
+        convRef.update("memberIds", com.google.firebase.firestore.FieldValue.arrayRemove(userId))
+            .await()
+
+        // Update timestamp
+        convRef.update("updatedAtMs", System.currentTimeMillis()).await()
     }
 
     fun listenConversation(conversationId: String): Flow<Conversation> = callbackFlow {
@@ -84,7 +165,12 @@ class FirebaseDataSource @Inject constructor(
                         id = conversationId,
                         lastMessageText = d.getString("lastMessageText"),
                         updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
-                        memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                        memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                        convType = try {
+                            ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                        } catch (e: IllegalArgumentException) {
+                            ConversationType.DIRECT // fallback para conversas existentes
+                        }
                     )
                     val messages = msgsSnap?.documents?.mapNotNull { doc ->
                         val text = doc.getString("text") ?: return@mapNotNull null
@@ -114,7 +200,36 @@ class FirebaseDataSource @Inject constructor(
                     id = d.id,
                     lastMessageText = d.getString("lastMessageText"),
                     updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
-                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                    convType = try {
+                        ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                    } catch (e: IllegalArgumentException) {
+                        ConversationType.DIRECT // fallback para conversas existentes
+                    }
+                )
+            } ?: emptyList()
+            trySend(list)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    fun listenConversationsByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> = callbackFlow {
+        val ref = firestore.collection("conversations")
+            .whereArrayContains("memberIds", userId)
+            .whereEqualTo("convType", convType.name)
+        val reg = ref.addSnapshotListener { snap, err ->
+            if (err != null) Log.e(TAG, "listenConversationsByType error", err)
+            val list = snap?.documents?.map { d ->
+                ConversationSummary(
+                    id = d.id,
+                    lastMessageText = d.getString("lastMessageText"),
+                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+                    convType = try {
+                        ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
+                    } catch (e: IllegalArgumentException) {
+                        ConversationType.DIRECT // fallback para conversas existentes
+                    }
                 )
             } ?: emptyList()
             trySend(list)
