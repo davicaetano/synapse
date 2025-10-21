@@ -4,7 +4,8 @@ data class ConversationUIMessage(
     val id: String,
     val text: String,
     val isMine: Boolean,
-    val displayTime: String
+    val displayTime: String,
+    val isReadByEveryone: Boolean = false
 )
 
 data class ConversationUIState(

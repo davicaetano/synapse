@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,7 +82,8 @@ fun ConversationScreen(
                     MessageBubble(
                         text = m.text,
                         displayTime = m.displayTime,
-                        isMine = m.isMine
+                        isMine = m.isMine,
+                        isReadByEveryone = m.isReadByEveryone
                     )
                 }
             }
@@ -110,6 +114,7 @@ private fun MessageBubble(
     text: String,
     displayTime: String,
     isMine: Boolean,
+    isReadByEveryone: Boolean = false,
 ) {
     val bg = if (isMine) Color(0xFF0B93F6) else Color(0xFFE5E5EA)
     val fg = if (isMine) Color.White else Color.Black
@@ -129,13 +134,27 @@ private fun MessageBubble(
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Text(text = text, color = fg)
-            Text(
-                text = displayTime,
-                color = fg.copy(alpha = 0.8f),
-                style = MaterialTheme.typography.labelSmall,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = if (isMine) TextAlign.End else TextAlign.Start
-            )
+                horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = displayTime,
+                    color = fg.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+                if (isReadByEveryone) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Read by everyone",
+                        tint = fg.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .padding(start = 4.dp)
+                            .size(12.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -155,13 +174,15 @@ private fun ConversationScreenPreview() {
                             id = "m1",
                             text = "Hello!",
                             isMine = true,
-                            displayTime = "09:12"
+                            displayTime = "09:12",
+                            isReadByEveryone = true
                         ),
                         ConversationUIMessage(
                             id = "m2",
                             text = "Hi!",
                             isMine = false,
-                            displayTime = "09:13"
+                            displayTime = "09:13",
+                            isReadByEveryone = true
                         )
                     )
                 ),

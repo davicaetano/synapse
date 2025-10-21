@@ -73,7 +73,8 @@ class ConversationViewModel @Inject constructor(
             id = id,
             text = text,
             isMine = isMine,
-            displayTime = formatTime(createdAtMs)
+            displayTime = formatTime(createdAtMs),
+            isReadByEveryone = isReadByEveryone
         )
     }
 

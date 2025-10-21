@@ -203,26 +203,30 @@ class FirebaseDataSource @Inject constructor(
                                 val receivedByIds = (doc.get("receivedBy") as? List<String>) ?: emptyList()
                                 val readByIds = (doc.get("readBy") as? List<String>) ?: emptyList()
 
-                                // For now, create message with empty user lists
-                                // User data will be fetched separately if needed
-                                val receivedByUsers = emptyList<User>()
-                                val readByUsers = emptyList<User>()
+                                // For now, create message with IDs and calculate isReadByEveryone based on IDs count
+                                // This is a workaround since we can't use await() in snapshot listeners
+                                val isReadByEveryoneBasedOnIds = readByIds.size >= memberCount
 
                                 // Mark message as received if current user hasn't received it yet (skip if it's their own message)
                                 if (myId != null && myId !in receivedByIds && senderId != myId) {
                                     doc.reference.update("receivedBy", com.google.firebase.firestore.FieldValue.arrayUnion(myId))
                                 }
 
-                                Message(
+                                val message = Message(
                                     id = doc.id,
                                     text = text,
                                     senderId = senderId,
                                     createdAtMs = createdAt,
                                     isMine = (myId != null && senderId == myId),
-                                    receivedBy = receivedByUsers,
-                                    readBy = readByUsers,
-                                    isReadByEveryone = (readByUsers.size >= memberCount)
+                                    receivedBy = emptyList(), // Will be populated later if needed
+                                    readBy = emptyList(),     // Will be populated later if needed
+                                    isReadByEveryone = isReadByEveryoneBasedOnIds
                                 )
+
+                                // Log message creation with isReadByEveryone status
+                                android.util.Log.d(TAG, "Message created: id=${message.id}, text=${message.text}, isReadByEveryone=${message.isReadByEveryone}, readByIdsCount=${readByIds.size}, memberCount=$memberCount")
+
+                                message
                             } ?: emptyList()
                             trySend(Conversation(summary = summary, messages = messages))
                         }
@@ -248,10 +252,12 @@ class FirebaseDataSource @Inject constructor(
                         val receivedByIds = (doc.get("receivedBy") as? List<String>) ?: emptyList()
                         val readByIds = (doc.get("readBy") as? List<String>) ?: emptyList()
 
-                        // For now, create message with empty user lists
-                        // User data will be fetched separately if needed
-                        val receivedByUsers = emptyList<User>()
-                        val readByUsers = emptyList<User>()
+                        // Calculate memberCount from the conversation document
+                        val fallbackMemberCount = memberIds.size
+
+                        // For now, create message with IDs and calculate isReadByEveryone based on IDs count
+                        // This is a workaround since we can't use await() in snapshot listeners
+                        val isReadByEveryoneBasedOnIds = readByIds.size >= fallbackMemberCount
 
                         // Mark message as received if current user hasn't received it yet (skip if it's their own message)
                         if (myId != null && myId !in receivedByIds && senderId != myId) {
@@ -264,8 +270,9 @@ class FirebaseDataSource @Inject constructor(
                             senderId = senderId,
                             createdAtMs = createdAt,
                             isMine = (myId != null && senderId == myId),
-                            receivedBy = receivedByUsers,
-                            readBy = readByUsers
+                            receivedBy = emptyList(), // Will be populated later if needed
+                            readBy = emptyList(),     // Will be populated later if needed
+                            isReadByEveryone = isReadByEveryoneBasedOnIds
                         )
                     } ?: emptyList()
                     trySend(Conversation(summary = summary, messages = messages))
