@@ -20,7 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -94,7 +94,7 @@ fun InboxScreen(
                             ConversationRow(
                                 item = item,
                                 onClick = { onOpenConversation(item.id) })
-                            Divider()
+                            HorizontalDivider()
                         }
                     }
                 }
@@ -169,7 +169,7 @@ private fun OneOnOneConversationRow(
             if (item.otherUser.photoUrl != null) {
                 AsyncImage(
                     model = item.otherUser.photoUrl,
-                    contentDescription = "Foto de ${item.otherUser.displayName}",
+                    contentDescription = "Profile picture of ${item.otherUser.displayName}",
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape),
@@ -189,7 +189,7 @@ private fun OneOnOneConversationRow(
         Spacer(modifier = Modifier.padding(start = 12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            // Nome do usuário + status (online ou last seen)
+            // User name + status (online or last seen)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = item.title,
@@ -198,7 +198,7 @@ private fun OneOnOneConversationRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                // Mostrar status ao lado do nome
+                // Show status next to name
                 if (item.otherUser.isOnline) {
                     Spacer(modifier = Modifier.size(4.dp))
                     Text(
@@ -220,7 +220,7 @@ private fun OneOnOneConversationRow(
                 }
             }
             
-            // Sempre mostrar última mensagem
+            // Always show last message
             Text(
                 text = item.lastMessageText ?: "",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
@@ -274,7 +274,7 @@ private fun GroupConversationRow(
     }
 }
 
-// Helper function para formato curto do last seen (usado no inbox)
+// Helper function for short format of last seen (used in inbox)
 private fun formatLastSeenShort(lastSeenMs: Long): String {
     val now = System.currentTimeMillis()
     val diffMs = now - lastSeenMs

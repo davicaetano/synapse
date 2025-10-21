@@ -23,7 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,14 +75,14 @@ fun UserPickerScreen(
                     when (item) {
                         is UserPickerItem.CreateGroupItem -> {
                             CreateGroupRow(onClick = onCreateGroup)
-                            Divider()
+                            HorizontalDivider()
                         }
                         is UserPickerItem.UserItem -> {
                             UserRow(
                                 user = item.user,
                                 onClick = { onPickUser(item.user) }
                             )
-                            Divider()
+                            HorizontalDivider()
                         }
                     }
                 }
@@ -140,7 +140,7 @@ private fun UserRow(user: User, onClick: () -> Unit) {
         if (user.photoUrl != null) {
             AsyncImage(
                 model = user.photoUrl,
-                contentDescription = "Foto de ${user.displayName ?: user.id}",
+                contentDescription = "Profile picture of ${user.displayName ?: user.id}",
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape),
@@ -154,7 +154,7 @@ private fun UserRow(user: User, onClick: () -> Unit) {
             ) {
                 Icon(
                     imageVector = Icons.Filled.Person,
-                    contentDescription = "Foto padrão",
+                    contentDescription = "Default profile picture",
                     modifier = Modifier.padding(8.dp),
                     tint = MaterialTheme.colorScheme.onSecondaryContainer
                 )
