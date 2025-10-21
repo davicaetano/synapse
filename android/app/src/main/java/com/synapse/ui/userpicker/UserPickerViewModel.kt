@@ -20,7 +20,7 @@ class UserPickerViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     suspend fun createDirectConversation(otherUserId: String): String? =
-        conversationRepo.createDirectConversation(otherUserId)
+        conversationRepo.getOrCreateDirectConversation(otherUserId)
 }
 
 

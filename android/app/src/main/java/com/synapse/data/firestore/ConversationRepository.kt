@@ -3,6 +3,7 @@ package com.synapse.data.firestore
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.synapse.domain.conversation.ConversationSummary
@@ -27,14 +28,18 @@ class ConversationRepository @Inject constructor(
         }
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", uid)
-            .orderBy("updatedAtMs", Query.Direction.DESCENDING)
-        val reg = ref.addSnapshotListener { snap, _ ->
+        // NOTE: ordering by updatedAtMs can require a composite index; avoid for MVP
+        val reg = ref.addSnapshotListener { snap, err ->
+            if (err != null) {
+                Log.e(TAG, "listenConversations snapshot error", err)
+            }
             val list = snap?.documents?.map { d ->
                 ConversationSummary(
                     id = d.id,
                     title = d.getString("title"),
                     lastMessageText = d.getString("lastMessageText"),
-                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L
+                    updatedAtMs = d.getLong("updatedAtMs") ?: 0L,
+                    memberIds = (d.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                 )
             } ?: emptyList()
             trySend(list)
@@ -54,19 +59,30 @@ class ConversationRepository @Inject constructor(
             .await()
     }
 
-    suspend fun createDirectConversation(otherUserId: String): String? {
+    suspend fun getOrCreateDirectConversation(otherUserId: String): String? {
         val myId = auth.currentUser?.uid ?: return null
-        val convId = listOf(myId, otherUserId).sorted().joinToString("_")
-        firestore.collection("conversations").document(convId)
-            .set(
-                mapOf(
-                    "memberIds" to listOf(myId, otherUserId),
-                    "updatedAtMs" to System.currentTimeMillis()
-                ),
-                SetOptions.merge()
-            ).await()
-        return convId
+        val key = listOf(myId, otherUserId).sorted().joinToString("_")
+        // Check if a conversation already exists for this pair
+        val existing = firestore.collection("conversations")
+            .whereEqualTo("participantsKey", key)
+            .limit(1)
+            .get()
+            .await()
+        if (!existing.isEmpty) {
+            return existing.documents.first().id
+        }
+        // Create with auto-generated ID to avoid collisions
+        val data = mapOf(
+            "participantsKey" to key,
+            "memberIds" to listOf(myId, otherUserId),
+            "createdAtMs" to System.currentTimeMillis(),
+            "updatedAtMs" to System.currentTimeMillis()
+        )
+        val newDoc = firestore.collection("conversations").add(data).await()
+        return newDoc.id
     }
+
+    companion object { private const val TAG = "ConversationRepository" }
 }
 
 

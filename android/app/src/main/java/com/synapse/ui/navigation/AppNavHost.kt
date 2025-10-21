@@ -3,6 +3,8 @@ package com.synapse.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -39,9 +41,16 @@ fun AppNavHost(
             })
         }
         composable(Routes.UserPicker) {
+            val pickerVm: com.synapse.ui.userpicker.UserPickerViewModel = hiltViewModel()
+            val scope = rememberCoroutineScope()
             UserPickerScreen(onPick = { user ->
-                // We'll navigate back to inbox then to conversation; the VM will create the conv id deterministically elsewhere if needed
-                navController.navigate("conversation/${user.id}")
+                scope.launch {
+                    val convId = pickerVm.createDirectConversation(user.id)
+                    if (convId != null) {
+                        navController.popBackStack()
+                        navController.navigate("conversation/$convId")
+                    }
+                }
             })
         }
         composable(Routes.Conversation) { backStackEntry ->
