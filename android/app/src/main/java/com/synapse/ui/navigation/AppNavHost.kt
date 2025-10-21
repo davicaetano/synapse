@@ -27,13 +27,15 @@ object Routes {
 @Composable
 fun AppNavHost(
     mainVm: MainActivityViewModel,
+    startGoogleSignIn: () -> Unit,
     navController: NavHostController = rememberNavController()
 ) {
+
     val authState: AuthState by mainVm.authState.collectAsStateWithLifecycle()
     val start = if (authState is AuthState.SignedIn) Routes.Inbox else Routes.Auth
     NavHost(navController = navController, startDestination = start) {
         composable(Routes.Auth) {
-            AuthScreen(onSignIn = { /* triggered by Activity button previously; keep simple */ })
+            AuthScreen(onSignIn = { startGoogleSignIn() })
         }
         composable(Routes.Inbox) {
             InboxScreen(onOpenConversation = { id ->

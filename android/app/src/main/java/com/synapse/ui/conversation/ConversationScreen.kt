@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,9 +13,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,60 +38,74 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
 ) {
     val conversation: Conversation by vm.conversation.collectAsStateWithLifecycle()
 
-    ConversationScreen(
-        conversation = conversation,
-        onSendClick = { text: String -> vm.send(text) }
-    )
+        ConversationScreen(
+            conversation = conversation,
+            onSendClick = { text: String -> vm.send(text) },
+        )
+
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationScreen(
     conversation: Conversation,
     onSendClick: (text: String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
 
     var input by remember { mutableStateOf("") }
-    Column(
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(conversation.summary.title ?: "") },
+                colors = TopAppBarDefaults.topAppBarColors()
+            )
+        },
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp)
             .imePadding()
-    ) {
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) { padding ->
+        Column(
+            modifier = modifier.padding(padding)
         ) {
-            items(conversation.messages) { m ->
-
-                MessageBubble(
-                    text = m.text,
-                    timeMs = m.createdAtMs,
-                    isMine = m.isMine
-                )
-            }
-        }
-        Row {
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    if (input.isNotBlank()) {
-                        onSendClick(input)
-                        input = ""
-                    }
-                },
-                modifier = Modifier.padding(start = 8.dp)
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Send")
+                items(conversation.messages) { m ->
+
+                    MessageBubble(
+                        text = m.text,
+                        timeMs = m.createdAtMs,
+                        isMine = m.isMine
+                    )
+                }
+            }
+            Row {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = {
+                        if (input.isNotBlank()) {
+                            onSendClick(input)
+                            input = ""
+                        }
+                    },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text("Send")
+                }
             }
         }
     }
@@ -96,7 +115,7 @@ fun ConversationScreen(
 private fun MessageBubble(
     text: String,
     timeMs: Long,
-    isMine: Boolean
+    isMine: Boolean,
 ) {
     val bg = if (isMine) Color(0xFF0B93F6) else Color(0xFFE5E5EA)
     val fg = if (isMine) Color.White else Color.Black
@@ -140,6 +159,7 @@ private fun ConversationScreenPreview() {
     SynapseTheme {
         Column {
             ConversationScreen(
+                modifier = Modifier.weight(1.0f),
                 conversation = Conversation(
                     summary = ConversationSummary(
                         id = "123",
@@ -175,27 +195,16 @@ private fun ConversationScreenPreview() {
                 onSendClick = {}
 
             )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp)
-        ) {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Column(
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 50.dp)
+                    .weight(1.0f)
 
+            ) {
+                Text(text = "abc")
             }
-//            Row {
-//                OutlinedTextField(
-//                    value = "",
-//                    onValueChange = {},
-//                    modifier = Modifier.weight(1f),
-//                    placeholder = { Text("Type a message") })
-//                Button(onClick = {}, modifier = Modifier.padding(start = 8.dp)) { Text("Send") }
-//            }
         }
+
     }
 }
 
