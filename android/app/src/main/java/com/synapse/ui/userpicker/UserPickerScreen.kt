@@ -30,8 +30,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
+import coil.compose.AsyncImage
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.domain.user.User
@@ -77,7 +79,7 @@ fun UserPickerScreen(
                         }
                         is UserPickerItem.UserItem -> {
                             UserRow(
-                                name = item.user.displayName ?: item.user.id,
+                                user = item.user,
                                 onClick = { onPickUser(item.user) }
                             )
                             Divider()
@@ -126,29 +128,42 @@ private fun CreateGroupRow(onClick: () -> Unit) {
 }
 
 @Composable
-private fun UserRow(name: String, onClick: () -> Unit) {
+private fun UserRow(user: User, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .clickable(onClick = onClick)
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            modifier = Modifier.size(48.dp).clip(CircleShape),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                modifier = Modifier.padding(8.dp),
-                tint = MaterialTheme.colorScheme.onSecondaryContainer
+        // Foto do usuário ou ícone padrão
+        if (user.photoUrl != null) {
+            AsyncImage(
+                model = user.photoUrl,
+                contentDescription = "Foto de ${user.displayName ?: user.id}",
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape),
+                contentScale = ContentScale.Crop
             )
+        } else {
+            Surface(
+                modifier = Modifier.size(48.dp).clip(CircleShape),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Person,
+                    contentDescription = "Foto padrão",
+                    modifier = Modifier.padding(8.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = name,
+                text = user.displayName ?: user.id,
                 style = MaterialTheme.typography.titleMedium
             )
         }
