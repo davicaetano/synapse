@@ -44,8 +44,9 @@ class MainActivityViewModel @Inject constructor(
     suspend fun requestGoogleIdToken(activity: android.app.Activity): String? =
         authRepository.requestGoogleIdToken(activity)
 
-    fun signInWithIdToken(idToken: String, onComplete: (Boolean) -> Unit) =
+    suspend fun signInWithIdToken(idToken: String, onComplete: (Boolean) -> Unit) {
         authRepository.signInWithIdToken(idToken, onComplete)
+    }
 
     fun signOut() = authRepository.signOut()
 }

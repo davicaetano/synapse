@@ -20,10 +20,7 @@ class SynapseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (user != null) {
-                    tokenRepository.saveToken(user.uid, token)
-                }
+                tokenRepository.getAndSaveCurrentToken()
             } catch (_: Exception) {
             }
         }
