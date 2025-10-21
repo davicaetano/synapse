@@ -28,21 +28,20 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Synapse">
+            android:theme="@style/Theme.Synapse"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-        <activity
-            android:name=".ChatActivity"
-            android:exported="true"
-            android:label="@string/app_name"
-            android:theme="@style/Theme.Synapse">
+            
+            <!-- Deep link for notifications -->
             <intent-filter>
-                <action android:name="com.synapse.action.OPEN_CHAT" />
+                <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="synapse" android:host="conversation" />
+                <data android:scheme="synapse" android:host="inbox" />
             </intent-filter>
         </activity>
     </application>
