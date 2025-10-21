@@ -11,6 +11,7 @@ data class ConversationEntity(
     val lastMessageText: String?,
     val updatedAtMs: Long,
     val createdAtMs: Long,
-    val groupName: String? = null
+    val groupName: String? = null,
+    val createdBy: String? = null  // Creator/admin user ID (only for GROUP conversations)
 )
 

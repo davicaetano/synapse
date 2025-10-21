@@ -111,7 +111,7 @@ fun InboxScreen(
                                 text = { Text("New Group") },
                                 onClick = {
                                     showMenu = false
-                                    onOpenConversation("userPicker")
+                                    onOpenConversation("createGroup")
                                 }
                             )
                             

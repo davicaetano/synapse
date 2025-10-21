@@ -231,9 +231,22 @@ class ConversationRepository @Inject constructor(
     
     /**
      * Create a group conversation.
+     * Current user is automatically set as the admin/creator.
+     * 
+     * @param memberIds List of user IDs to add to group (can be empty to create group with just yourself)
+     * @param groupName Optional group name
      */
     suspend fun createGroupConversation(memberIds: List<String>, groupName: String? = null): String? {
-        return conversationDataSource.createGroupConversation(memberIds, groupName)
+        val currentUserId = auth.currentUser?.uid ?: return null
+        
+        // Always include current user in the group
+        val allMemberIds = (memberIds + currentUserId).distinct()
+        
+        return conversationDataSource.createGroupConversation(
+            memberIds = allMemberIds,
+            groupName = groupName,
+            createdBy = currentUserId  // Current user is the admin
+        )
     }
     
     /**

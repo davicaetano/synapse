@@ -55,7 +55,8 @@ class FirestoreConversationDataSource @Inject constructor(
                         lastMessageText = doc.getString("lastMessageText"),
                         updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
                         createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                        groupName = doc.getString("groupName")
+                        groupName = doc.getString("groupName"),
+                        createdBy = doc.getString("createdBy")
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing conversation ${doc.id}", e)
@@ -188,19 +189,24 @@ class FirestoreConversationDataSource @Inject constructor(
     /**
      * Create a group conversation.
      * Returns conversation ID if successful.
+     * 
+     * @param memberIds List of user IDs (must include at least 1 member)
+     * @param groupName Optional group name
+     * @param createdBy User ID of the creator/admin
      */
     suspend fun createGroupConversation(
         memberIds: List<String>,
-        groupName: String? = null
+        groupName: String? = null,
+        createdBy: String
     ): String? {
-        if (memberIds.size < 2) {
-            Log.e(TAG, "Group conversation must have at least 2 members")
+        if (memberIds.isEmpty()) {
+            Log.e(TAG, "Group conversation must have at least 1 member")
             return null
         }
         
         val sortedIds = memberIds.sorted()
         
-        // Check if already exists
+        // Check if already exists (by memberIds + convType)
         val existing = firestore.collection("conversations")
             .whereEqualTo("memberIds", sortedIds)
             .whereEqualTo("convType", ConversationType.GROUP.name)
@@ -212,10 +218,11 @@ class FirestoreConversationDataSource @Inject constructor(
             return existing.documents.first().id
         }
         
-        // Create new
+        // Create new group
         val data = mutableMapOf<String, Any>(
             "memberIds" to sortedIds,
             "convType" to ConversationType.GROUP.name,
+            "createdBy" to createdBy,  // Store creator as admin
             "createdAtMs" to System.currentTimeMillis(),
             "updatedAtMs" to System.currentTimeMillis()
         )
@@ -226,6 +233,7 @@ class FirestoreConversationDataSource @Inject constructor(
         
         return try {
             val docRef = firestore.collection("conversations").add(data).await()
+            Log.d(TAG, "Group created by $createdBy with ${memberIds.size} members")
             docRef.id
         } catch (e: Exception) {
             Log.e(TAG, "Error creating group conversation", e)

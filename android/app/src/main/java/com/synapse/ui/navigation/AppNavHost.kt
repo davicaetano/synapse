@@ -16,12 +16,14 @@ import com.synapse.ui.inbox.InboxScreen
 import com.synapse.ui.conversation.ConversationScreen
 import com.synapse.ui.auth.AuthScreen
 import com.synapse.ui.userpicker.UserPickerScreen
+import com.synapse.ui.creategroup.CreateGroupScreen
 
 object Routes {
     const val Auth = "auth"
     const val Inbox = "inbox"
     const val Conversation = "conversation/{conversationId}"
     const val UserPicker = "userPicker"
+    const val CreateGroup = "createGroup"
 }
 
 @Composable
@@ -56,8 +58,7 @@ fun AppNavHost(
                     }
                 },
                 onCreateGroup = {
-                    // TODO: Implement navigation to group creation screen
-                    // For example: navController.navigate(Routes.CreateGroup)
+                    navController.navigate(Routes.CreateGroup)
                 },
                 onClose = { navController.popBackStack() }
             )
@@ -65,6 +66,15 @@ fun AppNavHost(
         composable(Routes.Conversation) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
             ConversationScreen()
+        }
+        composable(Routes.CreateGroup) {
+            CreateGroupScreen(
+                onGroupCreated = { conversationId ->
+                    navController.popBackStack()
+                    navController.navigate("conversation/$conversationId")
+                },
+                onClose = { navController.popBackStack() }
+            )
         }
     }
 }

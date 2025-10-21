@@ -39,7 +39,8 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
             ConversationType.valueOf(this.convType)
         } catch (e: IllegalArgumentException) {
             ConversationType.DIRECT
-        }
+        },
+        createdBy = this.createdBy
     )
 }
 
