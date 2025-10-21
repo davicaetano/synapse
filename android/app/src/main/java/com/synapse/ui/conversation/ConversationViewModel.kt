@@ -26,6 +26,18 @@ class ConversationViewModel @Inject constructor(
 ) : ViewModel() {
     private val conversationId: String = savedStateHandle.get<String>("conversationId") ?: ""
 
+    init {
+        // Mark conversation as read when opened
+        viewModelScope.launch {
+            try {
+                convRepo.markConversationAsRead(conversationId)
+            } catch (e: Exception) {
+                // Log error but don't crash the app
+                android.util.Log.e("ConversationViewModel", "Failed to mark conversation as read", e)
+            }
+        }
+    }
+
     val conversation: StateFlow<Conversation> = convRepo.listenConversation(conversationId)
         .stateIn(
             viewModelScope,

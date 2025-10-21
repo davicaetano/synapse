@@ -48,6 +48,14 @@ class ConversationRepository @Inject constructor(
     fun listenUserConversationsWithUsersByType(userId: String, convType: ConversationType): Flow<List<ConversationSummary>> =
         firebaseDataSource.listenConversationsWithUsersByType(userId, convType)
 
+    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+        firebaseDataSource.markMessagesAsRead(conversationId, messageIds)
+    }
+
+    suspend fun markConversationAsRead(conversationId: String) {
+        firebaseDataSource.markConversationAsRead(conversationId)
+    }
+
 }
 
 

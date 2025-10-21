@@ -30,7 +30,9 @@ class FirebaseDataSource @Inject constructor(
         val msg = mapOf(
             "text" to text,
             "senderId" to uid,
-            "createdAtMs" to System.currentTimeMillis()
+            "createdAtMs" to System.currentTimeMillis(),
+            "receivedBy" to listOf(uid), // Sender has received their own message (store as ID)
+            "readBy" to listOf(uid)      // Sender has read their own message (store as ID)
         )
         val convRef = firestore.collection("conversations").document(conversationId)
         convRef.collection("messages").add(msg).await()
@@ -197,12 +199,27 @@ class FirebaseDataSource @Inject constructor(
                                 val text = doc.getString("text") ?: return@mapNotNull null
                                 val senderId = doc.getString("senderId") ?: return@mapNotNull null
                                 val createdAt = doc.getLong("createdAtMs") ?: 0L
+                                val receivedByIds = (doc.get("receivedBy") as? List<String>) ?: emptyList()
+                                val readByIds = (doc.get("readBy") as? List<String>) ?: emptyList()
+
+                                // For now, create message with empty user lists
+                                // User data will be fetched separately if needed
+                                val receivedByUsers = emptyList<User>()
+                                val readByUsers = emptyList<User>()
+
+                                // Mark message as received if current user hasn't received it yet (skip if it's their own message)
+                                if (myId != null && myId !in receivedByIds && senderId != myId) {
+                                    doc.reference.update("receivedBy", com.google.firebase.firestore.FieldValue.arrayUnion(myId))
+                                }
+
                                 Message(
                                     id = doc.id,
                                     text = text,
                                     senderId = senderId,
                                     createdAtMs = createdAt,
-                                    isMine = (myId != null && senderId == myId)
+                                    isMine = (myId != null && senderId == myId),
+                                    receivedBy = receivedByUsers,
+                                    readBy = readByUsers
                                 )
                             } ?: emptyList()
                             trySend(Conversation(summary = summary, messages = messages))
@@ -226,12 +243,27 @@ class FirebaseDataSource @Inject constructor(
                         val text = doc.getString("text") ?: return@mapNotNull null
                         val senderId = doc.getString("senderId") ?: return@mapNotNull null
                         val createdAt = doc.getLong("createdAtMs") ?: 0L
+                        val receivedByIds = (doc.get("receivedBy") as? List<String>) ?: emptyList()
+                        val readByIds = (doc.get("readBy") as? List<String>) ?: emptyList()
+
+                        // For now, create message with empty user lists
+                        // User data will be fetched separately if needed
+                        val receivedByUsers = emptyList<User>()
+                        val readByUsers = emptyList<User>()
+
+                        // Mark message as received if current user hasn't received it yet (skip if it's their own message)
+                        if (myId != null && myId !in receivedByIds && senderId != myId) {
+                            doc.reference.update("receivedBy", com.google.firebase.firestore.FieldValue.arrayUnion(myId))
+                        }
+
                         Message(
                             id = doc.id,
                             text = text,
                             senderId = senderId,
                             createdAtMs = createdAt,
-                            isMine = (myId != null && senderId == myId)
+                            isMine = (myId != null && senderId == myId),
+                            receivedBy = receivedByUsers,
+                            readBy = readByUsers
                         )
                     } ?: emptyList()
                     trySend(Conversation(summary = summary, messages = messages))
@@ -500,7 +532,42 @@ class FirebaseDataSource @Inject constructor(
             .set(data, SetOptions.merge())
             .await()
     }
+
+    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+        val uid = auth.currentUser?.uid ?: return
+
+        // Update each message to mark as read by current user (store as ID)
+        messageIds.forEach { messageId ->
+            val messageRef = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .document(messageId)
+
+            messageRef.update("readBy", com.google.firebase.firestore.FieldValue.arrayUnion(uid))
+                .await()
+        }
+    }
+
+    suspend fun markConversationAsRead(conversationId: String) {
+        val uid = auth.currentUser?.uid ?: return
+
+        // Get all messages in conversation and mark them as read
+        val messages = firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .get()
+            .await()
+
+        // Update each message to mark as read by current user (store as ID)
+        messages.documents.forEach { doc ->
+            val readByIds = (doc.get("readBy") as? List<String>) ?: emptyList()
+
+            if (uid !in readByIds) {
+                doc.reference.update("readBy", com.google.firebase.firestore.FieldValue.arrayUnion(uid))
+                    .await()
+            }
+        }
+    }
     companion object { private const val TAG = "FirebaseDataSource" }
 }
-
 
