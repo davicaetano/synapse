@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                 if (idToken != null) {
                     mainVm.signInWithIdToken(idToken) { success ->
                         if (success) {
+                            mainVm.upsertCurrentUser()
                             mainVm.registerCurrentToken()
                         }
                     }

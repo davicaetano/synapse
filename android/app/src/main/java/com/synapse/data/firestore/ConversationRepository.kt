@@ -53,6 +53,20 @@ class ConversationRepository @Inject constructor(
             .set(data, SetOptions.merge())
             .await()
     }
+
+    suspend fun createDirectConversation(otherUserId: String): String? {
+        val myId = auth.currentUser?.uid ?: return null
+        val convId = listOf(myId, otherUserId).sorted().joinToString("_")
+        firestore.collection("conversations").document(convId)
+            .set(
+                mapOf(
+                    "memberIds" to listOf(myId, otherUserId),
+                    "updatedAtMs" to System.currentTimeMillis()
+                ),
+                SetOptions.merge()
+            ).await()
+        return convId
+    }
 }
 
 

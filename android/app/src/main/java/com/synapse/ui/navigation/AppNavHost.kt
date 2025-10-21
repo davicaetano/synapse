@@ -13,11 +13,13 @@ import com.synapse.MainActivityViewModel
 import com.synapse.ui.inbox.InboxScreen
 import com.synapse.ui.conversation.ConversationScreen
 import com.synapse.ui.auth.AuthScreen
+import com.synapse.ui.userpicker.UserPickerScreen
 
 object Routes {
     const val Auth = "auth"
     const val Inbox = "inbox"
     const val Conversation = "conversation/{conversationId}"
+    const val UserPicker = "userPicker"
 }
 
 @Composable
@@ -33,7 +35,13 @@ fun AppNavHost(
         }
         composable(Routes.Inbox) {
             InboxScreen(onOpenConversation = { id ->
-                navController.navigate("conversation/$id")
+                if (id == "userPicker") navController.navigate(Routes.UserPicker) else navController.navigate("conversation/$id")
+            })
+        }
+        composable(Routes.UserPicker) {
+            UserPickerScreen(onPick = { user ->
+                // We'll navigate back to inbox then to conversation; the VM will create the conv id deterministically elsewhere if needed
+                navController.navigate("conversation/${user.id}")
             })
         }
         composable(Routes.Conversation) { backStackEntry ->

@@ -10,12 +10,14 @@ import kotlinx.coroutines.launch
 import com.synapse.auth.AuthRepository
 import com.synapse.auth.AuthState
 import kotlinx.coroutines.flow.StateFlow
+import com.synapse.data.firestore.UserRepository
 
 @HiltViewModel
 class MainActivityViewModel @Inject constructor(
     private val notificationHelper: NotificationHelper,
     private val tokenRepository: TokenRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
     val authState: StateFlow<AuthState> = authRepository.authState
 
@@ -25,6 +27,9 @@ class MainActivityViewModel @Inject constructor(
 
     fun registerCurrentToken() {
         viewModelScope.launch { tokenRepository.getAndSaveCurrentToken() }
+    }
+    fun upsertCurrentUser() {
+        viewModelScope.launch { userRepository.upsertCurrentUser() }
     }
 
     fun sendTestNotification() {
