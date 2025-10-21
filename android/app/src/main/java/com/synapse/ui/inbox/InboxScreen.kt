@@ -1,6 +1,7 @@
 package com.synapse.ui.inbox
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +38,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.synapse.MainActivityViewModel
 import com.synapse.domain.conversation.ConversationType
+import com.synapse.ui.components.LastSeenText
+import com.synapse.ui.components.PresenceIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -161,26 +164,63 @@ private fun OneOnOneConversationRow(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Show the other user's profile picture for direct conversations
-        if (item.otherUser.photoUrl != null) {
-            AsyncImage(
-                model = item.otherUser.photoUrl,
-                contentDescription = "Foto de ${item.otherUser.displayName}",
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape),
-                contentScale = ContentScale.Crop
+        // Show the other user's profile picture for direct conversations with presence indicator
+        Box {
+            if (item.otherUser.photoUrl != null) {
+                AsyncImage(
+                    model = item.otherUser.photoUrl,
+                    contentDescription = "Foto de ${item.otherUser.displayName}",
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Spacer(modifier = Modifier.size(48.dp))
+            }
+            
+            // Presence indicator in bottom-right corner
+            PresenceIndicator(
+                isOnline = item.otherUser.isOnline,
+                modifier = Modifier.align(Alignment.BottomEnd)
             )
-            Spacer(modifier = Modifier.padding(start = 12.dp))
         }
+        
+        Spacer(modifier = Modifier.padding(start = 12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Nome do usuário + status (online ou last seen)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                
+                // Mostrar status ao lado do nome
+                if (item.otherUser.isOnline) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = "• online",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                        fontSize = 11.sp
+                    )
+                } else if (item.otherUser.lastSeenMs != null) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = "• ${formatLastSeenShort(item.otherUser.lastSeenMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.ui.graphics.Color.Gray,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            
+            // Sempre mostrar última mensagem
             Text(
                 text = item.lastMessageText ?: "",
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
@@ -231,6 +271,29 @@ private fun GroupConversationRow(
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(start = 8.dp)
         )
+    }
+}
+
+// Helper function para formato curto do last seen (usado no inbox)
+private fun formatLastSeenShort(lastSeenMs: Long): String {
+    val now = System.currentTimeMillis()
+    val diffMs = now - lastSeenMs
+    
+    return when {
+        diffMs < java.util.concurrent.TimeUnit.MINUTES.toMillis(1) -> "just now"
+        diffMs < java.util.concurrent.TimeUnit.HOURS.toMillis(1) -> {
+            val mins = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(diffMs)
+            "${mins}m ago"
+        }
+        diffMs < java.util.concurrent.TimeUnit.DAYS.toMillis(1) -> {
+            val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(diffMs)
+            "${hours}h ago"
+        }
+        diffMs < java.util.concurrent.TimeUnit.DAYS.toMillis(7) -> {
+            val days = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMs)
+            "${days}d ago"
+        }
+        else -> "long ago"
     }
 }
 

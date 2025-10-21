@@ -6,6 +6,10 @@ import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ktx.database
+import com.google.firebase.ktx.Firebase
 import com.synapse.R
 import dagger.Module
 import dagger.Provides
@@ -42,6 +46,15 @@ object AppModule {
     @Provides
     @Singleton
     fun provideFirebaseMessaging(): FirebaseMessaging = FirebaseMessaging.getInstance()
+
+    @Provides
+    @Singleton
+    fun provideFirebaseDatabase(): FirebaseDatabase = Firebase.database
+
+    @Provides
+    @Singleton
+    fun provideDatabaseReference(database: FirebaseDatabase): DatabaseReference =
+        database.reference
 }
 
 
