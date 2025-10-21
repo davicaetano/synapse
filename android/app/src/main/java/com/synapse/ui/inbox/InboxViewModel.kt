@@ -13,42 +13,56 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
     private val conversationsRepo: ConversationRepository,
     private val usersRepo: UserRepository,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
 ) : ViewModel() {
 
     data class InboxItem(
         val id: String,
         val title: String,
         val lastMessageText: String?,
-        val updatedAtMs: Long
+        val updatedAtMs: Long,
+        val displayTime: String
     )
 
-    private val conversationsFlow = conversationsRepo.listenConversations()
-    private val usersMapFlow = usersRepo.listenUsers().map { list -> list.associateBy({ it.id }, { it.displayName ?: it.id }) }
+    fun observeInbox(userId: String): StateFlow<List<InboxItem>> {
+        val conversationsFlow = conversationsRepo.listenUserConversations(userId)
+        val usersMapFlow = usersRepo.listenUsers().map { list -> list.associateBy({ it.id }, { it.displayName ?: it.id }) }
 
-    val items: StateFlow<List<InboxItem>> = combine(conversationsFlow, usersMapFlow) { conversations, usersMap ->
-        val myId = auth.currentUser?.uid
-        conversations.map { c ->
-            val peerId = c.memberIds.firstOrNull { it != myId }
-            val resolvedTitle = c.title ?: (peerId?.let { usersMap[it] } ?: c.id)
-            InboxItem(
-                id = c.id,
-                title = resolvedTitle,
-                lastMessageText = c.lastMessageText,
-                updatedAtMs = c.updatedAtMs
-            )
+        return combine(conversationsFlow, usersMapFlow) { convs: List<ConversationSummary>, usersMap: Map<String, String> ->
+            convs.map { c ->
+                val peerId = c.memberIds.firstOrNull { it != userId }
+                val title = c.title ?: (peerId?.let { usersMap[it] } ?: c.id)
+                InboxItem(
+                    id = c.id,
+                    title = title,
+                    lastMessageText = c.lastMessageText,
+                    updatedAtMs = c.updatedAtMs,
+                    displayTime = formatTime(c.updatedAtMs)
+                )
+            }.sortedByDescending { it.updatedAtMs }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    fun observeInboxForCurrentUser(): StateFlow<List<InboxItem>> {
+        val uid = auth.currentUser?.uid
+        return if (uid == null) {
+            // empty StateFlow when not logged
+            kotlinx.coroutines.flow.flowOf(emptyList<InboxItem>())
+                .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        } else {
+            observeInbox(uid)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun createOrTouch(conversationId: String) {
-        viewModelScope.launch { conversationsRepo.ensureConversation(conversationId) }
     }
 }
 
-
+private fun formatTime(ms: Long): String {
+    if (ms <= 0) return ""
+    val date = java.util.Date(ms)
+    val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    return fmt.format(date)
+}

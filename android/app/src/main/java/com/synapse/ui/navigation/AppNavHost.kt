@@ -55,7 +55,7 @@ fun AppNavHost(
         }
         composable(Routes.Conversation) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
-            ConversationScreen(conversationId = conversationId)
+            ConversationScreen()
         }
     }
 }

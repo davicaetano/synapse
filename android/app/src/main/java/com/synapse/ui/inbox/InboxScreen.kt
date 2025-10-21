@@ -15,17 +15,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Divider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun InboxScreen(onOpenConversation: (String) -> Unit, vm: InboxViewModel = hiltViewModel()) {
-    val items by vm.items.collectAsState()
+    val items by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { onOpenConversation("userPicker") }) {
@@ -39,7 +39,7 @@ fun InboxScreen(onOpenConversation: (String) -> Unit, vm: InboxViewModel = hiltV
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(items) { c ->
-                        ConversationRow(title = c.title, lastMessage = c.lastMessageText ?: "", timeMs = c.updatedAtMs, onClick = { onOpenConversation(c.id) })
+                        ConversationRow(title = c.title, lastMessage = c.lastMessageText ?: "", displayTime = c.displayTime, onClick = { onOpenConversation(c.id) })
                         Divider()
                     }
                 }
@@ -49,7 +49,7 @@ fun InboxScreen(onOpenConversation: (String) -> Unit, vm: InboxViewModel = hiltV
 }
 
 @Composable
-private fun ConversationRow(title: String, lastMessage: String, timeMs: Long, onClick: () -> Unit) {
+private fun ConversationRow(title: String, lastMessage: String, displayTime: String, onClick: () -> Unit) {
     androidx.compose.foundation.layout.Row(
         modifier = Modifier
             .clickable { onClick() }
@@ -66,18 +66,10 @@ private fun ConversationRow(title: String, lastMessage: String, timeMs: Long, on
             )
         }
         Text(
-            text = formatTime(timeMs),
+            text = displayTime,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(start = 8.dp)
         )
     }
 }
-
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return ""
-    val date = java.util.Date(ms)
-    val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-    return fmt.format(date)
-}
-
 
