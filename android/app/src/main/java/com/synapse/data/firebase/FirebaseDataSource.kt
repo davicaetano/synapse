@@ -192,7 +192,7 @@ class FirebaseDataSource @Inject constructor(
                                 convType = try {
                                     ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
                                 } catch (e: IllegalArgumentException) {
-                                    ConversationType.DIRECT // fallback para conversas existentes
+                                    ConversationType.DIRECT // fallback for existing conversations
                                 }
                             )
 
@@ -241,7 +241,7 @@ class FirebaseDataSource @Inject constructor(
                                 convType = try {
                                     ConversationType.valueOf(d.getString("convType") ?: ConversationType.DIRECT.name)
                                 } catch (e: IllegalArgumentException) {
-                                    ConversationType.DIRECT // fallback para conversas existentes
+                                    ConversationType.DIRECT // fallback for existing conversations
                                 }
                             )
 
