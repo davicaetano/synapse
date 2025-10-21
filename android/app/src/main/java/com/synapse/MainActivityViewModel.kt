@@ -2,7 +2,6 @@ package com.synapse
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synapse.notifications.NotificationHelper
 import com.synapse.data.tokens.TokenRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -14,7 +13,6 @@ import com.synapse.data.repository.UserRepository
 
 @HiltViewModel
 class MainActivityViewModel @Inject constructor(
-    private val notificationHelper: NotificationHelper,
     private val tokenRepository: TokenRepository,
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository
@@ -30,15 +28,6 @@ class MainActivityViewModel @Inject constructor(
     }
     fun upsertCurrentUser() {
         viewModelScope.launch { userRepository.upsertCurrentUser() }
-    }
-
-    fun sendTestNotification() {
-        notificationHelper.showMessageNotification(
-            title = "Alex",
-            body = "Sent you a message",
-            chatId = "test_chat_123",
-            messageId = "m1"
-        )
     }
 
     suspend fun requestGoogleIdToken(activity: android.app.Activity): String? =
