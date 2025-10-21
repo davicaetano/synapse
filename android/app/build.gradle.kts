@@ -41,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true  // Generate BuildConfig for debug checks
     }
 }
 
@@ -69,6 +70,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.coil.compose)
+    
+    // Timber - Better logging (auto-removes logs in release builds)
+    implementation("com.jakewharton.timber:timber:5.0.1")
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

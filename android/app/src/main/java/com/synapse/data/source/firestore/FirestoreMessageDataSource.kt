@@ -43,7 +43,8 @@ class FirestoreMessageDataSource @Inject constructor(
         
         val registration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Error listening to messages in $conversationId", error)
+                Log.e(TAG, "Error listening to messages in $conversationId, sending empty list", error)
+                trySend(emptyList())  // Keep flow alive, will update when error resolves
                 return@addSnapshotListener
             }
             

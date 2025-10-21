@@ -40,7 +40,8 @@ class FirestoreConversationDataSource @Inject constructor(
         
         val registration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Error listening to conversations", error)
+                Log.e(TAG, "Error listening to conversations, sending empty list", error)
+                trySend(emptyList())  // Keep flow alive, will update when error resolves
                 return@addSnapshotListener
             }
             
@@ -83,7 +84,8 @@ class FirestoreConversationDataSource @Inject constructor(
         
         val registration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Error listening to conversations by type", error)
+                Log.e(TAG, "Error listening to conversations by type, sending empty list", error)
+                trySend(emptyList())  // Keep flow alive, will update when error resolves
                 return@addSnapshotListener
             }
             

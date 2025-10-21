@@ -54,7 +54,7 @@ class ConversationViewModel @Inject constructor(
             )
         )
 
-    val uiState: StateFlow<ConversationUIState> = convRepo.observeConversationWithMessages(conversationId)
+    val uiState: StateFlow<ConversationUIState> = conversation
         .map { conv ->
             val currentUserId = auth.currentUser?.uid
             val summary = conv.summary

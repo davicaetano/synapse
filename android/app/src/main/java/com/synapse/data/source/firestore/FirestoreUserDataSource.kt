@@ -40,7 +40,8 @@ class FirestoreUserDataSource @Inject constructor(
         
         val registration = ref.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                Log.e(TAG, "Error listening to all users", error)
+                Log.e(TAG, "Error listening to all users, sending empty list", error)
+                trySend(emptyList())  // Keep flow alive, will update when error resolves
                 return@addSnapshotListener
             }
             
@@ -89,7 +90,8 @@ class FirestoreUserDataSource @Inject constructor(
             
             val registration = ref.addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Error listening to users by IDs", error)
+                    Log.e(TAG, "Error listening to users by IDs, sending current list", error)
+                    trySend(usersMap.values.toList())  // Keep flow alive with current data
                     return@addSnapshotListener
                 }
                 

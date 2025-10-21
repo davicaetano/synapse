@@ -54,7 +54,13 @@ class RealtimePresenceDataSource @Inject constructor(
             }
             
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Presence listener cancelled for $userId", error.toException())
+                Log.e(TAG, "Presence listener cancelled for $userId, sending offline", error.toException())
+                // Keep flow alive by sending offline status
+                try {
+                    trySend(PresenceEntity(online = false, lastSeenMs = System.currentTimeMillis())).isSuccess
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send offline presence for $userId", e)
+                }
             }
         }
         
@@ -97,7 +103,13 @@ class RealtimePresenceDataSource @Inject constructor(
                 }
                 
                 override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "Presence listener cancelled for $userId", error.toException())
+                    Log.e(TAG, "Presence listener cancelled for $userId, sending current map", error.toException())
+                    // Keep flow alive by sending current presence map
+                    try {
+                        trySend(presenceMap.toMap()).isSuccess
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send presence map after cancellation", e)
+                    }
                 }
             }
             
