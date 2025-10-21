@@ -40,7 +40,8 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
         } catch (e: IllegalArgumentException) {
             ConversationType.DIRECT
         },
-        createdBy = this.createdBy
+        createdBy = this.createdBy,
+        groupName = this.groupName
     )
 }
 

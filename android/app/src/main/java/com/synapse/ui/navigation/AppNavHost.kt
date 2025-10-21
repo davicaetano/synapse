@@ -41,7 +41,11 @@ fun AppNavHost(
         }
         composable(Routes.Inbox) {
             InboxScreen(onOpenConversation = { id ->
-                if (id == "userPicker") navController.navigate(Routes.UserPicker) else navController.navigate("conversation/$id")
+                when (id) {
+                    "userPicker" -> navController.navigate(Routes.UserPicker)
+                    "createGroup" -> navController.navigate(Routes.CreateGroup)
+                    else -> navController.navigate("conversation/$id")
+                }
             })
         }
         composable(Routes.UserPicker) {
@@ -58,6 +62,7 @@ fun AppNavHost(
                     }
                 },
                 onCreateGroup = {
+                    navController.popBackStack()  // Close UserPicker first
                     navController.navigate(Routes.CreateGroup)
                 },
                 onClose = { navController.popBackStack() }

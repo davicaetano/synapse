@@ -37,7 +37,8 @@ sealed class InboxItem {
         override val updatedAtMs: Long,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.GROUP,
-        val members: List<User>
+        val members: List<User>,
+        val groupName: String? = null  // Group name for avatar
     ) : InboxItem()
 }
 

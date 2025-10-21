@@ -14,7 +14,8 @@ data class ConversationSummary constructor(
     val updatedAtMs: Long,
     val members: List<User>,  // CHANGED: List of complete User objects instead of IDs
     val convType: ConversationType,
-    val createdBy: String? = null  // Creator/admin user ID (only for GROUP conversations)
+    val createdBy: String? = null,  // Creator/admin user ID (only for GROUP conversations)
+    val groupName: String? = null    // Group name (only for GROUP conversations)
 ) {
     // Computed property to maintain compatibility where memberIds is still used
     val memberIds: List<String>

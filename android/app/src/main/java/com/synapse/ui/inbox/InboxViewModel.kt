@@ -33,11 +33,13 @@ class InboxViewModel @Inject constructor(
                         peerUser?.displayName ?: "Unknown User"
                     }
                     ConversationType.GROUP -> {
-                        val otherMembers = c.members.filter { it.id != userId }
-                        if (otherMembers.size <= 3) {
-                            otherMembers.joinToString(", ") { it.displayName ?: it.id }
-                        } else {
-                            "${otherMembers.take(2).joinToString(", ") { it.displayName ?: it.id }} + ${otherMembers.size - 2} more"
+                        // Use group name if set, otherwise generate from members
+                        c.groupName?.ifBlank { null } ?: run {
+                            val otherMembers = c.members.filter { it.id != userId }
+                            when {
+                                otherMembers.isEmpty() -> "Group (just you)"
+                                else -> "Group"
+                            }
                         }
                     }
                 }
@@ -75,7 +77,8 @@ class InboxViewModel @Inject constructor(
                         updatedAtMs = c.updatedAtMs,
                         displayTime = formatTime(c.updatedAtMs),
                         convType = c.convType,
-                        members = c.members
+                        members = c.members,
+                        groupName = c.groupName
                     )
                 }
             }.sortedByDescending { it.updatedAtMs }

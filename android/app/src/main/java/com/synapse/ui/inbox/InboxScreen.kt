@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.MainActivityViewModel
 import com.synapse.ui.components.EmptyState
 import com.synapse.ui.components.ErrorState
+import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.LoadingState
 import com.synapse.ui.components.PresenceIndicator
 import com.synapse.ui.components.UserAvatar
@@ -314,24 +315,35 @@ private fun GroupConversationRow(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // For group conversations, show multiple profile pictures or a group icon
-        // For now, we'll show a placeholder for the group
-        Spacer(modifier = Modifier.size(48.dp)) // Placeholder for group icon
+        // Group avatar with initials or icon
+        GroupAvatar(
+            groupName = item.groupName,
+            groupPhotoUrl = null,
+            size = 48.dp
+        )
+        
+        Spacer(modifier = Modifier.padding(start = 12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
+            // First line: Group name (title)
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            
+            // Second line: Members list OR last message
+            val membersText = item.members.joinToString(", ") { it.displayName ?: it.id }
             Text(
-                text = item.lastMessageText ?: "",
+                text = if (membersText.isNotBlank()) membersText else (item.lastMessageText ?: ""),
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
+        
         Text(
             text = item.displayTime,
             style = MaterialTheme.typography.labelSmall,
