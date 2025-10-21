@@ -1,7 +1,11 @@
 package com.synapse.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -30,11 +34,18 @@ object Routes {
 fun AppNavHost(
     mainVm: MainActivityViewModel,
     startGoogleSignIn: () -> Unit,
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    onNavControllerCreated: (NavHostController) -> Unit = {}
 ) {
-
     val authState: AuthState by mainVm.authState.collectAsStateWithLifecycle()
+    
+    // Notify MainActivity that nav controller is ready
+    LaunchedEffect(navController) {
+        onNavControllerCreated(navController)
+    }
+    
     val start = if (authState is AuthState.SignedIn) Routes.Inbox else Routes.Auth
+    
     NavHost(navController = navController, startDestination = start) {
         composable(Routes.Auth) {
             AuthScreen(onSignIn = { startGoogleSignIn() })

@@ -3,12 +3,8 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "runtime": "python311"
-    }
-  ]
+  "functions": {
+    "source": "functions"
+  }
 }
 
