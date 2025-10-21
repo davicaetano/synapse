@@ -171,7 +171,11 @@ class FirebaseDataSource @Inject constructor(
                         .get()
                         .addOnSuccessListener { usersSnapshot ->
                             val usersMap = usersSnapshot.documents.associate { userDoc ->
-                                userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
+                                userDoc.id to User(
+                                    id = userDoc.id,
+                                    displayName = userDoc.getString("displayName"),
+                                    photoUrl = userDoc.getString("photoUrl")
+                                )
                             }
 
                             val members = memberIds.mapNotNull { userId -> usersMap[userId] }
@@ -281,7 +285,11 @@ class FirebaseDataSource @Inject constructor(
                 .get()
                 .addOnSuccessListener { usersSnapshot ->
                     val usersMap = usersSnapshot.documents.associate { userDoc ->
-                        userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
+                        userDoc.id to User(
+                            id = userDoc.id,
+                            displayName = userDoc.getString("displayName"),
+                            photoUrl = userDoc.getString("photoUrl")
+                        )
                     }
 
                     val list = conversations.map { d ->
@@ -370,7 +378,11 @@ class FirebaseDataSource @Inject constructor(
                 .get()
                 .addOnSuccessListener { usersSnapshot ->
                     val usersMap = usersSnapshot.documents.associate { userDoc ->
-                        userDoc.id to User(id = userDoc.id, displayName = userDoc.getString("displayName"))
+                        userDoc.id to User(
+                            id = userDoc.id,
+                            displayName = userDoc.getString("displayName"),
+                            photoUrl = userDoc.getString("photoUrl")
+                        )
                     }
 
                     val list = conversations.map { d ->
@@ -462,7 +474,11 @@ class FirebaseDataSource @Inject constructor(
         val reg = ref.addSnapshotListener { snap, err ->
             if (err != null) Log.e(TAG, "listenUsers error", err)
             val list = snap?.documents?.map { d ->
-                User(id = d.id, displayName = d.getString("displayName"))
+                User(
+                    id = d.id,
+                    displayName = d.getString("displayName"),
+                    photoUrl = d.getString("photoUrl")
+                )
             } ?: emptyList()
             trySend(list)
         }
@@ -474,6 +490,7 @@ class FirebaseDataSource @Inject constructor(
         val data = hashMapOf<String, Any>(
             "displayName" to (u.displayName ?: (u.email ?: u.uid)),
             "email" to (u.email ?: ""),
+            "photoUrl" to (u.photoUrl ?: ""),
             "updatedAtMs" to System.currentTimeMillis()
         )
         firestore.collection("users").document(u.uid)

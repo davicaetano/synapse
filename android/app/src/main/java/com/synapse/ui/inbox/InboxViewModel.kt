@@ -11,7 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
@@ -22,20 +22,12 @@ class InboxViewModel @Inject constructor(
     private val auth: FirebaseAuth,
 ) : ViewModel() {
 
-    data class InboxItem(
-        val id: String,
-        val title: String,
-        val lastMessageText: String?,
-        val updatedAtMs: Long,
-        val displayTime: String
-    )
-
-    fun observeInbox(userId: String): StateFlow<List<InboxItem>> {
+    fun observeInbox(userId: String): StateFlow<InboxUIState> {
         // Usar o novo método que já inclui dados completos dos usuários
         val conversationsFlow = conversationsRepo.listenUserConversationsWithUsers(userId)
 
         return conversationsFlow.map { convs: List<ConversationSummary> ->
-            convs.map { c ->
+            val items = convs.map { c ->
                 val peerUser = c.members.firstOrNull { it.id != userId }
                 val title = when (c.convType) {
                     ConversationType.SELF -> "AI Assistant"
@@ -58,15 +50,21 @@ class InboxViewModel @Inject constructor(
                     displayTime = formatTime(c.updatedAtMs)
                 )
             }.sortedByDescending { it.updatedAtMs }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+            InboxUIState(
+                items = items,
+                isLoading = false,
+                error = null
+            )
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), InboxUIState(isLoading = true))
     }
 
-    fun observeInboxForCurrentUser(): StateFlow<List<InboxItem>> {
+    fun observeInboxForCurrentUser(): StateFlow<InboxUIState> {
         val uid = auth.currentUser?.uid
         return if (uid == null) {
             // empty StateFlow when not logged
-            kotlinx.coroutines.flow.flowOf(emptyList<InboxItem>())
-                .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+            flowOf(InboxUIState())
+                .stateIn(viewModelScope, SharingStarted.Eagerly, InboxUIState())
         } else {
             observeInbox(uid)
         }

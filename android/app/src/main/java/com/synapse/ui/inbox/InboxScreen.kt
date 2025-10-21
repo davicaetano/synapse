@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.MainActivityViewModel
+import com.synapse.ui.inbox.InboxItem
+import com.synapse.ui.inbox.InboxUIState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,7 +40,7 @@ fun InboxScreen(
     vm: InboxViewModel = hiltViewModel(),
     mainVm: MainActivityViewModel = hiltViewModel(),
 ) {
-    val items by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
+    val uiState by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -65,20 +67,29 @@ fun InboxScreen(
                 .fillMaxSize()
                 .then(Modifier)
         ) {
-            if (items.isEmpty()) {
-                Text("No conversations yet")
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                ) {
-                    items(items) { c ->
-                        ConversationRow(
-                            title = c.title,
-                            lastMessage = c.lastMessageText ?: "",
-                            displayTime = c.displayTime,
-                            onClick = { onOpenConversation(c.id) })
-                        Divider()
+            when {
+                uiState.isLoading -> {
+                    Text("Loading conversations...")
+                }
+                uiState.error != null -> {
+                    Text("Error: ${uiState.error}")
+                }
+                uiState.items.isEmpty() -> {
+                    Text("No conversations yet")
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                    ) {
+                        items(uiState.items) { c ->
+                            ConversationRow(
+                                title = c.title,
+                                lastMessage = c.lastMessageText ?: "",
+                                displayTime = c.displayTime,
+                                onClick = { onOpenConversation(c.id) })
+                            Divider()
+                        }
                     }
                 }
             }
