@@ -182,6 +182,7 @@ class FirebaseDataSource @Inject constructor(
                             }
 
                             val members = memberIds.mapNotNull { userId -> usersMap[userId] }
+                            val memberCount = members.size
 
                             val summary = ConversationSummary(
                                 id = conversationId,
@@ -219,7 +220,8 @@ class FirebaseDataSource @Inject constructor(
                                     createdAtMs = createdAt,
                                     isMine = (myId != null && senderId == myId),
                                     receivedBy = receivedByUsers,
-                                    readBy = readByUsers
+                                    readBy = readByUsers,
+                                    isReadByEveryone = (readByUsers.size >= memberCount)
                                 )
                             } ?: emptyList()
                             trySend(Conversation(summary = summary, messages = messages))

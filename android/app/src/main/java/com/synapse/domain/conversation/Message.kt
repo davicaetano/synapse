@@ -9,7 +9,8 @@ data class Message constructor(
     val createdAtMs: Long,
     val isMine: Boolean = false,
     val receivedBy: List<User> = emptyList(), // Users that have received this message
-    val readBy: List<User> = emptyList()       // Users that have read this message
+    val readBy: List<User> = emptyList(),      // Users that have read this message
+    val isReadByEveryone: Boolean = false     // True if all conversation members have read this message
 )
 
 
