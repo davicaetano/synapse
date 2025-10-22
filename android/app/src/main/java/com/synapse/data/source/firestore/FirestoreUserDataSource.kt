@@ -8,7 +8,9 @@ import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.UserEntity
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -73,7 +75,6 @@ class FirestoreUserDataSource @Inject constructor(
      * If you need more than 10, you'll need to batch the queries.
      */
     fun listenUsersByIds(userIds: List<String>): Flow<List<UserEntity>> = callbackFlow {
-        
         if (userIds.isEmpty()) {
             trySend(emptyList())
             awaitClose {}
@@ -82,41 +83,49 @@ class FirestoreUserDataSource @Inject constructor(
         
         // Handle Firestore's 10 ID limit for whereIn queries
         val batches = userIds.chunked(10)
-        
         val registrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
-        val usersMap = mutableMapOf<String, UserEntity>()
+        
+        // Use StateFlow for thread-safe accumulation of results from multiple batches
+        val usersState = MutableStateFlow<Map<String, UserEntity>>(emptyMap())
         
         batches.forEachIndexed { batchIndex, batch ->
             val ref = firestore.collection("users")
                 .whereIn(FieldPath.documentId(), batch)
             
-            
             val registration = ref.addSnapshotListener { snapshot, error ->
-                val isFromCache = snapshot?.metadata?.isFromCache ?: false
-                
                 if (error != null) {
-                    trySend(usersMap.values.toList())
+                    Log.e(TAG, "Error listening to user batch $batchIndex", error)
+                    // Don't update state on error - keep current data
                     return@addSnapshotListener
                 }
                 
-                snapshot?.documents?.forEach { doc ->
+                // Parse users from this batch
+                val batchUsers = snapshot?.documents?.mapNotNull { doc ->
                     try {
-                        usersMap[doc.id] = UserEntity(
+                        UserEntity(
                             id = doc.id,
                             displayName = doc.getString("displayName"),
                             email = doc.getString("email"),
                             photoUrl = doc.getString("photoUrl")
                         )
                     } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing user ${doc.id}", e)
+                        null
                     }
+                } ?: emptyList()
+                
+                // Thread-safe update: merge this batch into the state
+                usersState.update { currentMap ->
+                    currentMap + batchUsers.associateBy { it.id }
                 }
-                
-                
-                // Emit the combined results from all batches
-                trySend(usersMap.values.toList())
             }
             
             registrations.add(registration)
+        }
+        
+        // Collect from StateFlow and emit to the callbackFlow
+        usersState.collect { usersMap ->
+            trySend(usersMap.values.toList())
         }
         
         awaitClose {
