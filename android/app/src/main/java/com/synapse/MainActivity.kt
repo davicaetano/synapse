@@ -33,35 +33,46 @@ class MainActivity : FragmentActivity() {
     
     // Job to track network monitoring coroutine
     private var networkMonitoringJob: kotlinx.coroutines.Job? = null
+    
+    // Pending deep link navigation (from notification when app was killed)
+    private var pendingChatId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Extract chatId from notification intent (when app was killed)
+        val chatId = intent?.extras?.getString("chatId")
+        if (chatId != null) {
+            pendingChatId = chatId
+        }
+        
         requestNotificationPermissionIfNeeded()
         
-        // Set the layout with FragmentContainerView
         setContentView(R.layout.activity_main)
         
-        // Get NavController from NavHostFragment
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
         
-        // Handle deep link if exists
-        handleDeepLink(intent)
-        
-        // Observe auth state to navigate
         lifecycleScope.launch {
             mainVm.authState.collect { authState ->
                 when (authState) {
                     is com.synapse.data.auth.AuthState.SignedIn -> {
-                        // Navigate to inbox if currently on auth screen
                         val currentDest = navController?.currentDestination?.id
                         if (currentDest == R.id.authFragment) {
                             navController?.navigate(R.id.action_auth_to_inbox)
                         }
+                        
+                        // Navigate to pending conversation from notification (if app was killed)
+                        if (pendingChatId != null) {
+                            navController?.navigate(
+                                R.id.conversationFragment,
+                                bundleOf("conversationId" to pendingChatId)
+                            )
+                            pendingChatId = null
+                        }
                     }
                     else -> {
-                        // Navigate to auth if signed out
                         val currentDest = navController?.currentDestination?.id
                         if (currentDest != R.id.authFragment) {
                             navController?.navigate(R.id.authFragment) {
@@ -84,25 +95,17 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleDeepLink(intent)
-    }
-    
-    private fun handleDeepLink(intent: Intent?) {
-        val deepLinkUri = intent?.data
-        val conversationId = deepLinkUri?.lastPathSegment
         
-        Log.d(TAG, "handleDeepLink - Action: ${intent?.action}")
-        Log.d(TAG, "handleDeepLink - URI: $deepLinkUri")
-        Log.d(TAG, "handleDeepLink - Conversation ID: $conversationId")
-        
-        if (conversationId != null && deepLinkUri.host == "conversation") {
-            Log.d(TAG, "Will navigate to conversation: $conversationId")
-            
-            // Navigate using Fragment navigation
+        // Handle FCM notification clicks by extracting chatId from extras
+        val chatId = intent.extras?.getString("chatId")
+        if (chatId != null) {
             navController?.navigate(
                 R.id.conversationFragment,
-                bundleOf("conversationId" to conversationId)
+                bundleOf("conversationId" to chatId)
             )
+        } else {
+            // Fallback to standard deep link handling
+            navController?.handleDeepLink(intent)
         }
     }
 
@@ -121,21 +124,17 @@ class MainActivity : FragmentActivity() {
 
             networkMonitor.isConnected
                 .collect { isConnected ->
-                    Log.d(TAG, "Network connectivity changed: isConnected=$isConnected")
                     
                     // Only call markOnline() when connection is RECOVERED (was offline, now online)
                     // Don't try to call markOffline() when losing connection - it won't work anyway!
                     // Firebase's onDisconnect() handler will mark us offline after ~30 seconds.
                     if (!wasConnected && isConnected) {
-                        Log.d(TAG, "Connection recovered - re-establishing presence in Firebase")
                         presenceManager.markOnline()
                     }
                     
                     wasConnected = isConnected
                 }
         }
-        
-        Log.d(TAG, "Network monitoring started for UI indicator and connection recovery")
     }
     
     override fun onStop() {
@@ -150,8 +149,6 @@ class MainActivity : FragmentActivity() {
         
         // Mark user as offline when app stops
         presenceManager.markOffline()
-        
-        Log.d(TAG, "Network monitoring stopped and user marked as offline")
     }
 
     private fun startGoogleSignIn() {

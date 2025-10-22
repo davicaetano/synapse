@@ -18,6 +18,15 @@ class ConversationFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        // NOTE: conversationId argument is automatically injected into ViewModel
+        // via SavedStateHandle by Navigation Component.
+        // 
+        // Flow: InboxFragment passes bundleOf("conversationId" to id)
+        //       → Navigation Component puts it in SavedStateHandle
+        //       → ConversationViewModel reads from savedStateHandle.get("conversationId")
+        //
+        // This is the recommended pattern for Fragment Navigation + Hilt ViewModels.
+        
         return ComposeView(requireContext()).apply {
             setContent {
                 SynapseTheme {

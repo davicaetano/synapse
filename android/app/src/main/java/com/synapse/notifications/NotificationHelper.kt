@@ -4,7 +4,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.synapse.MainActivity
@@ -34,22 +33,23 @@ class NotificationHelper @Inject constructor(
     }
 
     private fun createChatPendingIntent(chatId: String?, messageId: String?): PendingIntent {
-        // Use deep link to open specific conversation in MainActivity
-        val deepLinkUri = if (chatId != null) {
-            Uri.parse("synapse://conversation/$chatId")
-        } else {
-            Uri.parse("synapse://inbox")
-        }
-        
-        val openIntent = Intent(Intent.ACTION_VIEW, deepLinkUri, appContext, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val intent = Intent(appContext, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+            if (chatId != null) {
+                putExtra("chatId", chatId)
+            }
             if (messageId != null) {
                 putExtra("messageId", messageId)
             }
         }
         
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        return PendingIntent.getActivity(appContext, chatId.hashCode(), openIntent, flags)
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        
+        return PendingIntent.getActivity(appContext, chatId.hashCode(), intent, flags)
     }
 }
 
