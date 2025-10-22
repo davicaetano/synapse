@@ -75,45 +75,6 @@ class FirestoreMessageDataSource @Inject constructor(
         awaitClose { registration.remove() }
     }
     
-    /**
-     * Get all messages in a conversation (one-time read).
-     * Useful for batch operations like marking all as read.
-     */
-    suspend fun getAllMessages(conversationId: String): List<MessageEntity> {
-        return try {
-            val snapshot = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .orderBy("createdAtMs")
-                .get()
-                .await()
-            
-            snapshot.documents.mapNotNull { doc ->
-                try {
-                    MessageEntity(
-                        id = doc.id,
-                        text = doc.getString("text") ?: "",
-                        senderId = doc.getString("senderId") ?: "",
-                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                        receivedBy = (doc.get("receivedBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        readBy = (doc.get("readBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
-                    )
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing message ${doc.id}", e)
-                    null
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting all messages from $conversationId", e)
-            emptyList()
-        }
-    }
-    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================
@@ -193,28 +154,48 @@ class FirestoreMessageDataSource @Inject constructor(
     
     /**
      * Mark ALL messages in a conversation as read by the current user.
-     * This is less efficient than markMessagesAsRead for specific IDs,
-     * but useful when opening a conversation for the first time.
+     * Uses efficient Firestore query to only fetch unread messages.
      */
     suspend fun markAllMessagesAsRead(conversationId: String) {
         val userId = auth.currentUser?.uid ?: return
         
         try {
-            // Get all messages first
-            val messages = getAllMessages(conversationId)
+            // Query only messages not sent by me (more efficient than downloading everything)
+            val snapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .whereNotEqualTo("senderId", userId)  // Only messages from others
+                .get()
+                .await()
             
-            // Filter messages where current user is not in readBy
-            val unreadMessageIds = messages
-                .filter { userId !in it.readBy }
-                .map { it.id }
-            
-            if (unreadMessageIds.isEmpty()) {
-                Log.d(TAG, "No unread messages to mark")
+            if (snapshot.isEmpty) {
+                Log.d(TAG, "No messages from others to mark as read")
                 return
             }
             
-            // Mark them as read using batch operation
-            markMessagesAsRead(conversationId, unreadMessageIds)
+            // Use batch to update all unread messages
+            val batch = firestore.batch()
+            var updatedCount = 0
+            
+            snapshot.documents.forEach { doc ->
+                val readBy = (doc.get("readBy") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    ?: emptyList()
+                
+                // Only update if not already read
+                if (userId !in readBy) {
+                    batch.update(doc.reference, "readBy", FieldValue.arrayUnion(userId))
+                    batch.update(doc.reference, "receivedBy", FieldValue.arrayUnion(userId))
+                    updatedCount++
+                }
+            }
+            
+            if (updatedCount > 0) {
+                batch.commit().await()
+                Log.d(TAG, "Marked $updatedCount messages as read and received in $conversationId")
+            } else {
+                Log.d(TAG, "No unread messages to mark in $conversationId")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error marking all messages as read in $conversationId", e)
         }

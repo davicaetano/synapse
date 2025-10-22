@@ -78,19 +78,6 @@ class UserRepository @Inject constructor(
     }
     
     /**
-     * Get a single user by ID (one-time read).
-     */
-    suspend fun getUser(userId: String): User? {
-        val currentUserId = auth.currentUser?.uid
-        val userEntity = userDataSource.getUser(userId) ?: return null
-        
-        return userEntity.toDomain(
-            presence = null,
-            isMyself = (userId == currentUserId)
-        )
-    }
-    
-    /**
      * Upsert current authenticated user.
      * Creates or updates user profile based on Firebase Auth data.
      */

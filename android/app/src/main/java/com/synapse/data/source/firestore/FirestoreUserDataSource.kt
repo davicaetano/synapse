@@ -120,30 +120,6 @@ class FirestoreUserDataSource @Inject constructor(
         }
     }
     
-    /**
-     * Get a single user by ID (one-time read, not a listener).
-     */
-    suspend fun getUser(userId: String): UserEntity? {
-        return try {
-            val doc = firestore.collection("users")
-                .document(userId)
-                .get()
-                .await()
-            
-            if (!doc.exists()) return null
-            
-            UserEntity(
-                id = doc.id,
-                displayName = doc.getString("displayName"),
-                email = doc.getString("email"),
-                photoUrl = doc.getString("photoUrl")
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting user $userId", e)
-            null
-        }
-    }
-    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================

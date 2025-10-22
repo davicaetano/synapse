@@ -81,46 +81,6 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
-     * Observe conversations filtered by type with full data.
-     */
-    fun observeConversationsByTypeWithUsers(
-        userId: String,
-        convType: ConversationType
-    ): Flow<List<ConversationSummary>> {
-        return conversationDataSource.listenConversationsByType(userId, convType)
-            .flatMapLatest { conversations ->
-                if (conversations.isEmpty()) {
-                    flowOf(emptyList())
-                } else {
-                    val allMemberIds = conversations
-                        .flatMap { it.memberIds }
-                        .distinct()
-                    
-                    combine(
-                        flowOf(conversations),
-                        userDataSource.listenUsersByIds(allMemberIds),
-                        presenceDataSource.listenMultiplePresence(allMemberIds)
-                    ) { convEntities, userEntities, presenceMap ->
-                        val usersMap = userEntities.associateBy { it.id }
-                        
-                        convEntities.map { convEntity ->
-                            val members = convEntity.memberIds.mapNotNull { memberId ->
-                                val userEntity = usersMap[memberId]
-                                val presence = presenceMap[memberId]
-                                userEntity?.toDomain(
-                                    presence = presence,
-                                    isMyself = (memberId == userId)
-                                )
-                            }
-                            
-                            convEntity.toDomain(members = members)
-                        }
-                    }
-                }
-            }
-    }
-    
-    /**
      * Observe a single conversation with all messages.
      */
     fun observeConversationWithMessages(conversationId: String): Flow<Conversation> {
@@ -262,13 +222,6 @@ class ConversationRepository @Inject constructor(
      */
     suspend fun removeUserFromGroup(conversationId: String, userId: String) {
         conversationDataSource.removeMemberFromGroup(conversationId, userId)
-    }
-    
-    /**
-     * Mark specific messages as read.
-     */
-    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
-        messageDataSource.markMessagesAsRead(conversationId, messageIds)
     }
     
     /**

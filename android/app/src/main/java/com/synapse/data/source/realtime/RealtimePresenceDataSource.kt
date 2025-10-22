@@ -220,22 +220,6 @@ class RealtimePresenceDataSource @Inject constructor(
     }
     
     /**
-     * Remove presence data for a user.
-     * Usually not needed, but provided for cleanup/testing.
-     */
-    suspend fun removePresence(userId: String) {
-        val presenceRef = realtimeDb.child("presence").child(userId)
-        
-        presenceRef.removeValue()
-            .addOnSuccessListener {
-                Log.d(TAG, "Removed presence for user $userId")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to remove presence for user $userId", e)
-            }
-    }
-    
-    /**
      * Start heartbeat to update lastSeenMs every 2 seconds.
      * This keeps the user's presence "fresh" so other clients can infer online status.
      * 
