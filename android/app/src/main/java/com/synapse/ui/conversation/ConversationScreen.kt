@@ -80,7 +80,7 @@ fun ConversationScreen(
         )
         hiltEntryPoint.networkMonitor()
     }
-    
+
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
 
@@ -105,29 +105,6 @@ fun ConversationScreen(
     currentUserIsConnected: Boolean = true,
 ) {
     var input by remember { mutableStateOf("") }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    
-    // Detect keyboard visibility
-    val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
-    
-    // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(ui.messages.size) {
-        if (ui.messages.isNotEmpty()) {
-            scope.launch {
-                listState.animateScrollToItem(ui.messages.size - 1)
-            }
-        }
-    }
-    
-    // Auto-scroll to bottom when keyboard opens
-    LaunchedEffect(imeVisible) {
-        if (imeVisible && ui.messages.isNotEmpty()) {
-            scope.launch {
-                listState.animateScrollToItem(ui.messages.size - 1)
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -153,7 +130,7 @@ fun ConversationScreen(
                 .imePadding() // Push content up when keyboard appears (works on Android 14+)
         ) {
             LazyColumn(
-                state = listState,
+                reverseLayout = true,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
@@ -163,7 +140,7 @@ fun ConversationScreen(
                     bottom = 8.dp
                 )
             ) {
-                items(ui.messages) { m ->
+                items(ui.messages.reversed()) { m ->
                     MessageBubble(
                         text = m.text,
                         displayTime = m.displayTime,
@@ -174,7 +151,7 @@ fun ConversationScreen(
                     )
                 }
             }
-            
+
             // Input row
             Row(
                 modifier = Modifier
@@ -184,7 +161,7 @@ fun ConversationScreen(
             ) {
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { 
+                    onValueChange = {
                         input = it
                         onTextChanged(it)
                     },
@@ -192,7 +169,7 @@ fun ConversationScreen(
                     placeholder = { Text("Type a message...") },
                     maxLines = 4
                 )
-                
+
                 IconButton(
                     onClick = {
                         if (input.isNotBlank()) {
@@ -260,11 +237,11 @@ private fun ConversationTopAppBar(
                     }
                     else -> {} // SELF - no avatar
                 }
-                
+
                 if (convType != ConversationType.SELF) {
                     Spacer(modifier = Modifier.width(12.dp))
                 }
-                
+
                 // Title + subtitle/typing
                 Column {
                     Text(
@@ -312,7 +289,7 @@ private fun ConversationTopAppBar(
                     )
                 }
             }
-            
+
             // Menu button
             IconButton(onClick = onMenuClick) {
                 Icon(
@@ -349,7 +326,7 @@ private fun MessageBubble(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    
+
     // Rounded corners with pointer
     val shape = if (isMine)
         RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
@@ -373,7 +350,7 @@ private fun MessageBubble(
                 fontSize = 11.sp
             )
         }
-        
+
         // Message bubble
         Column(
             modifier = Modifier
@@ -388,9 +365,9 @@ private fun MessageBubble(
                 color = fg,
                 style = MaterialTheme.typography.bodyMedium
             )
-            
+
             Spacer(modifier = Modifier.height(2.dp))
-            
+
             // Time + status indicators (WhatsApp-style)
             Row(
                 horizontalArrangement = Arrangement.End,
@@ -403,11 +380,11 @@ private fun MessageBubble(
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp
                 )
-                
+
                 // Show status indicators only for your messages
                 if (isMine) {
                     Spacer(modifier = Modifier.width(4.dp))
-                    
+
                     when (status) {
                         MessageStatus.PENDING -> {
                             // ⏱️ Clock icon - message pending (offline/not sent)
@@ -539,6 +516,79 @@ private fun ConversationScreenPreview() {
                             isReadByEveryone = true,
                             status = MessageStatus.READ
                         ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Last!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
+
                     )
                 ),
                 onSendClick = {}
