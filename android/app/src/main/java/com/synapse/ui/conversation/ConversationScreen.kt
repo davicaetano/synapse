@@ -2,6 +2,7 @@ package com.synapse.ui.conversation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.domain.conversation.ConversationType
+import com.synapse.domain.conversation.MessageStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import com.synapse.ui.theme.SynapseTheme
@@ -407,27 +409,33 @@ private fun MessageBubble(
                     Spacer(modifier = Modifier.width(4.dp))
                     
                     when (status) {
-                        com.synapse.domain.conversation.MessageStatus.PENDING -> {
+                        MessageStatus.PENDING -> {
                             // ⏱️ Clock icon - message pending (offline/not sent)
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = "Sending",
-                                tint = fg.copy(alpha = 0.5f),
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                        com.synapse.domain.conversation.MessageStatus.SENT -> {
-                            // ✓ Single gray check - sent to server
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = "Sent",
-                                tint = fg.copy(alpha = 0.7f),
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                        com.synapse.domain.conversation.MessageStatus.DELIVERED -> {
-                            // ✓✓ Double gray checks - delivered to device
                             Row {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = "Sending",
+                                    tint = fg.copy(alpha = 0.5f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                        MessageStatus.SENT -> {
+                            // ✓ Single gray check - sent to server (aligned right like double checks)
+                            Row{
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = "Sent",
+                                    tint = fg.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                        MessageStatus.DELIVERED -> {
+                            // ✓✓ Double gray checks - delivered to device
+                            Box {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
@@ -438,15 +446,17 @@ private fun MessageBubble(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = "Delivered",
                                     tint = fg.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(12.dp).offset(x = (-6).dp)
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .size(12.dp)
                                 )
                             }
                         }
-                        com.synapse.domain.conversation.MessageStatus.READ -> {
+                        MessageStatus.READ -> {
                             // ✓✓ Double blue checks - read by all
                             // Using a visible blue that works on both light/dark backgrounds
                             val readBlue = Color(0xFF2196F3)  // Material Blue 500
-                            Row {
+                            Box {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
@@ -455,9 +465,11 @@ private fun MessageBubble(
                                 )
                                 Icon(
                                     imageVector = Icons.Filled.Check,
-                                    contentDescription = "Read by everyone",
+                                    contentDescription = "Delivered",
                                     tint = readBlue,
-                                    modifier = Modifier.size(12.dp).offset(x = (-6).dp)
+                                    modifier = Modifier
+                                        .padding(start = 4.dp)
+                                        .size(12.dp)
                                 )
                             }
                         }
@@ -494,7 +506,39 @@ private fun ConversationScreenPreview() {
                             isMine = false,
                             displayTime = "09:13",
                             isReadByEveryone = true
-                        )
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.PENDING
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = false,
+                            status = MessageStatus.SENT
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = false,
+                            status = MessageStatus.DELIVERED
+                        ),
+                        ConversationUIMessage(
+                            id = "m1",
+                            text = "Hello!",
+                            isMine = true,
+                            displayTime = "09:12",
+                            isReadByEveryone = true,
+                            status = MessageStatus.READ
+                        ),
                     )
                 ),
                 onSendClick = {}
