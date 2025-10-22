@@ -68,6 +68,9 @@ dependencies {
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.google.identity)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.navigation.fragment.ktx)
+    implementation(libs.androidx.navigation.ui.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.coil.compose)
     

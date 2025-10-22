@@ -26,8 +26,21 @@ class InboxViewModel @Inject constructor(
     private val typingRepo: TypingRepository,
     private val auth: FirebaseAuth,
 ) : ViewModel() {
-
-    fun observeInbox(userId: String): StateFlow<InboxUIState> {
+    
+    init {
+        android.util.Log.d("FRAGMENT_LIFECYCLE", "🆕 InboxViewModel CREATED")
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        android.util.Log.d("FRAGMENT_LIFECYCLE", "💀 InboxViewModel onCleared() - ViewModel destroyed")
+    }
+    
+    // StateFlow created ONCE when ViewModel is created
+    val uiState: StateFlow<InboxUIState> = run {
+        val userId = auth.currentUser?.uid ?: ""
+        android.util.Log.d("FRAGMENT_LIFECYCLE", "🏗️ Creating uiState StateFlow for userId=$userId")
+        
         // STEP 1: Get raw conversations
         val conversationsFlow = conversationsRepo.observeConversations(userId)
         
@@ -66,7 +79,7 @@ class InboxViewModel @Inject constructor(
             }
         
         // STEP 6: Combine everything and build UI state
-        return combine(
+        combine(
             conversationsFlow,
             usersFlow,
             presenceFlow,
@@ -203,17 +216,6 @@ class InboxViewModel @Inject constructor(
                 typingText = typingText
             )
             else -> null
-        }
-    }
-
-    fun observeInboxForCurrentUser(): StateFlow<InboxUIState> {
-        val uid = auth.currentUser?.uid
-        return if (uid == null) {
-            // empty StateFlow when not logged
-            flowOf(InboxUIState())
-                .stateIn(viewModelScope, SharingStarted.Eagerly, InboxUIState())
-        } else {
-            observeInbox(uid)
         }
     }
 }

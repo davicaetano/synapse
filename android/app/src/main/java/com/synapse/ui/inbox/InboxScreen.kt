@@ -75,7 +75,7 @@ fun InboxScreen(
         hiltEntryPoint.networkMonitor()
     }
     
-    val uiState by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
+    val uiState by vm.uiState.collectAsStateWithLifecycle()
     val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
     var showMenu by remember { mutableStateOf(false) }
     
