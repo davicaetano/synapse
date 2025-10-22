@@ -5,13 +5,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -104,9 +106,21 @@ fun ConversationScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     
+    // Detect keyboard visibility
+    val imeVisible = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+    
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(ui.messages.size) {
         if (ui.messages.isNotEmpty()) {
+            scope.launch {
+                listState.animateScrollToItem(ui.messages.size - 1)
+            }
+        }
+    }
+    
+    // Auto-scroll to bottom when keyboard opens
+    LaunchedEffect(imeVisible) {
+        if (imeVisible && ui.messages.isNotEmpty()) {
             scope.launch {
                 listState.animateScrollToItem(ui.messages.size - 1)
             }
@@ -129,12 +143,12 @@ fun ConversationScreen(
                 currentUserIsConnected = currentUserIsConnected
             )
         },
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
+        modifier = Modifier.fillMaxSize()
     ) { padding ->
         Column(
-            modifier = modifier.padding(padding)
+            modifier = modifier
+                .padding(padding)
+                .imePadding() // Push content up when keyboard appears (works on Android 14+)
         ) {
             LazyColumn(
                 state = listState,
