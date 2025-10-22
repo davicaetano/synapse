@@ -194,7 +194,6 @@ class FirestoreUserDataSource @Inject constructor(
                 .update(updates)
                 .await()
             
-            Log.d(TAG, "User $userId profile updated")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating user profile for $userId", e)
         }

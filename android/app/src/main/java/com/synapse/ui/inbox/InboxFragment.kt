@@ -17,20 +17,13 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class InboxFragment : Fragment() {
     
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "🟢 InboxFragment onCreate() - Fragment created")
-    }
-    
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "🎨 InboxFragment onCreateView() - Creating view")
         return ComposeView(requireContext()).apply {
             setContent {
-                android.util.Log.d("FRAGMENT_LIFECYCLE", "🎨 InboxFragment setContent() - Composing UI")
                 SynapseTheme {
                     InboxScreen(
                         onOpenConversation = { id ->
@@ -46,7 +39,6 @@ class InboxFragment : Fragment() {
                                     )
                                 }
                                 else -> {
-                                    android.util.Log.d("FRAGMENT_LIFECYCLE", "➡️ InboxFragment navigating to conversation: $id")
                                     findNavController().navigate(
                                         com.synapse.R.id.action_inbox_to_conversation,
                                         bundleOf("conversationId" to id)
@@ -58,36 +50,6 @@ class InboxFragment : Fragment() {
                 }
             }
         }
-    }
-    
-    override fun onStart() {
-        super.onStart()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "▶️ InboxFragment onStart()")
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "▶️▶️ InboxFragment onResume()")
-    }
-    
-    override fun onPause() {
-        super.onPause()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "⏸️ InboxFragment onPause()")
-    }
-    
-    override fun onStop() {
-        super.onStop()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "⏹️ InboxFragment onStop()")
-    }
-    
-    override fun onDestroyView() {
-        super.onDestroyView()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "🔴 InboxFragment onDestroyView() - View destroyed")
-    }
-    
-    override fun onDestroy() {
-        super.onDestroy()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "💀 InboxFragment onDestroy() - Fragment destroyed")
     }
 }
 

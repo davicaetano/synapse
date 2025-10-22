@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.mapper.toDomain
+import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.domain.conversation.ConversationType
@@ -25,22 +26,17 @@ class InboxViewModel @Inject constructor(
     private val conversationsRepo: ConversationRepository,
     private val typingRepo: TypingRepository,
     private val auth: FirebaseAuth,
+    private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
-    
-    init {
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "🆕 InboxViewModel CREATED")
-    }
     
     override fun onCleared() {
         super.onCleared()
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "💀 InboxViewModel onCleared() - ViewModel destroyed")
     }
     
     // StateFlow created ONCE when ViewModel is created
     val uiState: StateFlow<InboxUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
-        android.util.Log.d("FRAGMENT_LIFECYCLE", "🏗️ Creating uiState StateFlow for userId=$userId")
-        
+
         // STEP 1: Get raw conversations
         val conversationsFlow = conversationsRepo.observeConversations(userId)
         
@@ -78,14 +74,18 @@ class InboxViewModel @Inject constructor(
                 }
             }
         
-        // STEP 6: Combine everything and build UI state
+        // STEP 6: Observe network connectivity
+        val isConnectedFlow = networkMonitor.isConnected
+        
+        // STEP 7: Combine everything and build UI state
         combine(
             conversationsFlow,
             usersFlow,
             presenceFlow,
-            typingFlow
-        ) { conversations, users, presence, typing ->
-            buildInboxUIState(userId, conversations, users, presence, typing)
+            typingFlow,
+            isConnectedFlow
+        ) { conversations, users, presence, typing, isConnected ->
+            buildInboxUIState(userId, conversations, users, presence, typing, isConnected)
         }.stateIn(
             viewModelScope,
             SharingStarted.Lazily, // Keep listeners active - no reload when navigating back
@@ -102,10 +102,11 @@ class InboxViewModel @Inject constructor(
         conversations: List<com.synapse.data.source.firestore.entity.ConversationEntity>,
         users: List<com.synapse.data.source.firestore.entity.UserEntity>,
         presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
-        typing: Map<String, List<com.synapse.domain.user.User>>
+        typing: Map<String, List<com.synapse.domain.user.User>>,
+        isConnected: Boolean
     ): InboxUIState {
         if (conversations.isEmpty()) {
-            return InboxUIState(items = emptyList(), isLoading = false)
+            return InboxUIState(items = emptyList(), isLoading = false, isConnected = isConnected)
         }
         
         // Build user map
@@ -130,7 +131,7 @@ class InboxViewModel @Inject constructor(
             }
         }
         
-        return InboxUIState(items = items, isLoading = false)
+        return InboxUIState(items = items, isLoading = false, isConnected = isConnected)
     }
     
     /**

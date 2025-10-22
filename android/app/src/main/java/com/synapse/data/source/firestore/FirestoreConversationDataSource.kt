@@ -89,7 +89,6 @@ class FirestoreConversationDataSource @Inject constructor(
      */
     suspend fun createDirectConversation(userIds: List<String>): String? {
         if (userIds.size != 2) {
-            Log.e(TAG, "Direct conversation must have exactly 2 users")
             return null
         }
         
@@ -171,7 +170,6 @@ class FirestoreConversationDataSource @Inject constructor(
         
         return try {
             val docRef = firestore.collection("conversations").add(data).await()
-            Log.d(TAG, "Group created by $createdBy with ${memberIds.size} members")
             docRef.id
         } catch (e: Exception) {
             Log.e(TAG, "Error creating group conversation", e)

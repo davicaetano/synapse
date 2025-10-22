@@ -132,8 +132,7 @@ class RealtimePresenceDataSource @Inject constructor(
                 "lastSeenMs" to ServerValue.TIMESTAMP
             )
         ).addOnSuccessListener {
-            Log.d(TAG, "Marked user $userId as online")
-            
+
             // Start heartbeat to keep lastSeenMs fresh
             startHeartbeat()
         }.addOnFailureListener { e ->
@@ -202,9 +201,7 @@ class RealtimePresenceDataSource @Inject constructor(
             Log.e(TAG, "Cannot start heartbeat: user not authenticated")
             return
         }
-        
-        Log.d(TAG, "Starting presence heartbeat for user $userId")
-        
+
         heartbeatJob = scope.launch {
             while (true) {
                 delay(5_000L) // 5 seconds heartbeat
@@ -216,9 +213,7 @@ class RealtimePresenceDataSource @Inject constructor(
                         "online" to true,
                         "lastSeenMs" to ServerValue.TIMESTAMP
                     )
-                ).addOnSuccessListener {
-                    Log.d(TAG, "Heartbeat: updated online=true and lastSeenMs for user $userId")
-                }.addOnFailureListener { e ->
+                ).addOnFailureListener { e ->
                     Log.e(TAG, "Heartbeat: failed to update presence", e)
                 }
             }
@@ -232,7 +227,6 @@ class RealtimePresenceDataSource @Inject constructor(
     fun stopHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = null
-        Log.d(TAG, "Stopped presence heartbeat")
     }
     
     // ============================================================
@@ -277,9 +271,6 @@ class RealtimePresenceDataSource @Inject constructor(
         val typingRef = realtimeDb.child("typing").child(conversationId).child(userId)
         
         typingRef.removeValue()
-            .addOnSuccessListener {
-                Log.d(TAG, "Removed typing for user $userId in $conversationId")
-            }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to remove typing for $userId in $conversationId", e)
             }
@@ -383,7 +374,6 @@ class RealtimePresenceDataSource @Inject constructor(
                 }
                 
                 override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "Typing listener cancelled for $conversationId", error.toException())
                     try {
                         trySend(typingMap.toMap()).isSuccess
                     } catch (e: Exception) {

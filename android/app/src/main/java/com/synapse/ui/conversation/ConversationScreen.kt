@@ -53,21 +53,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.MessageStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import com.synapse.ui.theme.SynapseTheme
-import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
-
-// EntryPoint to access NetworkConnectivityMonitor from Composable
-@dagger.hilt.EntryPoint
-@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
-interface ConversationNetworkMonitorEntryPoint {
-    fun networkMonitor(): NetworkConnectivityMonitor
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,26 +66,14 @@ fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val networkMonitor = remember {
-        val hiltEntryPoint = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            ConversationNetworkMonitorEntryPoint::class.java
-        )
-        hiltEntryPoint.networkMonitor()
-    }
-
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
-    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
 
     ConversationScreen(
         ui = ui,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
-        onBackClick = onNavigateBack,
-        currentUserIsConnected = isConnected
+        onBackClick = onNavigateBack
     )
-
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,8 +83,7 @@ fun ConversationScreen(
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
-    onBackClick: () -> Unit = {},
-    currentUserIsConnected: Boolean = true,
+    onBackClick: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -133,7 +111,7 @@ fun ConversationScreen(
                 onBackClick = onBackClick,
                 onAddMemberClick = { /* TODO: Add member to group */ },
                 onMenuClick = { /* TODO: Show conversation menu */ },
-                currentUserIsConnected = currentUserIsConnected
+                currentUserIsConnected = ui.isConnected
             )
         },
         modifier = Modifier.imePadding(),

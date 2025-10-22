@@ -64,13 +64,11 @@ class SynapseMessagingService : FirebaseMessagingService() {
      */
     private fun markMessageAsReceived(conversationId: String?, messageId: String?) {
         if (conversationId == null || messageId == null) {
-            Log.w(TAG, "Cannot mark as received: missing conversationId or messageId")
             return
         }
         
         val currentUserId = auth.currentUser?.uid
         if (currentUserId == null) {
-            Log.w(TAG, "Cannot mark as received: user not authenticated")
             return
         }
         
@@ -83,7 +81,6 @@ class SynapseMessagingService : FirebaseMessagingService() {
                     .update("receivedBy", FieldValue.arrayUnion(currentUserId))
                     .await()
                 
-                Log.d(TAG, "Message $messageId marked as received by $currentUserId")
             } catch (e: Exception) {
                 Log.e(TAG, "Error marking message as received", e)
             }

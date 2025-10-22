@@ -25,5 +25,6 @@ data class ConversationUIState(
     val isUserAdmin: Boolean = false,     // True if current user is group admin
     val otherUserOnline: Boolean? = null, // For DIRECT - other user's online status
     val otherUserPhotoUrl: String? = null, // For DIRECT - other user's photo
-    val typingText: String? = null        // "John is typing..." or null
+    val typingText: String? = null,       // "John is typing..." or null
+    val isConnected: Boolean = true       // Network connectivity status
 )

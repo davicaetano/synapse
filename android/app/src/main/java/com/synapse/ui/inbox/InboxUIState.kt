@@ -53,5 +53,6 @@ sealed class InboxItem {
 data class InboxUIState(
     val items: List<InboxItem> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val isConnected: Boolean = true  // Network connectivity status
 )

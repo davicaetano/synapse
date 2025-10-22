@@ -1,12 +1,17 @@
 package com.synapse.ui.conversation
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.mapper.toDomain
+import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
+import com.synapse.data.source.firestore.entity.ConversationEntity
+import com.synapse.data.source.firestore.entity.MessageEntity
+import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import com.synapse.domain.user.User
@@ -29,7 +34,8 @@ class ConversationViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val convRepo: ConversationRepository,
     private val typingRepo: TypingRepository,
-    private val auth: FirebaseAuth
+    private val auth: FirebaseAuth,
+    private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
     private val conversationId: String = savedStateHandle.get<String>("conversationId") ?: ""
     
@@ -43,7 +49,7 @@ class ConversationViewModel @Inject constructor(
                 convRepo.markConversationAsRead(conversationId)
             } catch (e: Exception) {
                 // Log error but don't crash the app
-                android.util.Log.e("ConversationViewModel", "Failed to mark conversation as read", e)
+                Log.e("ConversationViewModel", "Failed to mark conversation as read", e)
             }
         }
     }
@@ -93,21 +99,31 @@ class ConversationViewModel @Inject constructor(
         // STEP 6: Observe typing
         val typingFlow = typingRepo.observeTypingTextInConversation(conversationId)
         
-        // STEP 7: Combine everything and build UI state
+        // STEP 7: Observe network connectivity
+        val isConnectedFlow = networkMonitor.isConnected
+        
+        // STEP 8: Combine typing + connectivity (to avoid 6-flow limit)
+        val typingAndConnectivityFlow = combine(typingFlow, isConnectedFlow) { typing, connected ->
+            typing to connected
+        }
+        
+        // STEP 9: Combine everything and build UI state
         combine(
             conversationFlow,
             messagesFlow,
             usersFlow,
             presenceFlow,
-            typingFlow
-        ) { conversation, messages, users, presence, typingText ->
+            typingAndConnectivityFlow
+        ) { conversation, messages, users, presence, typingAndConnectivity ->
+            val (typingText, isConnected) = typingAndConnectivity
             buildConversationUIState(
                 userId = userId,
                 conversation = conversation,
                 messages = messages,
                 users = users,
                 presence = presence,
-                typingText = typingText
+                typingText = typingText,
+                isConnected = isConnected
             )
         }.stateIn(
             viewModelScope,
@@ -127,11 +143,12 @@ class ConversationViewModel @Inject constructor(
      */
     private fun buildConversationUIState(
         userId: String,
-        conversation: com.synapse.data.source.firestore.entity.ConversationEntity?,
-        messages: List<com.synapse.data.source.firestore.entity.MessageEntity>,
-        users: List<com.synapse.data.source.firestore.entity.UserEntity>,
+        conversation: ConversationEntity?,
+        messages: List<MessageEntity>,
+        users: List<UserEntity>,
         presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
-        typingText: String?
+        typingText: String?,
+        isConnected: Boolean
     ): ConversationUIState {
         if (conversation == null) {
             // Conversation not found or loading
@@ -207,7 +224,8 @@ class ConversationViewModel @Inject constructor(
             otherUserPhotoUrl = if (convType == ConversationType.DIRECT) {
                 members.firstOrNull { it.id != userId }?.photoUrl
             } else null,
-            typingText = typingText
+            typingText = typingText,
+            isConnected = isConnected
         )
     }
 

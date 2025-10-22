@@ -76,8 +76,6 @@ class NetworkConnectivityMonitor @Inject constructor(
             return
         }
         
-        Log.d(TAG, "Starting network connectivity monitoring")
-        
         val networkRequest = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
@@ -85,14 +83,12 @@ class NetworkConnectivityMonitor @Inject constructor(
         
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                Log.d(TAG, "Network available: $network")
                 activeNetworks.add(network)
                 // Network is available, but we need to wait for capabilities to confirm it's usable
                 updateConnectionState()
             }
             
             override fun onLost(network: Network) {
-                Log.d(TAG, "Network lost: $network")
                 activeNetworks.remove(network)
                 // Check if we still have other valid networks
                 updateConnectionState()
@@ -105,8 +101,6 @@ class NetworkConnectivityMonitor @Inject constructor(
                 val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 val isValidated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                 
-                Log.d(TAG, "Network $network capabilities changed: hasInternet=$hasInternet, isValidated=$isValidated")
-                
                 // Add to active networks if it has internet and is validated
                 if (hasInternet && isValidated) {
                     activeNetworks.add(network)
@@ -118,15 +112,7 @@ class NetworkConnectivityMonitor @Inject constructor(
             }
             
             private fun updateConnectionState() {
-                val wasConnected = _isConnected.value
-                val nowConnected = hasAnyValidNetwork()
-                
-                if (wasConnected != nowConnected) {
-                    val networkCount = synchronized(activeNetworks) { activeNetworks.size }
-                    Log.d(TAG, "Connection state changed: $wasConnected -> $nowConnected (active networks: $networkCount)")
-                }
-                
-                _isConnected.value = nowConnected
+                _isConnected.value = hasAnyValidNetwork()
             }
         }
         
@@ -142,7 +128,6 @@ class NetworkConnectivityMonitor @Inject constructor(
      */
     fun stopMonitoring() {
         networkCallback?.let { callback ->
-            Log.d(TAG, "Stopping network connectivity monitoring")
             connectivityManager.unregisterNetworkCallback(callback)
             networkCallback = null
             synchronized(activeNetworks) {

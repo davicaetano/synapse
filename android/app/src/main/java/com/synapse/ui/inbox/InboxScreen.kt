@@ -42,22 +42,12 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.MainActivityViewModel
-import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.ui.components.EmptyState
 import com.synapse.ui.components.ErrorState
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.LoadingState
 import com.synapse.ui.components.PresenceIndicator
 import com.synapse.ui.components.UserAvatar
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.android.qualifiers.ApplicationContext
-
-// EntryPoint to access NetworkConnectivityMonitor from Composable
-@dagger.hilt.EntryPoint
-@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
-interface NetworkMonitorEntryPoint {
-    fun networkMonitor(): NetworkConnectivityMonitor
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,17 +56,7 @@ fun InboxScreen(
     vm: InboxViewModel = hiltViewModel(),
     mainVm: MainActivityViewModel = hiltViewModel(),
 ) {
-    val context = LocalContext.current
-    val networkMonitor = remember {
-        val hiltEntryPoint = EntryPointAccessors.fromApplication(
-            context.applicationContext,
-            NetworkMonitorEntryPoint::class.java
-        )
-        hiltEntryPoint.networkMonitor()
-    }
-    
     val uiState by vm.uiState.collectAsStateWithLifecycle()
-    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
     var showMenu by remember { mutableStateOf(false) }
     
     Scaffold(
@@ -87,7 +67,7 @@ fun InboxScreen(
                         Text("Synapse")
                         Spacer(modifier = Modifier.size(8.dp))
                         // User's own connection status
-                        PresenceIndicator(isOnline = isConnected)
+                        PresenceIndicator(isOnline = uiState.isConnected)
                     }
                 },
                 actions = {
@@ -120,9 +100,9 @@ fun InboxScreen(
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        PresenceIndicator(isOnline = isConnected)
+                                        PresenceIndicator(isOnline = uiState.isConnected)
                                         Spacer(modifier = Modifier.size(8.dp))
-                                        Text(if (isConnected) "Online" else "Offline")
+                                        Text(if (uiState.isConnected) "Online" else "Offline")
                                     }
                                 },
                                 onClick = { /* TODO: Change status */ },
@@ -197,7 +177,7 @@ fun InboxScreen(
                             ConversationRow(
                                 item = item,
                                 onClick = { onOpenConversation(item.id) },
-                                currentUserIsConnected = isConnected
+                                currentUserIsConnected = uiState.isConnected
                             )
                             HorizontalDivider()
                         }
