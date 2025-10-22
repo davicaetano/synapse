@@ -63,6 +63,7 @@ fun ConversationScreen(
     ConversationScreen(
         ui = ui,
         onSendClick = { text: String -> vm.send(text) },
+        onTextChanged = { text: String -> vm.onTextChanged(text) },
         onBackClick = onNavigateBack
     )
 
@@ -73,6 +74,7 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     onSendClick: (text: String) -> Unit,
+    onTextChanged: (text: String) -> Unit = {},
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -98,6 +100,7 @@ fun ConversationScreen(
                 otherUserPhotoUrl = ui.otherUserPhotoUrl,
                 otherUserOnline = ui.otherUserOnline,
                 isUserAdmin = ui.isUserAdmin,
+                typingText = ui.typingText,
                 onBackClick = onBackClick,
                 onAddMemberClick = { /* TODO: Add member to group */ },
                 onMenuClick = { /* TODO: Show conversation menu */ }
@@ -142,7 +145,10 @@ fun ConversationScreen(
             ) {
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { input = it },
+                    onValueChange = { 
+                        input = it
+                        onTextChanged(it)
+                    },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Type a message...") },
                     maxLines = 4
@@ -186,6 +192,7 @@ private fun ConversationTopAppBar(
     otherUserPhotoUrl: String?,
     otherUserOnline: Boolean?,
     isUserAdmin: Boolean,
+    typingText: String?,
     onBackClick: () -> Unit,
     onAddMemberClick: () -> Unit,
     onMenuClick: () -> Unit
@@ -217,20 +224,24 @@ private fun ConversationTopAppBar(
                     Spacer(modifier = Modifier.width(12.dp))
                 }
                 
-                // Title + subtitle
+                // Title + subtitle/typing
                 Column {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    if (subtitle != null) {
+                    // Prioritize typing indicator over subtitle
+                    val displayText = typingText ?: subtitle
+                    if (displayText != null) {
                         Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (subtitle == "online") {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                            text = displayText,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontStyle = if (typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                            ),
+                            color = when {
+                                typingText != null -> MaterialTheme.colorScheme.primary
+                                displayText == "online" -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
                             },
                             fontSize = 12.sp
                         )

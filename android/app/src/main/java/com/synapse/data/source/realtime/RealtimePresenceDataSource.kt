@@ -209,6 +209,188 @@ class RealtimePresenceDataSource @Inject constructor(
             }
     }
     
+    // ============================================================
+    // TYPING INDICATOR OPERATIONS
+    // ============================================================
+    // Path: /typing/{conversationId}/{userId} = timestamp
+    
+    /**
+     * Mark current user as typing in a conversation.
+     * Sets a timestamp that can be used for auto-cleanup (e.g., remove if > 3 seconds old).
+     */
+    suspend fun setTyping(conversationId: String) {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            Log.e("TYPING_DEBUG", "Cannot set typing: user not authenticated")
+            return
+        }
+        
+        val typingRef = realtimeDb.child("typing").child(conversationId).child(userId)
+        val timestamp = System.currentTimeMillis()
+        
+        Log.d("TYPING_DEBUG", "RealtimeDB.setTyping: path=/typing/$conversationId/$userId timestamp=$timestamp")
+        
+        typingRef.setValue(timestamp)
+            .addOnSuccessListener {
+                Log.d("TYPING_DEBUG", "RealtimeDB.setTyping SUCCESS: userId=$userId convId=$conversationId")
+            }
+            .addOnFailureListener { e ->
+                Log.e("TYPING_DEBUG", "RealtimeDB.setTyping FAILED: userId=$userId convId=$conversationId", e)
+            }
+        
+        // Auto-remove after disconnect
+        typingRef.onDisconnect().removeValue()
+    }
+    
+    /**
+     * Remove typing indicator for current user in a conversation.
+     */
+    suspend fun removeTyping(conversationId: String) {
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            Log.e(TAG, "Cannot remove typing: user not authenticated")
+            return
+        }
+        
+        val typingRef = realtimeDb.child("typing").child(conversationId).child(userId)
+        
+        typingRef.removeValue()
+            .addOnSuccessListener {
+                Log.d(TAG, "Removed typing for user $userId in $conversationId")
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "Failed to remove typing for $userId in $conversationId", e)
+            }
+    }
+    
+    /**
+     * Listen to who is typing in a specific conversation.
+     * Returns a map of userId -> timestamp for all users currently typing.
+     * 
+     * NOTE: This includes ALL users typing (including self), so the caller
+     * should filter out the current user if needed.
+     */
+    fun listenTypingInConversation(conversationId: String): Flow<Map<String, Long>> = callbackFlow {
+        val ref = realtimeDb.child("typing").child(conversationId)
+        
+        Log.d("TYPING_DEBUG", "listenTypingInConversation: Setting up listener for convId=$conversationId path=/typing/$conversationId")
+        
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                Log.d("TYPING_DEBUG", "listenTypingInConversation.onDataChange: convId=$conversationId childrenCount=${snapshot.childrenCount}")
+                
+                val typingUsers = mutableMapOf<String, Long>()
+                
+                snapshot.children.forEach { userSnapshot ->
+                    val userId = userSnapshot.key
+                    val timestamp = userSnapshot.getValue(Long::class.java)
+                    
+                    Log.d("TYPING_DEBUG", "listenTypingInConversation: userId=$userId timestamp=$timestamp")
+                    
+                    if (userId != null && timestamp != null) {
+                        // Only include if timestamp is recent (< 5 seconds old)
+                        // This handles stale data from network issues
+                        val age = System.currentTimeMillis() - timestamp
+                        Log.d("TYPING_DEBUG", "listenTypingInConversation: age=${age}ms (threshold=5000ms)")
+                        if (age < 5000) {
+                            typingUsers[userId] = timestamp
+                        } else {
+                            Log.d("TYPING_DEBUG", "listenTypingInConversation: SKIPPING stale timestamp userId=$userId")
+                        }
+                    }
+                }
+                
+                Log.d("TYPING_DEBUG", "listenTypingInConversation: Sending ${typingUsers.size} typing users to Flow")
+                
+                try {
+                    trySend(typingUsers).isSuccess
+                } catch (e: Exception) {
+                    Log.e("TYPING_DEBUG", "Failed to send typing update for $conversationId", e)
+                }
+            }
+            
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("TYPING_DEBUG", "Typing listener CANCELLED for convId=$conversationId", error.toException())
+                try {
+                    trySend(emptyMap()).isSuccess
+                } catch (e: Exception) {
+                    Log.e("TYPING_DEBUG", "Failed to send empty typing map", e)
+                }
+            }
+        }
+        
+        ref.addValueEventListener(listener)
+        awaitClose { 
+            Log.d("TYPING_DEBUG", "listenTypingInConversation: Removing listener for convId=$conversationId")
+            ref.removeEventListener(listener) 
+        }
+    }
+    
+    /**
+     * Listen to typing status across multiple conversations.
+     * Returns a map: conversationId -> map of userId -> timestamp
+     * 
+     * Useful for Inbox screen to show "typing..." for multiple chats.
+     */
+    fun listenTypingInMultipleConversations(conversationIds: List<String>): Flow<Map<String, Map<String, Long>>> = callbackFlow {
+        if (conversationIds.isEmpty()) {
+            trySend(emptyMap())
+            awaitClose {}
+            return@callbackFlow
+        }
+        
+        val listeners = mutableMapOf<String, ValueEventListener>()
+        val typingMap = mutableMapOf<String, Map<String, Long>>()
+        
+        conversationIds.forEach { conversationId ->
+            val ref = realtimeDb.child("typing").child(conversationId)
+            
+            val listener = object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    val typingUsers = mutableMapOf<String, Long>()
+                    
+                    snapshot.children.forEach { userSnapshot ->
+                        val userId = userSnapshot.key
+                        val timestamp = userSnapshot.getValue(Long::class.java)
+                        
+                        if (userId != null && timestamp != null) {
+                            val age = System.currentTimeMillis() - timestamp
+                            if (age < 5000) {
+                                typingUsers[userId] = timestamp
+                            }
+                        }
+                    }
+                    
+                    typingMap[conversationId] = typingUsers
+                    
+                    try {
+                        trySend(typingMap.toMap()).isSuccess
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send typing map update", e)
+                    }
+                }
+                
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e(TAG, "Typing listener cancelled for $conversationId", error.toException())
+                    try {
+                        trySend(typingMap.toMap()).isSuccess
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send typing map after cancellation", e)
+                    }
+                }
+            }
+            
+            listeners[conversationId] = listener
+            ref.addValueEventListener(listener)
+        }
+        
+        awaitClose {
+            listeners.forEach { (conversationId, listener) ->
+                realtimeDb.child("typing").child(conversationId).removeEventListener(listener)
+            }
+        }
+    }
+    
     companion object {
         private const val TAG = "RealtimePresenceDS"
     }

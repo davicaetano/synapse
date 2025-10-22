@@ -11,6 +11,7 @@ sealed class InboxItem {
     abstract val displayTime: String
     abstract val convType: ConversationType
     abstract val unreadCount: Int
+    abstract val typingText: String?  // "John is typing..." or null
 
     data class SelfConversation(
         override val id: String,
@@ -19,7 +20,8 @@ sealed class InboxItem {
         override val updatedAtMs: Long,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.SELF,
-        override val unreadCount: Int = 0
+        override val unreadCount: Int = 0,
+        override val typingText: String? = null
     ) : InboxItem()
 
     data class OneOnOneConversation(
@@ -30,7 +32,8 @@ sealed class InboxItem {
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.DIRECT,
         val otherUser: User, // Other user for direct conversations
-        override val unreadCount: Int = 0
+        override val unreadCount: Int = 0,
+        override val typingText: String? = null
     ) : InboxItem()
 
     data class GroupConversation(
@@ -42,7 +45,8 @@ sealed class InboxItem {
         override val convType: ConversationType = ConversationType.GROUP,
         val members: List<User>,
         val groupName: String? = null,  // Group name for avatar
-        override val unreadCount: Int = 0
+        override val unreadCount: Int = 0,
+        override val typingText: String? = null
     ) : InboxItem()
 }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.repository.ConversationRepository
+import com.synapse.data.repository.TypingRepository
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
@@ -12,8 +13,11 @@ import com.synapse.domain.conversation.Message
 import com.synapse.domain.user.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -22,9 +26,13 @@ import kotlinx.coroutines.launch
 class ConversationViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val convRepo: ConversationRepository,
+    private val typingRepo: TypingRepository,
     private val auth: FirebaseAuth
 ) : ViewModel() {
     private val conversationId: String = savedStateHandle.get<String>("conversationId") ?: ""
+    
+    // Job to handle typing timeout (auto-remove typing after 3 seconds of inactivity)
+    private var typingTimeoutJob: Job? = null
 
     init {
         // Mark conversation as read when opened
@@ -35,6 +43,14 @@ class ConversationViewModel @Inject constructor(
                 // Log error but don't crash the app
                 android.util.Log.e("ConversationViewModel", "Failed to mark conversation as read", e)
             }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Remove typing indicator when leaving conversation
+        viewModelScope.launch {
+            typingRepo.removeTyping(conversationId)
         }
     }
 
@@ -55,7 +71,8 @@ class ConversationViewModel @Inject constructor(
         )
 
     val uiState: StateFlow<ConversationUIState> = conversation
-        .map { conv ->
+        .combine(typingRepo.observeTypingTextInConversation(conversationId)) { conv, typingText ->
+            android.util.Log.d("TYPING_DEBUG", "ConversationScreen UI updated: typingText='$typingText' convId=$conversationId")
             val currentUserId = auth.currentUser?.uid
             val summary = conv.summary
             
@@ -97,7 +114,8 @@ class ConversationViewModel @Inject constructor(
                 } else null,
                 otherUserPhotoUrl = if (summary.convType == ConversationType.DIRECT) {
                     summary.members.firstOrNull { it.id != currentUserId }?.photoUrl
-                } else null
+                } else null,
+                typingText = typingText
             )
         }
         .stateIn(
@@ -159,8 +177,46 @@ class ConversationViewModel @Inject constructor(
         return fmt.format(date)
     }
 
+    /**
+     * Called when user types text in the input field.
+     * Implements debounce logic:
+     * - Sets typing indicator after 500ms of continuous typing
+     * - Removes typing indicator after 3 seconds of inactivity
+     */
+    fun onTextChanged(text: String) {
+        android.util.Log.d("TYPING_DEBUG", "onTextChanged: text='${text.take(20)}...' convId=$conversationId")
+        
+        // Cancel previous timeout job
+        typingTimeoutJob?.cancel()
+        
+        if (text.isNotBlank()) {
+            // User is typing - set typing indicator
+            android.util.Log.d("TYPING_DEBUG", "Setting typing indicator: convId=$conversationId")
+            viewModelScope.launch {
+                typingRepo.setTyping(conversationId)
+            }
+            
+            // Start timeout to remove typing indicator after 3 seconds
+            typingTimeoutJob = viewModelScope.launch {
+                delay(3000)
+                android.util.Log.d("TYPING_DEBUG", "Timeout - removing typing: convId=$conversationId")
+                typingRepo.removeTyping(conversationId)
+            }
+        } else {
+            // Input is empty - remove typing indicator immediately
+            android.util.Log.d("TYPING_DEBUG", "Text empty - removing typing: convId=$conversationId")
+            viewModelScope.launch {
+                typingRepo.removeTyping(conversationId)
+            }
+        }
+    }
+    
     fun send(text: String) {
-        viewModelScope.launch { convRepo.sendMessage(conversationId, text) }
+        // Remove typing indicator when sending message
+        viewModelScope.launch {
+            typingRepo.removeTyping(conversationId)
+            convRepo.sendMessage(conversationId, text)
+        }
     }
 }
 

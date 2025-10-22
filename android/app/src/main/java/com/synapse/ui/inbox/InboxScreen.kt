@@ -219,9 +219,14 @@ private fun SelfConversationRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            // Show typing indicator if someone is typing, otherwise show last message
             Text(
-                text = item.lastMessageText ?: "",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                text = item.typingText ?: item.lastMessageText ?: "",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 13.sp,
+                    fontStyle = if (item.typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                ),
+                color = if (item.typingText != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -292,10 +297,14 @@ private fun OneOnOneConversationRow(
                 }
             }
             
-            // Always show last message
+            // Show typing indicator if someone is typing, otherwise show last message
             Text(
-                text = item.lastMessageText ?: "",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                text = item.typingText ?: item.lastMessageText ?: "",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 13.sp,
+                    fontStyle = if (item.typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                ),
+                color = if (item.typingText != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -341,12 +350,16 @@ private fun GroupConversationRow(
                 overflow = TextOverflow.Ellipsis
             )
             
-            // Second line: Members list OR last message
+            // Second line: Typing indicator > Members list > Last message
             val membersText = item.members.joinToString(", ") { it.displayName ?: it.id }
+            val displayText = item.typingText ?: if (membersText.isNotBlank()) membersText else (item.lastMessageText ?: "")
             Text(
-                text = if (membersText.isNotBlank()) membersText else (item.lastMessageText ?: ""),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = displayText,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 13.sp,
+                    fontStyle = if (item.typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                ),
+                color = if (item.typingText != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
