@@ -1,11 +1,11 @@
 package com.synapse.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -59,7 +59,33 @@ fun AppNavHost(
                 }
             })
         }
-        composable(Routes.UserPicker) {
+        composable(
+            route = Routes.UserPicker,
+            enterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            },
+            exitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popEnterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            }
+        ) {
             val pickerVm: com.synapse.ui.userpicker.UserPickerViewModel = hiltViewModel()
             val scope = rememberCoroutineScope()
             UserPickerScreen(
@@ -79,13 +105,69 @@ fun AppNavHost(
                 onClose = { navController.popBackStack() }
             )
         }
-        composable(Routes.Conversation) { backStackEntry ->
+        composable(
+            route = Routes.Conversation,
+            enterTransition = {
+                // Slide in from right (WhatsApp style)
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            },
+            exitTransition = {
+                // Slide out to left when navigating forward
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popEnterTransition = {
+                // Slide in from left when coming back
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popExitTransition = {
+                // Slide out to right when going back
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            }
+        ) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
             ConversationScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
-        composable(Routes.CreateGroup) {
+        composable(
+            route = Routes.CreateGroup,
+            enterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            },
+            exitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popEnterTransition = {
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> -fullWidth / 4 },
+                    animationSpec = tween(300)
+                )
+            },
+            popExitTransition = {
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(300)
+                )
+            }
+        ) {
             CreateGroupScreen(
                 onGroupCreated = { conversationId ->
                     navController.popBackStack()
