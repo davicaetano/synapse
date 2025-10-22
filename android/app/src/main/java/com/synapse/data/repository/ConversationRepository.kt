@@ -1,7 +1,6 @@
 package com.synapse.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.mapper.toDomain
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.FirestoreUserDataSource
@@ -10,14 +9,7 @@ import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.data.source.realtime.entity.PresenceEntity
-import com.synapse.domain.conversation.Conversation
-import com.synapse.domain.conversation.ConversationSummary
-import com.synapse.domain.conversation.ConversationType
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -33,7 +25,6 @@ import javax.inject.Singleton
  * 
  * Philosophy: Keep it simple. Repository exposes data, ViewModel processes it.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class ConversationRepository @Inject constructor(
     private val conversationDataSource: FirestoreConversationDataSource,
@@ -89,82 +80,6 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
-     * LEGACY: Observe all conversations for a user with full data (members + presence).
-     * DEPRECATED: Use observeConversations() + observeUsers() + observePresence() in ViewModel instead.
-     * This will be removed after ViewModel refactoring.
-     */
-    @Deprecated("Use separate flows in ViewModel", ReplaceWith("observeConversations()"))
-    fun observeConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> {
-        
-        // Listen to conversations (only once!)
-        val conversationsFlow = conversationDataSource.listenConversations(userId)
-        
-        // Get member IDs flow from conversations
-        val memberIdsFlow = conversationsFlow
-            .map { conversations ->
-                val allMemberIds = conversations
-                    .flatMap { it.memberIds }
-                    .distinct()
-                    .sorted() // Sort to make comparison stable
-                
-                
-                allMemberIds
-            }
-            .distinctUntilChanged() // Only trigger flatMapLatest when member IDs actually change!
-        
-        // Listen to users ONLY when member IDs change (not on every presence update!)
-        val usersFlow = memberIdsFlow
-            .flatMapLatest { memberIds ->
-                if (memberIds.isEmpty()) {
-                    flowOf(emptyList())
-                } else {
-                    userDataSource.listenUsersByIds(memberIds)
-                }
-            }
-        
-        // Listen to presence ONLY when member IDs change (not on every presence update!)
-        val presenceFlow = memberIdsFlow
-            .flatMapLatest { memberIds ->
-                if (memberIds.isEmpty()) {
-                    flowOf(emptyMap())
-                } else {
-                    presenceDataSource.listenMultiplePresence(memberIds)
-                }
-            }
-        
-        // Combine conversations + users + presence
-        return combine(
-            conversationsFlow,
-            usersFlow,
-            presenceFlow
-        ) { conversations, userEntities, presenceMap ->
-            
-            if (conversations.isEmpty()) {
-                emptyList()
-            } else {
-                // Build user map
-                val usersMap = userEntities.associateBy { it.id }
-                
-                // Transform entities to domain models
-                val summaries = conversations.map { convEntity ->
-                    val members = convEntity.memberIds.mapNotNull { memberId ->
-                        val userEntity = usersMap[memberId]
-                        val presence = presenceMap[memberId]
-                        userEntity?.toDomain(
-                            presence = presence,
-                            isMyself = (memberId == userId)
-                        )
-                    }
-                    
-                    convEntity.toDomain(members = members)
-                }
-                
-                summaries
-            }
-        }
-    }
-    
-    /**
      * Get a single conversation entity by ID.
      * Observes all user's conversations and filters by ID.
      * Returns null if not found.
@@ -172,77 +87,6 @@ class ConversationRepository @Inject constructor(
     fun observeConversation(userId: String, conversationId: String): Flow<ConversationEntity?> {
         return conversationDataSource.listenConversations(userId)
             .map { conversations -> conversations.find { it.id == conversationId } }
-    }
-    
-    /**
-     * LEGACY: Observe a single conversation with all messages.
-     * DEPRECATED: Use separate flows in ViewModel instead.
-     */
-    @Deprecated("Use separate flows in ViewModel")
-    fun observeConversationWithMessages(conversationId: String): Flow<Conversation> {
-        val userId = auth.currentUser?.uid
-        
-        return combine(
-            conversationDataSource.listenConversations(userId ?: ""),
-            messageDataSource.listenMessages(conversationId)
-        ) { conversations, messageEntities ->
-            val convEntity = conversations.find { it.id == conversationId }
-            
-            if (convEntity == null) {
-                // Return empty conversation
-                Conversation(
-                    summary = ConversationSummary(
-                        id = conversationId,
-                        lastMessageText = null,
-                        updatedAtMs = 0L,
-                        members = emptyList(),
-                        convType = ConversationType.DIRECT
-                    ),
-                    messages = emptyList()
-                )
-            } else {
-                // We need users and presence for the conversation
-                convEntity
-            }
-        }.flatMapLatest { convEntity ->
-            if (convEntity is Conversation) {
-                flowOf(convEntity) // Already a Conversation (empty case)
-            } else {
-                // Cast back to entity
-                val conv = convEntity as com.synapse.data.source.firestore.entity.ConversationEntity
-                val allMemberIds = conv.memberIds
-                
-                combine(
-                    flowOf(conv),
-                    messageDataSource.listenMessages(conversationId),
-                    userDataSource.listenUsersByIds(allMemberIds),
-                    presenceDataSource.listenMultiplePresence(allMemberIds)
-                ) { convEnt, msgEntities, userEntities, presenceMap ->
-                    val usersMap = userEntities.associateBy { it.id }
-                    
-                    val members = convEnt.memberIds.mapNotNull { memberId ->
-                        val userEntity = usersMap[memberId]
-                        val presence = presenceMap[memberId]
-                        userEntity?.toDomain(
-                            presence = presence,
-                            isMyself = (memberId == userId)
-                        )
-                    }
-                    
-                    val messages = msgEntities.map { msgEntity ->
-                        msgEntity.toDomain(
-                            currentUserId = userId,
-                            memberCount = members.size
-                        )
-                    }
-                    
-                    Conversation(
-                        summary = convEnt.toDomain(members = members),
-                        messages = messages
-                    )
-                }
-            }
-        }
     }
     
     // ============================================================
