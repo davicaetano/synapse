@@ -1,5 +1,6 @@
 package com.synapse.ui.inbox
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -224,11 +226,14 @@ private fun SelfConversationRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Text(
-            text = item.displayTime,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = item.displayTime,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            UnreadBadge(count = item.unreadCount)
+        }
     }
 }
 
@@ -295,11 +300,14 @@ private fun OneOnOneConversationRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Text(
-            text = item.displayTime,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = item.displayTime,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            UnreadBadge(count = item.unreadCount)
+        }
     }
 }
 
@@ -344,11 +352,14 @@ private fun GroupConversationRow(
             )
         }
         
-        Text(
-            text = item.displayTime,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(start = 8.dp)
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = item.displayTime,
+                style = MaterialTheme.typography.labelSmall
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            UnreadBadge(count = item.unreadCount)
+        }
     }
 }
 
@@ -372,6 +383,29 @@ private fun formatLastSeenShort(lastSeenMs: Long): String {
             "${days}d ago"
         }
         else -> "long ago"
+    }
+}
+
+@Composable
+private fun UnreadBadge(count: Int) {
+    if (count > 0) {
+        Box(
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .size(22.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (count > 99) "99+" else count.toString(),
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 11.sp
+            )
+        }
     }
 }
 

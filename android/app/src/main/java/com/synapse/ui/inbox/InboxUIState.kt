@@ -10,6 +10,7 @@ sealed class InboxItem {
     abstract val updatedAtMs: Long
     abstract val displayTime: String
     abstract val convType: ConversationType
+    abstract val unreadCount: Int
 
     data class SelfConversation(
         override val id: String,
@@ -17,7 +18,8 @@ sealed class InboxItem {
         override val lastMessageText: String?,
         override val updatedAtMs: Long,
         override val displayTime: String,
-        override val convType: ConversationType = ConversationType.SELF
+        override val convType: ConversationType = ConversationType.SELF,
+        override val unreadCount: Int = 0
     ) : InboxItem()
 
     data class OneOnOneConversation(
@@ -27,8 +29,9 @@ sealed class InboxItem {
         override val updatedAtMs: Long,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.DIRECT,
-    val otherUser: User // Other user for direct conversations
-) : InboxItem()
+        val otherUser: User, // Other user for direct conversations
+        override val unreadCount: Int = 0
+    ) : InboxItem()
 
     data class GroupConversation(
         override val id: String,
@@ -38,7 +41,8 @@ sealed class InboxItem {
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.GROUP,
         val members: List<User>,
-        val groupName: String? = null  // Group name for avatar
+        val groupName: String? = null,  // Group name for avatar
+        override val unreadCount: Int = 0
     ) : InboxItem()
 }
 

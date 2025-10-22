@@ -276,5 +276,20 @@ class ConversationRepository @Inject constructor(
     suspend fun markConversationAsRead(conversationId: String) {
         messageDataSource.markAllMessagesAsRead(conversationId)
     }
+    
+    /**
+     * Get unread message count for a conversation.
+     */
+    suspend fun getUnreadMessageCount(conversationId: String): Int {
+        return messageDataSource.getUnreadMessageCount(conversationId)
+    }
+    
+    /**
+     * Mark the last message in a conversation as received.
+     * Optimization: if last message is received, all previous ones are too.
+     */
+    suspend fun markLastMessageAsReceived(conversationId: String) {
+        messageDataSource.markLastMessageAsReceived(conversationId)
+    }
 }
 

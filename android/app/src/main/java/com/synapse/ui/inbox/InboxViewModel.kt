@@ -8,11 +8,17 @@ import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
@@ -24,8 +30,27 @@ class InboxViewModel @Inject constructor(
         // Use the new method that already includes complete user data + presence
         val conversationsFlow = conversationsRepo.observeConversationsWithUsers(userId)
 
-        return conversationsFlow.map { convs: List<ConversationSummary> ->
-            val items = convs.mapNotNull { c ->  // Use mapNotNull to filter out invalid conversations
+        return conversationsFlow
+            .onEach { convs ->
+                // Background task: mark last message as received for all conversations
+                convs.forEach { c ->
+                    viewModelScope.launch {
+                        conversationsRepo.markLastMessageAsReceived(c.id)
+                    }
+                }
+            }
+            .mapLatest { convs: List<ConversationSummary> ->
+                // Calculate unread counts in parallel for better performance
+                val unreadCounts = coroutineScope {
+                    convs.map { c ->
+                        async {
+                            c.id to conversationsRepo.getUnreadMessageCount(c.id)
+                        }
+                    }.awaitAll().toMap()
+                }
+                
+                val items = convs.mapNotNull { c ->  // Use mapNotNull to filter out invalid conversations
+                    val unreadCount = unreadCounts[c.id] ?: 0
                 val title = when (c.convType) {
                     ConversationType.SELF -> "AI Assistant"
                     ConversationType.DIRECT -> {
@@ -51,7 +76,8 @@ class InboxViewModel @Inject constructor(
                         lastMessageText = c.lastMessageText,
                         updatedAtMs = c.updatedAtMs,
                         displayTime = formatTime(c.updatedAtMs),
-                        convType = c.convType
+                        convType = c.convType,
+                        unreadCount = unreadCount
                     )
                     ConversationType.DIRECT -> {
                         // SAFE: Only create item if other user exists
@@ -64,7 +90,8 @@ class InboxViewModel @Inject constructor(
                                 updatedAtMs = c.updatedAtMs,
                                 displayTime = formatTime(c.updatedAtMs),
                                 convType = c.convType,
-                                otherUser = otherUser
+                                otherUser = otherUser,
+                                unreadCount = unreadCount
                             )
                         } else {
                             null  // Skip this conversation if other user not found
@@ -78,7 +105,8 @@ class InboxViewModel @Inject constructor(
                         displayTime = formatTime(c.updatedAtMs),
                         convType = c.convType,
                         members = c.members,
-                        groupName = c.groupName
+                        groupName = c.groupName,
+                        unreadCount = unreadCount
                     )
                 }
             }.sortedByDescending { it.updatedAtMs }

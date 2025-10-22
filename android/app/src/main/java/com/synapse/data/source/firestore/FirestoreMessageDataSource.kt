@@ -317,6 +317,70 @@ class FirestoreMessageDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Count unread messages in a conversation for the current user.
+     * A message is unread if:
+     * - senderId != currentUserId (not my message)
+     * - readBy does NOT contain currentUserId (I haven't read it)
+     */
+    suspend fun getUnreadMessageCount(conversationId: String): Int {
+        val userId = auth.currentUser?.uid ?: return 0
+        
+        return try {
+            val snapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .whereNotEqualTo("senderId", userId)  // Not my messages
+                .get()
+                .await()
+            
+            // Count messages where readBy doesn't contain current user
+            snapshot.documents.count { doc ->
+                val readBy = (doc.get("readBy") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    ?: emptyList()
+                userId !in readBy
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error counting unread messages in $conversationId", e)
+            0
+        }
+    }
+    
+    /**
+     * Mark the last message in a conversation as received by the current user.
+     * Uses the optimization: if the last message is received, all previous ones are too.
+     */
+    suspend fun markLastMessageAsReceived(conversationId: String) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        try {
+            // Get the last message (ordered by createdAtMs descending, limit 1)
+            val lastMessageSnapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("createdAtMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                .limit(1)
+                .get()
+                .await()
+            
+            val lastMessage = lastMessageSnapshot.documents.firstOrNull()
+            if (lastMessage != null) {
+                val receivedBy = (lastMessage.get("receivedBy") as? List<*>)
+                    ?.mapNotNull { it as? String }
+                    ?: emptyList()
+                
+                // Only update if current user is not already in receivedBy
+                if (userId !in receivedBy) {
+                    lastMessage.reference.update("receivedBy", FieldValue.arrayUnion(userId)).await()
+                    Log.d(TAG, "Marked last message in $conversationId as received")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error marking last message as received in $conversationId", e)
+        }
+    }
+    
     companion object {
         private const val TAG = "FirestoreMessageDS"
     }
