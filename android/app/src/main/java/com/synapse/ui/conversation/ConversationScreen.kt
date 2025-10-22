@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -45,6 +46,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -105,6 +109,17 @@ fun ConversationScreen(
     currentUserIsConnected: Boolean = true,
 ) {
     var input by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    // Auto-scroll to bottom when new messages arrive
+    LaunchedEffect(ui.messages.size) {
+        if (ui.messages.isNotEmpty()) {
+            scope.launch {
+                listState.animateScrollToItem(0)
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -131,6 +146,7 @@ fun ConversationScreen(
         ) {
             LazyColumn(
                 reverseLayout = true,
+                state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
@@ -167,7 +183,12 @@ fun ConversationScreen(
                     },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Type a message...") },
-                    maxLines = 4
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Send
+                    )
                 )
 
                 IconButton(
