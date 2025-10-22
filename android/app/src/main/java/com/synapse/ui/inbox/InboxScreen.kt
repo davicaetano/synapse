@@ -35,18 +35,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synapse.MainActivityViewModel
+import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.ui.components.EmptyState
 import com.synapse.ui.components.ErrorState
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.LoadingState
 import com.synapse.ui.components.PresenceIndicator
 import com.synapse.ui.components.UserAvatar
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.android.qualifiers.ApplicationContext
+
+// EntryPoint to access NetworkConnectivityMonitor from Composable
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface NetworkMonitorEntryPoint {
+    fun networkMonitor(): NetworkConnectivityMonitor
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +66,17 @@ fun InboxScreen(
     vm: InboxViewModel = hiltViewModel(),
     mainVm: MainActivityViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
+    val networkMonitor = remember {
+        val hiltEntryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            NetworkMonitorEntryPoint::class.java
+        )
+        hiltEntryPoint.networkMonitor()
+    }
+    
     val uiState by vm.observeInboxForCurrentUser().collectAsStateWithLifecycle()
+    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
     var showMenu by remember { mutableStateOf(false) }
     
     Scaffold(
@@ -65,8 +86,8 @@ fun InboxScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Synapse")
                         Spacer(modifier = Modifier.size(8.dp))
-                        // User's own online status
-                        PresenceIndicator(isOnline = true)
+                        // User's own connection status
+                        PresenceIndicator(isOnline = isConnected)
                     }
                 },
                 actions = {
@@ -99,9 +120,9 @@ fun InboxScreen(
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        PresenceIndicator(isOnline = true)
+                                        PresenceIndicator(isOnline = isConnected)
                                         Spacer(modifier = Modifier.size(8.dp))
-                                        Text("Online")
+                                        Text(if (isConnected) "Online" else "Offline")
                                     }
                                 },
                                 onClick = { /* TODO: Change status */ },
@@ -175,7 +196,9 @@ fun InboxScreen(
                         items(uiState.items) { item ->
                             ConversationRow(
                                 item = item,
-                                onClick = { onOpenConversation(item.id) })
+                                onClick = { onOpenConversation(item.id) },
+                                currentUserIsConnected = isConnected
+                            )
                             HorizontalDivider()
                         }
                     }
@@ -189,10 +212,11 @@ fun InboxScreen(
 private fun ConversationRow(
     item: InboxItem,
     onClick: () -> Unit,
+    currentUserIsConnected: Boolean,
 ) {
     when (item) {
         is InboxItem.SelfConversation -> SelfConversationRow(item, onClick)
-        is InboxItem.OneOnOneConversation -> OneOnOneConversationRow(item, onClick)
+        is InboxItem.OneOnOneConversation -> OneOnOneConversationRow(item, onClick, currentUserIsConnected)
         is InboxItem.GroupConversation -> GroupConversationRow(item, onClick)
     }
 }
@@ -246,6 +270,7 @@ private fun SelfConversationRow(
 private fun OneOnOneConversationRow(
     item: InboxItem.OneOnOneConversation,
     onClick: () -> Unit,
+    currentUserIsConnected: Boolean,
 ) {
     Row(
         modifier = Modifier
@@ -255,11 +280,12 @@ private fun OneOnOneConversationRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // User avatar with presence indicator
+        // Only show presence if current user is connected
         UserAvatar(
             photoUrl = item.otherUser.photoUrl,
             displayName = item.otherUser.displayName,
             size = 48.dp,
-            showPresence = true,
+            showPresence = currentUserIsConnected,
             isOnline = item.otherUser.isOnline
         )
         
@@ -275,25 +301,27 @@ private fun OneOnOneConversationRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                // Show status next to name
-                if (item.otherUser.isOnline) {
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text(
-                        text = "• online",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
-                        fontSize = 11.sp
-                    )
-                } else if (item.otherUser.lastSeenMs != null) {
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text(
-                        text = "• ${formatLastSeenShort(item.otherUser.lastSeenMs)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.ui.graphics.Color.Gray,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                // Only show status if current user is connected
+                if (currentUserIsConnected) {
+                    if (item.otherUser.isOnline) {
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Text(
+                            text = "• online",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                            fontSize = 11.sp
+                        )
+                    } else if (item.otherUser.lastSeenMs != null) {
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Text(
+                            text = "• ${formatLastSeenShort(item.otherUser.lastSeenMs)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.ui.graphics.Color.Gray,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
             

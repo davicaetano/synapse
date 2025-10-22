@@ -198,16 +198,17 @@ class ConversationRepository @Inject constructor(
      * Coordinates: create message + update conversation metadata.
      */
     suspend fun sendMessage(conversationId: String, text: String) {
-        val messageId = messageDataSource.sendMessage(conversationId, text)
+        // Send message (may return null if offline, but Firestore caches it)
+        messageDataSource.sendMessage(conversationId, text)
         
-        if (messageId != null) {
-            // Update conversation's lastMessage and timestamp
-            conversationDataSource.updateConversationMetadata(
-                conversationId = conversationId,
-                lastMessageText = text,
-                timestamp = System.currentTimeMillis()
-            )
-        }
+        // ALWAYS update conversation metadata, even if messageId is null
+        // This ensures the inbox shows the latest message immediately,
+        // even when offline (Firestore will sync when back online)
+        conversationDataSource.updateConversationMetadata(
+            conversationId = conversationId,
+            lastMessageText = text,
+            timestamp = System.currentTimeMillis()
+        )
     }
     
     /**

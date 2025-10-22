@@ -5,11 +5,17 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.ServerValue
 import com.google.firebase.database.ValueEventListener
 import com.synapse.data.source.realtime.entity.PresenceEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,6 +35,10 @@ class RealtimePresenceDataSource @Inject constructor(
     private val realtimeDb: DatabaseReference,
     private val auth: FirebaseAuth
 ) {
+    
+    // Heartbeat job to update lastSeenMs periodically
+    private var heartbeatJob: Job? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
     
     // ============================================================
     // READ OPERATIONS
@@ -132,8 +142,14 @@ class RealtimePresenceDataSource @Inject constructor(
      * Mark the current user as online.
      * Also sets up automatic offline marking via onDisconnect() handler.
      * 
-     * This is the magic of Realtime Database: even if the app crashes or loses connection,
-     * the server will automatically mark the user offline.
+     * This should be called when:
+     * - App starts
+     * - Network becomes available (detected by NetworkConnectivityMonitor)
+     * 
+     * The onDisconnect() handler serves as a fallback for:
+     * - App crashes
+     * - Force close
+     * - Process kill
      */
     suspend fun markOnline() {
         val userId = auth.currentUser?.uid
@@ -143,28 +159,35 @@ class RealtimePresenceDataSource @Inject constructor(
         }
         
         val presenceRef = realtimeDb.child("presence").child(userId)
-        val presenceData = mapOf(
-            "online" to true,
-            "lastSeenMs" to System.currentTimeMillis()
-        )
         
-        presenceRef.setValue(presenceData)
-            .addOnSuccessListener {
-                Log.d(TAG, "Marked user $userId as online")
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to mark user $userId as online", e)
-            }
+        // Set online status
+        presenceRef.setValue(
+            mapOf(
+                "online" to true,
+                "lastSeenMs" to ServerValue.TIMESTAMP
+            )
+        ).addOnSuccessListener {
+            Log.d(TAG, "Marked user $userId as online")
+            
+            // Start heartbeat to keep lastSeenMs fresh
+            startHeartbeat()
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "Failed to mark user $userId as online", e)
+        }
         
-        // CRITICAL: Auto-disconnect handler
-        // When the client disconnects (crash, force kill, network loss),
-        // the server will automatically execute this write
+        // Set up onDisconnect handler as fallback for crashes/force close
+        // NOTE: Firebase detects disconnect after ~30 seconds
+        // For instant offline detection, use NetworkConnectivityMonitor
         presenceRef.onDisconnect().setValue(
             mapOf(
                 "online" to false,
-                "lastSeenMs" to System.currentTimeMillis()
+                "lastSeenMs" to ServerValue.TIMESTAMP
             )
-        )
+        ).addOnSuccessListener {
+            Log.d(TAG, "onDisconnect handler set for user $userId")
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "Failed to set onDisconnect handler", e)
+        }
     }
     
     /**
@@ -172,6 +195,9 @@ class RealtimePresenceDataSource @Inject constructor(
      * Called explicitly when the user closes the app or logs out.
      */
     suspend fun markOffline() {
+        // Stop heartbeat first
+        stopHeartbeat()
+        
         val userId = auth.currentUser?.uid
         if (userId == null) {
             Log.e(TAG, "Cannot mark offline: user not authenticated")
@@ -181,7 +207,7 @@ class RealtimePresenceDataSource @Inject constructor(
         val presenceRef = realtimeDb.child("presence").child(userId)
         val presenceData = mapOf(
             "online" to false,
-            "lastSeenMs" to System.currentTimeMillis()
+            "lastSeenMs" to ServerValue.TIMESTAMP  // Use server timestamp
         )
         
         presenceRef.setValue(presenceData)
@@ -207,6 +233,56 @@ class RealtimePresenceDataSource @Inject constructor(
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to remove presence for user $userId", e)
             }
+    }
+    
+    /**
+     * Start heartbeat to update lastSeenMs every 2 seconds.
+     * This keeps the user's presence "fresh" so other clients can infer online status.
+     * 
+     * With 2s heartbeat + 5s threshold in EntityMapper, users will appear offline
+     * within ~5-7 seconds of disconnecting (e.g., Airplane Mode).
+     * 
+     * Must be called when user goes online or network becomes available.
+     */
+    fun startHeartbeat() {
+        // Stop any existing heartbeat
+        stopHeartbeat()
+        
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            Log.e(TAG, "Cannot start heartbeat: user not authenticated")
+            return
+        }
+        
+        Log.d(TAG, "Starting presence heartbeat for user $userId")
+        
+        heartbeatJob = scope.launch {
+            while (true) {
+                delay(2_000L) // 2 seconds for ultra-fast offline detection
+                
+                // Update lastSeenMs
+                val presenceRef = realtimeDb.child("presence").child(userId)
+                presenceRef.updateChildren(
+                    mapOf<String, Any>(
+                        "lastSeenMs" to ServerValue.TIMESTAMP
+                    )
+                ).addOnSuccessListener {
+                    Log.d(TAG, "Heartbeat: updated lastSeenMs for user $userId")
+                }.addOnFailureListener { e ->
+                    Log.e(TAG, "Heartbeat: failed to update lastSeenMs", e)
+                }
+            }
+        }
+    }
+    
+    /**
+     * Stop heartbeat updates.
+     * Must be called when user goes offline or app stops.
+     */
+    fun stopHeartbeat() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
+        Log.d(TAG, "Stopped presence heartbeat")
     }
     
     // ============================================================

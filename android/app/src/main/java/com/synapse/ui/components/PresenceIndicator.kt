@@ -15,13 +15,17 @@ fun PresenceIndicator(
     isOnline: Boolean,
     modifier: Modifier = Modifier
 ) {
-    if (isOnline) {
-        Box(
-            modifier = modifier
-                .size(12.dp)
-                .background(Color(0xFF4CAF50), CircleShape) // Green
-                .border(2.dp, Color.White, CircleShape)
-        )
+    val color = if (isOnline) {
+        Color(0xFF4CAF50) // Green when online
+    } else {
+        Color(0xFFE53935) // Red when offline
     }
+    
+    Box(
+        modifier = modifier
+            .size(12.dp)
+            .background(color, CircleShape)
+            .border(2.dp, Color.White, CircleShape)
+    )
 }
 

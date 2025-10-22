@@ -11,10 +11,12 @@ import com.synapse.ui.theme.SynapseTheme
 import com.synapse.notifications.requestNotificationPermissionIfNeeded
 import com.synapse.ui.navigation.AppNavHost
 import com.synapse.data.presence.PresenceManager
+import com.synapse.data.network.NetworkConnectivityMonitor
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -28,8 +30,14 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var presenceManager: PresenceManager
     
+    @Inject
+    lateinit var networkMonitor: NetworkConnectivityMonitor
+    
     // NavController reference to navigate from intents
     private var navController: NavHostController? = null
+    
+    // Job to track network monitoring coroutine
+    private var networkMonitoringJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,14 +100,50 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        
+        // Start monitoring network connectivity for UI indicator (green/red light)
+        networkMonitor.startMonitoring()
+        
+        // Mark user as online in Firebase when app starts
         presenceManager.markOnline()
-        Log.d(TAG, "User marked as online")
+        
+        // Observe network connectivity to re-establish presence when connection is recovered
+        networkMonitoringJob = lifecycleScope.launch {
+            var wasConnected = networkMonitor.isConnected.value
+
+            networkMonitor.isConnected
+                .collect { isConnected ->
+                    Log.d(TAG, "Network connectivity changed: isConnected=$isConnected")
+                    
+                    // Only call markOnline() when connection is RECOVERED (was offline, now online)
+                    // Don't try to call markOffline() when losing connection - it won't work anyway!
+                    // Firebase's onDisconnect() handler will mark us offline after ~30 seconds.
+                    if (!wasConnected && isConnected) {
+                        Log.d(TAG, "Connection recovered - re-establishing presence in Firebase")
+                        presenceManager.markOnline()
+                    }
+                    
+                    wasConnected = isConnected
+                }
+        }
+        
+        Log.d(TAG, "Network monitoring started for UI indicator and connection recovery")
     }
     
     override fun onStop() {
         super.onStop()
+        
+        // Cancel network monitoring coroutine
+        networkMonitoringJob?.cancel()
+        networkMonitoringJob = null
+        
+        // Stop monitoring network connectivity
+        networkMonitor.stopMonitoring()
+        
+        // Mark user as offline when app stops
         presenceManager.markOffline()
-        Log.d(TAG, "User marked as offline")
+        
+        Log.d(TAG, "Network monitoring stopped and user marked as offline")
     }
 
     private fun startGoogleSignIn() {

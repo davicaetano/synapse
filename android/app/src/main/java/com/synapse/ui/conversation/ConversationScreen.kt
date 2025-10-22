@@ -40,17 +40,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import com.synapse.ui.theme.SynapseTheme
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
+
+// EntryPoint to access NetworkConnectivityMonitor from Composable
+@dagger.hilt.EntryPoint
+@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
+interface ConversationNetworkMonitorEntryPoint {
+    fun networkMonitor(): NetworkConnectivityMonitor
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,13 +68,24 @@ fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val networkMonitor = remember {
+        val hiltEntryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            ConversationNetworkMonitorEntryPoint::class.java
+        )
+        hiltEntryPoint.networkMonitor()
+    }
+    
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
+    val isConnected by networkMonitor.isConnected.collectAsStateWithLifecycle()
 
     ConversationScreen(
         ui = ui,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
-        onBackClick = onNavigateBack
+        onBackClick = onNavigateBack,
+        currentUserIsConnected = isConnected
     )
 
 }
@@ -77,6 +98,7 @@ fun ConversationScreen(
     onTextChanged: (text: String) -> Unit = {},
     onBackClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    currentUserIsConnected: Boolean = true,
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -103,7 +125,8 @@ fun ConversationScreen(
                 typingText = ui.typingText,
                 onBackClick = onBackClick,
                 onAddMemberClick = { /* TODO: Add member to group */ },
-                onMenuClick = { /* TODO: Show conversation menu */ }
+                onMenuClick = { /* TODO: Show conversation menu */ },
+                currentUserIsConnected = currentUserIsConnected
             )
         },
         modifier = Modifier
@@ -195,7 +218,8 @@ private fun ConversationTopAppBar(
     typingText: String?,
     onBackClick: () -> Unit,
     onAddMemberClick: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    currentUserIsConnected: Boolean
 ) {
     TopAppBar(
         title = {
@@ -203,11 +227,12 @@ private fun ConversationTopAppBar(
                 // Show avatar for DIRECT and GROUP
                 when (convType) {
                     ConversationType.DIRECT -> {
+                        // Only show presence if current user is connected
                         UserAvatar(
                             photoUrl = otherUserPhotoUrl,
                             displayName = title,
                             size = 36.dp,
-                            showPresence = true,
+                            showPresence = currentUserIsConnected,
                             isOnline = otherUserOnline ?: false
                         )
                     }
@@ -230,21 +255,25 @@ private fun ConversationTopAppBar(
                         text = title,
                         style = MaterialTheme.typography.titleMedium
                     )
-                    // Prioritize typing indicator over subtitle
-                    val displayText = typingText ?: subtitle
-                    if (displayText != null) {
-                        Text(
-                            text = displayText,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontStyle = if (typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
-                            ),
-                            color = when {
-                                typingText != null -> MaterialTheme.colorScheme.primary
-                                displayText == "online" -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            fontSize = 12.sp
-                        )
+                    // Only show subtitle/typing if current user is connected
+                    // No point showing other user's status if you can't communicate
+                    if (currentUserIsConnected) {
+                        // Prioritize typing indicator over subtitle
+                        val displayText = typingText ?: subtitle
+                        if (displayText != null) {
+                            Text(
+                                text = displayText,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontStyle = if (typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                                ),
+                                color = when {
+                                    typingText != null -> MaterialTheme.colorScheme.primary
+                                    displayText == "online" -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }

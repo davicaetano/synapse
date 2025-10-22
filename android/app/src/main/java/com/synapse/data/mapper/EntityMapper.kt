@@ -19,12 +19,40 @@ fun UserEntity.toDomain(
     presence: PresenceEntity? = null,
     isMyself: Boolean = false
 ): User {
+    // Infer online status based on lastSeenMs timestamp
+    // A user is considered online if:
+    // 1. presence?.online == true AND
+    // 2. lastSeenMs is recent (within last 5 seconds)
+    // 
+    // This handles the Airplane Mode case where the client can't write
+    // "offline" to Firebase, but other clients can infer offline status
+    // by seeing a stale lastSeenMs timestamp.
+    // 
+    // Heartbeat runs every 2s, so if we miss 2 heartbeats (4s) + 1s buffer = 5s offline.
+    val isOnline = if (presence?.online == true) {
+        val lastSeenMs = presence.lastSeenMs
+        if (lastSeenMs != null) {
+            val nowMs = System.currentTimeMillis()
+            val ageMs = nowMs - lastSeenMs
+            // 5 seconds threshold: heartbeat is 2s, so if we miss 2 heartbeats + buffer = offline
+            val ONLINE_THRESHOLD_MS = 5_000L
+            
+            ageMs < ONLINE_THRESHOLD_MS
+        } else {
+            // No lastSeenMs - assume offline
+            false
+        }
+    } else {
+        // presence?.online is false or null
+        false
+    }
+    
     return User(
         id = this.id,
         displayName = this.displayName,
         photoUrl = this.photoUrl,
         isMyself = isMyself,
-        isOnline = presence?.online ?: false,
+        isOnline = isOnline,
         lastSeenMs = presence?.lastSeenMs
     )
 }

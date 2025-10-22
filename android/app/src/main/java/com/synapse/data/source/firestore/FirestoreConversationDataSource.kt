@@ -3,6 +3,7 @@ package com.synapse.data.source.firestore
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
 import com.synapse.domain.conversation.ConversationType
 import kotlinx.coroutines.channels.awaitClose
@@ -280,6 +281,9 @@ class FirestoreConversationDataSource @Inject constructor(
     /**
      * Update conversation metadata after sending a message.
      * Updates lastMessageText and updatedAtMs.
+     * 
+     * Uses set() with merge instead of update() to work better offline.
+     * set() with merge will queue the update even if offline, while update() might fail.
      */
     suspend fun updateConversationMetadata(
         conversationId: String,
@@ -289,15 +293,19 @@ class FirestoreConversationDataSource @Inject constructor(
         try {
             firestore.collection("conversations")
                 .document(conversationId)
-                .update(
+                .set(
                     mapOf(
                         "lastMessageText" to lastMessageText,
                         "updatedAtMs" to timestamp
-                    )
+                    ),
+                    SetOptions.merge()
                 )
                 .await()
+            
+            Log.d(TAG, "Updated conversation $conversationId metadata: lastMessageText='${lastMessageText.take(20)}...', timestamp=$timestamp")
         } catch (e: Exception) {
-            Log.e(TAG, "Error updating conversation metadata", e)
+            // Log but don't fail - Firestore will cache this and sync when online
+            Log.w(TAG, "Error updating conversation metadata (will retry when online)", e)
         }
     }
     
