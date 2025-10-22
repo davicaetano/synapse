@@ -111,7 +111,7 @@ class ConversationViewModel @Inject constructor(
             )
         }.stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
+            SharingStarted.Lazily, // Keep listeners active - messages stay loaded
             ConversationUIState(
                 conversationId = conversationId,
                 title = "",

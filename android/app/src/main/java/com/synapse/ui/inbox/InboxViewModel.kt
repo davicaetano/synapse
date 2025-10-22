@@ -75,7 +75,7 @@ class InboxViewModel @Inject constructor(
             buildInboxUIState(userId, conversations, users, presence, typing)
         }.stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
+            SharingStarted.Lazily, // Keep listeners active - no reload when navigating back
             InboxUIState(isLoading = true)
         )
     }
