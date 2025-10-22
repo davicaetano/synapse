@@ -76,39 +76,6 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
-     * Get a single message by ID (one-time read, not a listener).
-     */
-    suspend fun getMessage(conversationId: String, messageId: String): MessageEntity? {
-        return try {
-            val doc = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .document(messageId)
-                .get()
-                .await()
-            
-            if (!doc.exists()) return null
-            
-            MessageEntity(
-                id = doc.id,
-                text = doc.getString("text") ?: "",
-                senderId = doc.getString("senderId") ?: "",
-                createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                receivedBy = (doc.get("receivedBy") as? List<*>)
-                    ?.mapNotNull { it as? String } 
-                    ?: emptyList(),
-                readBy = (doc.get("readBy") as? List<*>)
-                    ?.mapNotNull { it as? String } 
-                    ?: emptyList(),
-                serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting message $messageId", e)
-            null
-        }
-    }
-    
-    /**
      * Get all messages in a conversation (one-time read).
      * Useful for batch operations like marking all as read.
      */
@@ -194,49 +161,6 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
-     * Mark a message as received by the current user.
-     * Adds current user ID to the receivedBy array.
-     */
-    suspend fun markMessageReceived(conversationId: String, messageId: String) {
-        val userId = auth.currentUser?.uid ?: return
-        
-        try {
-            firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .document(messageId)
-                .update("receivedBy", FieldValue.arrayUnion(userId))
-                .await()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error marking message $messageId as received", e)
-        }
-    }
-    
-    /**
-     * Mark a message as read by the current user.
-     * Also marks as received (you can't read without receiving first).
-     * Adds current user ID to both readBy and receivedBy arrays.
-     */
-    suspend fun markMessageAsRead(conversationId: String, messageId: String) {
-        val userId = auth.currentUser?.uid ?: return
-        
-        try {
-            val docRef = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .document(messageId)
-            
-            // Batch update both fields atomically
-            firestore.runTransaction { transaction ->
-                transaction.update(docRef, "readBy", FieldValue.arrayUnion(userId))
-                transaction.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
-            }.await()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error marking message $messageId as read", e)
-        }
-    }
-    
-    /**
      * Mark multiple messages as read by the current user.
      * Also marks them as received (you can't read without receiving first).
      * Batch operation for efficiency.
@@ -295,28 +219,7 @@ class FirestoreMessageDataSource @Inject constructor(
             Log.e(TAG, "Error marking all messages as read in $conversationId", e)
         }
     }
-    
-    /**
-     * Delete a message (soft delete - could add a 'deleted' flag in the future).
-     * For now, this is a hard delete.
-     * 
-     * Note: Consider adding soft delete functionality later for "Message deleted" placeholders.
-     */
-    suspend fun deleteMessage(conversationId: String, messageId: String) {
-        try {
-            firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .document(messageId)
-                .delete()
-                .await()
-            
-            Log.d(TAG, "Message $messageId deleted successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting message $messageId", e)
-        }
-    }
-    
+
     /**
      * Count unread messages in a conversation for the current user.
      * A message is unread if:

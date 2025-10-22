@@ -69,23 +69,6 @@ class FirestoreFCMTokenDataSource @Inject constructor(
         }
     }
     
-    /**
-     * Remove a specific FCM token.
-     */
-    suspend fun removeToken(userId: String, token: String) {
-        try {
-            firestore.collection("users")
-                .document(userId)
-                .collection("fcmTokens")
-                .document(token)
-                .delete()
-                .await()
-            Log.d(TAG, "Removed FCM token for user $userId")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to remove FCM token", e)
-        }
-    }
-    
     companion object {
         private const val TAG = "FirestoreFCMTokenDS"
     }

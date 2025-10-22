@@ -144,48 +144,6 @@ class FirestoreUserDataSource @Inject constructor(
         }
     }
     
-    /**
-     * Get multiple users by IDs (one-time read).
-     * Handles batching for Firestore's 10 ID limit.
-     */
-    suspend fun getUsersByIds(userIds: List<String>): List<UserEntity> {
-        if (userIds.isEmpty()) return emptyList()
-        
-        return try {
-            // Batch queries to handle Firestore's 10 ID limit
-            val batches = userIds.chunked(10)
-            val allUsers = mutableListOf<UserEntity>()
-            
-            batches.forEach { batch ->
-                val snapshot = firestore.collection("users")
-                    .whereIn(FieldPath.documentId(), batch)
-                    .get()
-                    .await()
-                
-                val users = snapshot.documents.mapNotNull { doc ->
-                    try {
-                        UserEntity(
-                            id = doc.id,
-                            displayName = doc.getString("displayName"),
-                            email = doc.getString("email"),
-                            photoUrl = doc.getString("photoUrl")
-                        )
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing user ${doc.id}", e)
-                        null
-                    }
-                }
-                
-                allUsers.addAll(users)
-            }
-            
-            allUsers
-        } catch (e: Exception) {
-            Log.e(TAG, "Error getting users by IDs", e)
-            emptyList()
-        }
-    }
-    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================
@@ -250,54 +208,6 @@ class FirestoreUserDataSource @Inject constructor(
             Log.d(TAG, "User $userId profile updated")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating user profile for $userId", e)
-        }
-    }
-    
-    /**
-     * Create a new user document.
-     * Usually called after user signs up.
-     */
-    suspend fun createUser(
-        userId: String,
-        displayName: String?,
-        email: String?,
-        photoUrl: String?
-    ) {
-        val userData = mapOf(
-            "displayName" to (displayName ?: ""),
-            "email" to (email ?: ""),
-            "photoUrl" to (photoUrl ?: ""),
-            "createdAtMs" to System.currentTimeMillis(),
-            "updatedAtMs" to System.currentTimeMillis()
-        )
-        
-        try {
-            firestore.collection("users")
-                .document(userId)
-                .set(userData)
-                .await()
-            
-            Log.d(TAG, "User $userId created successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error creating user $userId", e)
-        }
-    }
-    
-    /**
-     * Delete a user document.
-     * Note: This doesn't delete the Firebase Auth account,
-     * only the Firestore user document.
-     */
-    suspend fun deleteUser(userId: String) {
-        try {
-            firestore.collection("users")
-                .document(userId)
-                .delete()
-                .await()
-            
-            Log.d(TAG, "User $userId deleted successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error deleting user $userId", e)
         }
     }
     

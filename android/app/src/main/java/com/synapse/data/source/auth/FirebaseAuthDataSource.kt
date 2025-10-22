@@ -26,11 +26,6 @@ class FirebaseAuthDataSource @Inject constructor(
 ) {
     
     /**
-     * Get current user ID, or null if not authenticated.
-     */
-    fun getCurrentUserId(): String? = auth.currentUser?.uid
-    
-    /**
      * Check if user is authenticated.
      */
     fun isAuthenticated(): Boolean = auth.currentUser != null
@@ -56,7 +51,7 @@ class FirebaseAuthDataSource @Inject constructor(
     /**
      * Sign in with Google ID token.
      */
-    suspend fun signInWithIdToken(idToken: String, onComplete: (Boolean) -> Unit) {
+    fun signInWithIdToken(idToken: String, onComplete: (Boolean) -> Unit) {
         val credential = GoogleAuthProvider.getCredential(idToken, null)
         auth.signInWithCredential(credential)
             .addOnCompleteListener { task ->
