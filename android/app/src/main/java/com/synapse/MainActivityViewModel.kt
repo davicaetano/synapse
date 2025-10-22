@@ -37,7 +37,11 @@ class MainActivityViewModel @Inject constructor(
         authRepository.signInWithIdToken(idToken, onComplete)
     }
 
-    fun signOut() = authRepository.signOut()
+    fun signOut() {
+        viewModelScope.launch {
+            authRepository.signOut()
+        }
+    }
 }
 
 

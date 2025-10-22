@@ -3,6 +3,7 @@ package com.synapse.data.auth
 import android.app.Activity
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.source.auth.FirebaseAuthDataSource
+import com.synapse.data.presence.PresenceManager
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class AuthRepository @Inject constructor(
     private val authDataSource: FirebaseAuthDataSource,
-    private val auth: FirebaseAuth  // Still needed for listener
+    private val auth: FirebaseAuth,  // Still needed for listener
+    private val presenceManager: PresenceManager
 ) {
     private val _authState: MutableStateFlow<AuthState> = MutableStateFlow(
         if (authDataSource.isAuthenticated()) {
@@ -36,7 +38,9 @@ class AuthRepository @Inject constructor(
         authDataSource.addAuthStateListener(listener)
     }
 
-    fun signOut() {
+    suspend fun signOut() {
+        // Mark user as offline before signing out
+        presenceManager.markOffline()
         authDataSource.signOut()
     }
     

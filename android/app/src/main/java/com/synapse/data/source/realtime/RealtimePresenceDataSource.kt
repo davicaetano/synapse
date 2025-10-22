@@ -45,40 +45,6 @@ class RealtimePresenceDataSource @Inject constructor(
     // ============================================================
     
     /**
-     * Listen to a single user's presence in real-time.
-     */
-    fun listenUserPresence(userId: String): Flow<PresenceEntity> = callbackFlow {
-        val ref = realtimeDb.child("presence").child(userId)
-        
-        val listener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
-                val lastSeenMs = snapshot.child("lastSeenMs").getValue(Long::class.java)
-                
-                // Safe send - only send if channel is not closed
-                try {
-                    trySend(PresenceEntity(online = online, lastSeenMs = lastSeenMs)).isSuccess
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send presence update for $userId", e)
-                }
-            }
-            
-            override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Presence listener cancelled for $userId, sending offline", error.toException())
-                // Keep flow alive by sending offline status
-                try {
-                    trySend(PresenceEntity(online = false, lastSeenMs = System.currentTimeMillis())).isSuccess
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send offline presence for $userId", e)
-                }
-            }
-        }
-        
-        ref.addValueEventListener(listener)
-        awaitClose { ref.removeEventListener(listener) }
-    }
-    
-    /**
      * Listen to multiple users' presence in real-time.
      * Useful for inbox screens where you need presence for many users.
      * 
@@ -150,7 +116,7 @@ class RealtimePresenceDataSource @Inject constructor(
      * - Force close
      * - Process kill
      */
-    suspend fun markOnline() {
+    fun markOnline() {
         val userId = auth.currentUser?.uid
         if (userId == null) {
             Log.e(TAG, "Cannot mark online: user not authenticated")
@@ -193,7 +159,7 @@ class RealtimePresenceDataSource @Inject constructor(
      * Mark the current user as offline.
      * Called explicitly when the user closes the app or logs out.
      */
-    suspend fun markOffline() {
+    fun markOffline() {
         // Stop heartbeat first
         stopHeartbeat()
         
@@ -219,11 +185,11 @@ class RealtimePresenceDataSource @Inject constructor(
     }
     
     /**
-     * Start heartbeat to update lastSeenMs every 2 seconds.
+     * Start heartbeat to update lastSeenMs every 5 seconds.
      * This keeps the user's presence "fresh" so other clients can infer online status.
      * 
-     * With 2s heartbeat + 5s threshold in EntityMapper, users will appear offline
-     * within ~5-7 seconds of disconnecting (e.g., Airplane Mode).
+     * With 5s heartbeat + 15s threshold in EntityMapper, users will appear offline
+     * within ~15-20 seconds of disconnecting (e.g., Airplane Mode).
      * 
      * Must be called when user goes online or network becomes available.
      */
@@ -241,18 +207,19 @@ class RealtimePresenceDataSource @Inject constructor(
         
         heartbeatJob = scope.launch {
             while (true) {
-                delay(2_000L) // 2 seconds for ultra-fast offline detection
+                delay(5_000L) // 5 seconds heartbeat
                 
-                // Update lastSeenMs
+                // Update online status and lastSeenMs to keep presence fresh
                 val presenceRef = realtimeDb.child("presence").child(userId)
                 presenceRef.updateChildren(
                     mapOf<String, Any>(
+                        "online" to true,
                         "lastSeenMs" to ServerValue.TIMESTAMP
                     )
                 ).addOnSuccessListener {
-                    Log.d(TAG, "Heartbeat: updated lastSeenMs for user $userId")
+                    Log.d(TAG, "Heartbeat: updated online=true and lastSeenMs for user $userId")
                 }.addOnFailureListener { e ->
-                    Log.e(TAG, "Heartbeat: failed to update lastSeenMs", e)
+                    Log.e(TAG, "Heartbeat: failed to update presence", e)
                 }
             }
         }
@@ -277,7 +244,7 @@ class RealtimePresenceDataSource @Inject constructor(
      * Mark current user as typing in a conversation.
      * Sets a timestamp that can be used for auto-cleanup (e.g., remove if > 3 seconds old).
      */
-    suspend fun setTyping(conversationId: String) {
+    fun setTyping(conversationId: String) {
         val userId = auth.currentUser?.uid
         if (userId == null) {
             return
@@ -300,7 +267,7 @@ class RealtimePresenceDataSource @Inject constructor(
     /**
      * Remove typing indicator for current user in a conversation.
      */
-    suspend fun removeTyping(conversationId: String) {
+    fun removeTyping(conversationId: String) {
         val userId = auth.currentUser?.uid
         if (userId == null) {
             Log.e(TAG, "Cannot remove typing: user not authenticated")

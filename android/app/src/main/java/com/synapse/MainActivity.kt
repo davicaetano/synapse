@@ -75,9 +75,10 @@ class MainActivity : FragmentActivity() {
                     else -> {
                         val currentDest = navController?.currentDestination?.id
                         if (currentDest != R.id.authFragment) {
-                            navController?.navigate(R.id.authFragment) {
-                                popUpTo(0) { inclusive = true }
-                            }
+                            val navOptions = androidx.navigation.NavOptions.Builder()
+                                .setPopUpTo(0, inclusive = true)
+                                .build()
+                            navController?.navigate(R.id.authFragment, null, navOptions)
                         }
                     }
                 }
