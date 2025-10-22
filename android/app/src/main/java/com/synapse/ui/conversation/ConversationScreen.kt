@@ -7,15 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -103,9 +102,9 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     onSendClick: (text: String) -> Unit,
+    modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
     onBackClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
     currentUserIsConnected: Boolean = true,
 ) {
     var input by remember { mutableStateOf("") }
@@ -137,12 +136,14 @@ fun ConversationScreen(
                 currentUserIsConnected = currentUserIsConnected
             )
         },
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.imePadding(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { padding ->
         Column(
             modifier = modifier
                 .padding(padding)
-                .imePadding() // Push content up when keyboard appears (works on Android 14+)
+                .consumeWindowInsets(padding)
+                .systemBarsPadding()
         ) {
             LazyColumn(
                 reverseLayout = true,
