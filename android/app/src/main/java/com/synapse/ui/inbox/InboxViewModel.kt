@@ -3,25 +3,22 @@ package com.synapse.ui.inbox
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.synapse.data.mapper.toDomain
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
@@ -31,144 +28,182 @@ class InboxViewModel @Inject constructor(
 ) : ViewModel() {
 
     fun observeInbox(userId: String): StateFlow<InboxUIState> {
+        // STEP 1: Get raw conversations
+        val conversationsFlow = conversationsRepo.observeConversations(userId)
         
-        // Use the new method that already includes complete user data + presence
-        val conversationsFlow = conversationsRepo.observeConversationsWithUsers(userId)
-                .onEach { convs ->
-                    // Background task: mark last message as received for all conversations
-                    convs.forEach { c ->
-                        viewModelScope.launch {
-                            conversationsRepo.markLastMessageAsReceived(c.id)
-                        }
-                    }
-                }
-                .onStart {
-                    emit(emptyList())
-                }
+        // STEP 2: Extract member IDs (stable - only changes when conversations change)
+        val memberIdsFlow = conversationsFlow
+            .map { conversations ->
+                conversations
+                    .flatMap { it.memberIds }
+                    .distinct()
+                    .sorted()
+            }
+            .distinctUntilChanged() // Only update when IDs actually change
         
-        // Get conversation IDs for typing observation
-        val conversationIdsFlow = conversationsFlow.map { convs -> 
-            val ids = convs.map { it.id }
-            ids
-        }
+        // STEP 3: Observe users (recreates ONLY when memberIds change)
+        val usersFlow = memberIdsFlow
+            .flatMapLatest { memberIds ->
+                conversationsRepo.observeUsers(memberIds)
+            }
         
-        // Observe typing in all conversations - flatMapLatest resolves the Flow<Flow<Map>> to Flow<Map>
-        // CRITICAL: onStart emits empty map immediately to unblock combine()
-        val typingFlow = conversationIdsFlow
+        // STEP 4: Observe presence (recreates ONLY when memberIds change)
+        val presenceFlow = memberIdsFlow
+            .flatMapLatest { memberIds ->
+                conversationsRepo.observePresence(memberIds)
+            }
+        
+        // STEP 5: Observe typing (only for conversation IDs we have)
+        val typingFlow = conversationsFlow
+            .map { convs -> convs.map { it.id } }
+            .distinctUntilChanged()
             .flatMapLatest { conversationIds ->
                 if (conversationIds.isEmpty()) {
-                    flowOf(emptyMap<String, List<com.synapse.domain.user.User>>())
+                    flowOf(emptyMap())
                 } else {
                     typingRepo.observeTypingInMultipleConversations(conversationIds)
                 }
             }
-            .onStart { 
-                emit(emptyMap()) // Emit immediately to prevent blocking combine()
+        
+        // STEP 6: Combine everything and build UI state
+        return combine(
+            conversationsFlow,
+            usersFlow,
+            presenceFlow,
+            typingFlow
+        ) { conversations, users, presence, typing ->
+            buildInboxUIState(userId, conversations, users, presence, typing)
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            InboxUIState(isLoading = true)
+        )
+    }
+    
+    /**
+     * Build InboxUIState from raw data.
+     * Separated for clarity and testability.
+     */
+    private suspend fun buildInboxUIState(
+        userId: String,
+        conversations: List<com.synapse.data.source.firestore.entity.ConversationEntity>,
+        users: List<com.synapse.data.source.firestore.entity.UserEntity>,
+        presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
+        typing: Map<String, List<com.synapse.domain.user.User>>
+    ): InboxUIState {
+        if (conversations.isEmpty()) {
+            return InboxUIState(items = emptyList(), isLoading = false)
+        }
+        
+        // Build user map
+        val usersMap = users.associateBy { it.id }
+        
+        // Get unread counts with timeout (don't block UI if Firestore is slow)
+        val unreadCounts = withTimeoutOrNull(2000) {
+            conversations.associate { conv ->
+                conv.id to conversationsRepo.getUnreadMessageCount(conv.id)
             }
-            .onEach { typingMap ->
+        } ?: emptyMap()
+        
+        // Transform to UI items
+        val items = conversations.mapNotNull { conv ->
+            buildInboxItem(userId, conv, usersMap, presence, typing, unreadCounts)
+        }.sortedByDescending { it.updatedAtMs }
+        
+        // Background: mark messages as received (don't wait for this)
+        conversations.forEach { conv ->
+            viewModelScope.launch {
+                conversationsRepo.markLastMessageAsReceived(conv.id)
             }
-
-        return conversationsFlow
-            .combine(typingFlow) { convs, typingMap ->
-                // Pair conversations with the typing map
-                convs to typingMap
-            }
-            .mapLatest { (convs, typingMap) ->
-                
-                // Calculate unread counts in parallel for better performance
-                val startTime = System.currentTimeMillis()
-                val unreadCounts = coroutineScope {
-                    convs.map { c ->
-                        async {
-                            c.id to conversationsRepo.getUnreadMessageCount(c.id)
-                        }
-                    }.awaitAll().toMap()
-                }
-                val elapsed = System.currentTimeMillis() - startTime
-                
-                val items = convs.mapNotNull { c ->  // Use mapNotNull to filter out invalid conversations
-                    val unreadCount = unreadCounts[c.id] ?: 0
-                    val typingUsers = typingMap[c.id] ?: emptyList()
-                    val typingText = when {
-                        typingUsers.isEmpty() -> null
-                        typingUsers.size == 1 -> "typing..."
-                        else -> "${typingUsers.size} people are typing..."
-                    }
-                val title = when (c.convType) {
-                    ConversationType.SELF -> "AI Assistant"
-                    ConversationType.DIRECT -> {
-                        val peerUser = c.members.firstOrNull { it.id != userId }
-                        peerUser?.displayName ?: "Unknown User"
-                    }
-                    ConversationType.GROUP -> {
-                        // Use group name if set, otherwise generate from members
-                        c.groupName?.ifBlank { null } ?: run {
-                            val otherMembers = c.members.filter { it.id != userId }
-                            when {
-                                otherMembers.isEmpty() -> "Group (just you)"
-                                else -> "Group"
-                            }
-                        }
-                    }
-                }
-
-                when (c.convType) {
-                    ConversationType.SELF -> InboxItem.SelfConversation(
-                        id = c.id,
-                        title = title,
-                        lastMessageText = c.lastMessageText,
-                        updatedAtMs = c.updatedAtMs,
-                        displayTime = formatTime(c.updatedAtMs),
-                        convType = c.convType,
-                        unreadCount = unreadCount,
-                        typingText = typingText
-                    )
-                    ConversationType.DIRECT -> {
-                        // SAFE: Only create item if other user exists
-                        val otherUser = c.members.firstOrNull { it.id != userId }
-                        if (otherUser != null) {
-                            InboxItem.OneOnOneConversation(
-                                id = c.id,
-                                title = title,
-                                lastMessageText = c.lastMessageText,
-                                updatedAtMs = c.updatedAtMs,
-                                displayTime = formatTime(c.updatedAtMs),
-                                convType = c.convType,
-                                otherUser = otherUser,
-                                unreadCount = unreadCount,
-                                typingText = typingText
-                            )
-                        } else {
-                            null  // Skip this conversation if other user not found
-                        }
-                    }
-                    ConversationType.GROUP -> InboxItem.GroupConversation(
-                        id = c.id,
-                        title = title,
-                        lastMessageText = c.lastMessageText,
-                        updatedAtMs = c.updatedAtMs,
-                        displayTime = formatTime(c.updatedAtMs),
-                        convType = c.convType,
-                        members = c.members,
-                        groupName = c.groupName,
-                        unreadCount = unreadCount,
-                        typingText = typingText
-                    )
-                }
-            }.sortedByDescending { it.updatedAtMs }
-
-            items.forEach { item ->
-            }
-            
-            InboxUIState(
-                items = items,
-                isLoading = false,
-                error = null
+        }
+        
+        return InboxUIState(items = items, isLoading = false)
+    }
+    
+    /**
+     * Build a single InboxItem from raw data.
+     * Separated for clarity.
+     */
+    private fun buildInboxItem(
+        userId: String,
+        conv: com.synapse.data.source.firestore.entity.ConversationEntity,
+        usersMap: Map<String, com.synapse.data.source.firestore.entity.UserEntity>,
+        presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
+        typing: Map<String, List<com.synapse.domain.user.User>>,
+        unreadCounts: Map<String, Int>
+    ): InboxItem? {
+        val unreadCount = unreadCounts[conv.id] ?: 0
+        val typingUsers = typing[conv.id] ?: emptyList()
+        val typingText = when {
+            typingUsers.isEmpty() -> null
+            typingUsers.size == 1 -> "typing..."
+            else -> "${typingUsers.size} people are typing..."
+        }
+        
+        // Build members with presence
+        val members = conv.memberIds.mapNotNull { memberId ->
+            val userEntity = usersMap[memberId]
+            val presenceEntity = presence[memberId]
+            userEntity?.toDomain(
+                presence = presenceEntity,
+                isMyself = (memberId == userId)
             )
         }
-        .onEach { state ->
+        
+        val title = when (conv.convType) {
+            ConversationType.SELF.name -> "AI Assistant"
+            ConversationType.DIRECT.name -> {
+                members.firstOrNull { it.id != userId }?.displayName ?: "Unknown User"
+            }
+            ConversationType.GROUP.name -> {
+                conv.groupName?.ifBlank { null } ?: "Group"
+            }
+            else -> "Unknown"
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), InboxUIState(isLoading = true))
+        
+        return when (conv.convType) {
+            ConversationType.SELF.name -> InboxItem.SelfConversation(
+                id = conv.id,
+                title = title,
+                lastMessageText = conv.lastMessageText,
+                updatedAtMs = conv.updatedAtMs,
+                displayTime = formatTime(conv.updatedAtMs),
+                convType = ConversationType.SELF,
+                unreadCount = unreadCount,
+                typingText = typingText
+            )
+            ConversationType.DIRECT.name -> {
+                val otherUser = members.firstOrNull { it.id != userId }
+                if (otherUser != null) {
+                    InboxItem.OneOnOneConversation(
+                        id = conv.id,
+                        title = title,
+                        lastMessageText = conv.lastMessageText,
+                        updatedAtMs = conv.updatedAtMs,
+                        displayTime = formatTime(conv.updatedAtMs),
+                        convType = ConversationType.DIRECT,
+                        otherUser = otherUser,
+                        unreadCount = unreadCount,
+                        typingText = typingText
+                    )
+                } else {
+                    null // Skip if other user not found
+                }
+            }
+            ConversationType.GROUP.name -> InboxItem.GroupConversation(
+                id = conv.id,
+                title = title,
+                lastMessageText = conv.lastMessageText,
+                updatedAtMs = conv.updatedAtMs,
+                displayTime = formatTime(conv.updatedAtMs),
+                convType = ConversationType.GROUP,
+                members = members,
+                groupName = conv.groupName,
+                unreadCount = unreadCount,
+                typingText = typingText
+            )
+            else -> null
+        }
     }
 
     fun observeInboxForCurrentUser(): StateFlow<InboxUIState> {

@@ -5,22 +5,21 @@ import com.synapse.data.mapper.toDomain
 import com.synapse.data.source.firestore.FirestoreUserDataSource
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.domain.user.User
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Repository for user operations.
  * 
- * RESPONSIBILITY: Business logic - combining User + Presence data.
- * - Combines: Firestore User + Realtime DB Presence
- * - Transforms entities to domain models
+ * RESPONSIBILITY: Simple data access - expose flows from DataSources.
+ * - NO complex transformations
+ * - ViewModel handles combining with presence if needed
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class UserRepository @Inject constructor(
     private val userDataSource: FirestoreUserDataSource,
@@ -30,20 +29,18 @@ class UserRepository @Inject constructor(
     
     /**
      * Observe all users WITHOUT presence data.
-     * Lightweight - use when you don't need online/offline status.
+     * Simple transformation to domain model.
      */
     fun observeUsers(): Flow<List<User>> {
         val currentUserId = auth.currentUser?.uid
         
-        return userDataSource.listenAllUsers().flatMapLatest { userEntities ->
-            flowOf(
-                userEntities.map { userEntity ->
-                    userEntity.toDomain(
-                        presence = null,
-                        isMyself = (userEntity.id == currentUserId)
-                    )
-                }
-            )
+        return userDataSource.listenAllUsers().map { userEntities ->
+            userEntities.map { userEntity ->
+                userEntity.toDomain(
+                    presence = null,
+                    isMyself = (userEntity.id == currentUserId)
+                )
+            }
         }
     }
     

@@ -1,12 +1,15 @@
 package com.synapse.data.repository
 
-import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.FirestoreUserDataSource
+import com.synapse.data.source.firestore.entity.ConversationEntity
+import com.synapse.data.source.firestore.entity.MessageEntity
+import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
+import com.synapse.data.source.realtime.entity.PresenceEntity
 import com.synapse.domain.conversation.Conversation
 import com.synapse.domain.conversation.ConversationSummary
 import com.synapse.domain.conversation.ConversationType
@@ -23,10 +26,12 @@ import javax.inject.Singleton
 /**
  * Repository for conversation operations.
  * 
- * RESPONSIBILITY: Business logic - combining multiple DataSources.
- * - Combines: Conversation + Message + User + Presence
- * - Transforms entities to domain models
- * - Coordinates multi-step operations (send message + update metadata)
+ * RESPONSIBILITY: Simple data access - expose flows from DataSources.
+ * - NO complex transformations or nested flatMapLatest
+ * - NO combining multiple flows (ViewModel does that)
+ * - Only coordinates write operations (send message + update metadata)
+ * 
+ * Philosophy: Keep it simple. Repository exposes data, ViewModel processes it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -39,12 +44,56 @@ class ConversationRepository @Inject constructor(
 ) {
     
     // ============================================================
-    // READ OPERATIONS (with business logic)
+    // READ OPERATIONS (simple flows, NO complex transformations)
     // ============================================================
     
     /**
-     * Observe all conversations for a user with full data (members + presence).
+     * Observe raw conversations for a user.
+     * Returns ConversationEntity without users or presence data.
+     * ViewModel should combine this with users and presence.
      */
+    fun observeConversations(userId: String): Flow<List<ConversationEntity>> {
+        return conversationDataSource.listenConversations(userId)
+    }
+    
+    /**
+     * Observe messages in a conversation.
+     * Returns raw MessageEntity list.
+     */
+    fun observeMessages(conversationId: String): Flow<List<MessageEntity>> {
+        return messageDataSource.listenMessages(conversationId)
+    }
+    
+    /**
+     * Observe users by IDs.
+     * Simple passthrough - ViewModel manages when to call this.
+     */
+    fun observeUsers(userIds: List<String>): Flow<List<UserEntity>> {
+        return if (userIds.isEmpty()) {
+            flowOf(emptyList())
+        } else {
+            userDataSource.listenUsersByIds(userIds)
+        }
+    }
+    
+    /**
+     * Observe presence for multiple users.
+     * Simple passthrough - ViewModel manages when to call this.
+     */
+    fun observePresence(userIds: List<String>): Flow<Map<String, PresenceEntity>> {
+        return if (userIds.isEmpty()) {
+            flowOf(emptyMap())
+        } else {
+            presenceDataSource.listenMultiplePresence(userIds)
+        }
+    }
+    
+    /**
+     * LEGACY: Observe all conversations for a user with full data (members + presence).
+     * DEPRECATED: Use observeConversations() + observeUsers() + observePresence() in ViewModel instead.
+     * This will be removed after ViewModel refactoring.
+     */
+    @Deprecated("Use separate flows in ViewModel", ReplaceWith("observeConversations()"))
     fun observeConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> {
         
         // Listen to conversations (only once!)
@@ -116,8 +165,20 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
-     * Observe a single conversation with all messages.
+     * Get a single conversation entity by ID.
+     * Observes all user's conversations and filters by ID.
+     * Returns null if not found.
      */
+    fun observeConversation(userId: String, conversationId: String): Flow<ConversationEntity?> {
+        return conversationDataSource.listenConversations(userId)
+            .map { conversations -> conversations.find { it.id == conversationId } }
+    }
+    
+    /**
+     * LEGACY: Observe a single conversation with all messages.
+     * DEPRECATED: Use separate flows in ViewModel instead.
+     */
+    @Deprecated("Use separate flows in ViewModel")
     fun observeConversationWithMessages(conversationId: String): Flow<Conversation> {
         val userId = auth.currentUser?.uid
         
