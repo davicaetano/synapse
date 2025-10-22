@@ -31,12 +31,10 @@ class InboxViewModel @Inject constructor(
 ) : ViewModel() {
 
     fun observeInbox(userId: String): StateFlow<InboxUIState> {
-        android.util.Log.d("OFFLINE_DEBUG", "observeInbox: Starting for userId=$userId")
         
         // Use the new method that already includes complete user data + presence
         val conversationsFlow = conversationsRepo.observeConversationsWithUsers(userId)
                 .onEach { convs ->
-                    android.util.Log.d("OFFLINE_DEBUG", "conversationsFlow emitted: ${convs.size} conversations")
                     // Background task: mark last message as received for all conversations
                     convs.forEach { c ->
                         viewModelScope.launch {
@@ -45,18 +43,19 @@ class InboxViewModel @Inject constructor(
                     }
                 }
                 .onStart {
-                    android.util.Log.d("OFFLINE_DEBUG", "conversationsFlow: onStart - emitting empty list")
                     emit(emptyList())
                 }
         
         // Get conversation IDs for typing observation
-        val conversationIdsFlow = conversationsFlow.map { convs -> convs.map { it.id } }
+        val conversationIdsFlow = conversationsFlow.map { convs -> 
+            val ids = convs.map { it.id }
+            ids
+        }
         
         // Observe typing in all conversations - flatMapLatest resolves the Flow<Flow<Map>> to Flow<Map>
         // CRITICAL: onStart emits empty map immediately to unblock combine()
         val typingFlow = conversationIdsFlow
             .flatMapLatest { conversationIds ->
-                android.util.Log.d("OFFLINE_DEBUG", "typingFlow flatMapLatest: conversationIds=${conversationIds.size}")
                 if (conversationIds.isEmpty()) {
                     flowOf(emptyMap<String, List<com.synapse.domain.user.User>>())
                 } else {
@@ -64,23 +63,20 @@ class InboxViewModel @Inject constructor(
                 }
             }
             .onStart { 
-                android.util.Log.d("OFFLINE_DEBUG", "typingFlow: onStart - emitting empty map")
                 emit(emptyMap()) // Emit immediately to prevent blocking combine()
             }
             .onEach { typingMap ->
-                android.util.Log.d("OFFLINE_DEBUG", "typingFlow emitted: ${typingMap.size} conversations with typing")
             }
 
         return conversationsFlow
             .combine(typingFlow) { convs, typingMap ->
-                android.util.Log.d("OFFLINE_DEBUG", "combine: convs=${convs.size} typingMap=${typingMap.size}")
                 // Pair conversations with the typing map
                 convs to typingMap
             }
             .mapLatest { (convs, typingMap) ->
-                android.util.Log.d("OFFLINE_DEBUG", "mapLatest: processing ${convs.size} conversations")
                 
                 // Calculate unread counts in parallel for better performance
+                val startTime = System.currentTimeMillis()
                 val unreadCounts = coroutineScope {
                     convs.map { c ->
                         async {
@@ -88,6 +84,7 @@ class InboxViewModel @Inject constructor(
                         }
                     }.awaitAll().toMap()
                 }
+                val elapsed = System.currentTimeMillis() - startTime
                 
                 val items = convs.mapNotNull { c ->  // Use mapNotNull to filter out invalid conversations
                     val unreadCount = unreadCounts[c.id] ?: 0
@@ -160,14 +157,18 @@ class InboxViewModel @Inject constructor(
                 }
             }.sortedByDescending { it.updatedAtMs }
 
-            android.util.Log.d("OFFLINE_DEBUG", "Creating InboxUIState: ${items.size} items, isLoading=false")
+            items.forEach { item ->
+            }
             
             InboxUIState(
                 items = items,
                 isLoading = false,
                 error = null
             )
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), InboxUIState(isLoading = true))
+        }
+        .onEach { state ->
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), InboxUIState(isLoading = true))
     }
 
     fun observeInboxForCurrentUser(): StateFlow<InboxUIState> {

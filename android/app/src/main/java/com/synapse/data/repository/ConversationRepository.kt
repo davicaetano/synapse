@@ -1,5 +1,6 @@
 package com.synapse.data.repository
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
@@ -12,8 +13,10 @@ import com.synapse.domain.conversation.ConversationType
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,41 +46,73 @@ class ConversationRepository @Inject constructor(
      * Observe all conversations for a user with full data (members + presence).
      */
     fun observeConversationsWithUsers(userId: String): Flow<List<ConversationSummary>> {
-        return conversationDataSource.listenConversations(userId)
-            .flatMapLatest { conversations ->
-                if (conversations.isEmpty()) {
+        
+        // Listen to conversations (only once!)
+        val conversationsFlow = conversationDataSource.listenConversations(userId)
+        
+        // Get member IDs flow from conversations
+        val memberIdsFlow = conversationsFlow
+            .map { conversations ->
+                val allMemberIds = conversations
+                    .flatMap { it.memberIds }
+                    .distinct()
+                    .sorted() // Sort to make comparison stable
+                
+                
+                allMemberIds
+            }
+            .distinctUntilChanged() // Only trigger flatMapLatest when member IDs actually change!
+        
+        // Listen to users ONLY when member IDs change (not on every presence update!)
+        val usersFlow = memberIdsFlow
+            .flatMapLatest { memberIds ->
+                if (memberIds.isEmpty()) {
                     flowOf(emptyList())
                 } else {
-                    // Collect all unique member IDs from all conversations
-                    val allMemberIds = conversations
-                        .flatMap { it.memberIds }
-                        .distinct()
-                    
-                    // Combine conversations + users + presence
-                    combine(
-                        flowOf(conversations),
-                        userDataSource.listenUsersByIds(allMemberIds),
-                        presenceDataSource.listenMultiplePresence(allMemberIds)
-                    ) { convEntities, userEntities, presenceMap ->
-                        // Build user map
-                        val usersMap = userEntities.associateBy { it.id }
-                        
-                        // Transform entities to domain models
-                        convEntities.map { convEntity ->
-                            val members = convEntity.memberIds.mapNotNull { memberId ->
-                                val userEntity = usersMap[memberId]
-                                val presence = presenceMap[memberId]
-                                userEntity?.toDomain(
-                                    presence = presence,
-                                    isMyself = (memberId == userId)
-                                )
-                            }
-                            
-                            convEntity.toDomain(members = members)
-                        }
-                    }
+                    userDataSource.listenUsersByIds(memberIds)
                 }
             }
+        
+        // Listen to presence ONLY when member IDs change (not on every presence update!)
+        val presenceFlow = memberIdsFlow
+            .flatMapLatest { memberIds ->
+                if (memberIds.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    presenceDataSource.listenMultiplePresence(memberIds)
+                }
+            }
+        
+        // Combine conversations + users + presence
+        return combine(
+            conversationsFlow,
+            usersFlow,
+            presenceFlow
+        ) { conversations, userEntities, presenceMap ->
+            
+            if (conversations.isEmpty()) {
+                emptyList()
+            } else {
+                // Build user map
+                val usersMap = userEntities.associateBy { it.id }
+                
+                // Transform entities to domain models
+                val summaries = conversations.map { convEntity ->
+                    val members = convEntity.memberIds.mapNotNull { memberId ->
+                        val userEntity = usersMap[memberId]
+                        val presence = presenceMap[memberId]
+                        userEntity?.toDomain(
+                            presence = presence,
+                            isMyself = (memberId == userId)
+                        )
+                    }
+                    
+                    convEntity.toDomain(members = members)
+                }
+                
+                summaries
+            }
+        }
     }
     
     /**
@@ -158,16 +193,18 @@ class ConversationRepository @Inject constructor(
      * Coordinates: create message + update conversation metadata.
      */
     suspend fun sendMessage(conversationId: String, text: String) {
+        
         // Send message (may return null if offline, but Firestore caches it)
-        messageDataSource.sendMessage(conversationId, text)
+        val messageId = messageDataSource.sendMessage(conversationId, text)
         
         // ALWAYS update conversation metadata, even if messageId is null
         // This ensures the inbox shows the latest message immediately,
         // even when offline (Firestore will sync when back online)
+        val timestamp = System.currentTimeMillis()
         conversationDataSource.updateConversationMetadata(
             conversationId = conversationId,
             lastMessageText = text,
-            timestamp = System.currentTimeMillis()
+            timestamp = timestamp
         )
     }
     

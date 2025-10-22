@@ -36,15 +36,18 @@ class FirestoreMessageDataSource @Inject constructor(
      * Returns raw Firestore data.
      */
     fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
+        
         val ref = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
             .orderBy("createdAtMs")
         
         val registration = ref.addSnapshotListener { snapshot, error ->
+            val isFromCache = snapshot?.metadata?.isFromCache ?: false
+            val hasPendingWrites = snapshot?.metadata?.hasPendingWrites() ?: false
+            
             if (error != null) {
-                Log.e(TAG, "Error listening to messages in $conversationId, sending empty list", error)
-                trySend(emptyList())  // Keep flow alive, will update when error resolves
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             
@@ -64,15 +67,20 @@ class FirestoreMessageDataSource @Inject constructor(
                         serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
                     )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing message ${doc.id}", e)
                     null
                 }
             } ?: emptyList()
             
+            if (messages.isNotEmpty()) {
+                val last = messages.last()
+            }
+            
             trySend(messages)
         }
         
-        awaitClose { registration.remove() }
+        awaitClose {
+            registration.remove()
+        }
     }
     
     // ============================================================
@@ -91,9 +99,9 @@ class FirestoreMessageDataSource @Inject constructor(
     ): String? {
         val userId = auth.currentUser?.uid
         if (userId == null) {
-            Log.e(TAG, "Cannot send message: user not authenticated")
             return null
         }
+        
         
         val messageData = hashMapOf(
             "text" to text,
@@ -111,12 +119,10 @@ class FirestoreMessageDataSource @Inject constructor(
                 .add(messageData)
                 .await()
             
-            Log.d(TAG, "Message sent successfully: ${docRef.id}")
             docRef.id
         } catch (e: Exception) {
             // Even if there's an error (e.g. offline), Firestore should have cached it
             // The listener will pick it up and show it as PENDING
-            Log.w(TAG, "Error sending message to $conversationId (may be offline): ${e.message}")
             null
         }
     }

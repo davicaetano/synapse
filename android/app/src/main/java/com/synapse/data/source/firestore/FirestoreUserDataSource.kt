@@ -73,6 +73,7 @@ class FirestoreUserDataSource @Inject constructor(
      * If you need more than 10, you'll need to batch the queries.
      */
     fun listenUsersByIds(userIds: List<String>): Flow<List<UserEntity>> = callbackFlow {
+        
         if (userIds.isEmpty()) {
             trySend(emptyList())
             awaitClose {}
@@ -81,17 +82,20 @@ class FirestoreUserDataSource @Inject constructor(
         
         // Handle Firestore's 10 ID limit for whereIn queries
         val batches = userIds.chunked(10)
+        
         val registrations = mutableListOf<com.google.firebase.firestore.ListenerRegistration>()
         val usersMap = mutableMapOf<String, UserEntity>()
         
-        batches.forEach { batch ->
+        batches.forEachIndexed { batchIndex, batch ->
             val ref = firestore.collection("users")
                 .whereIn(FieldPath.documentId(), batch)
             
+            
             val registration = ref.addSnapshotListener { snapshot, error ->
+                val isFromCache = snapshot?.metadata?.isFromCache ?: false
+                
                 if (error != null) {
-                    Log.e(TAG, "Error listening to users by IDs, sending current list", error)
-                    trySend(usersMap.values.toList())  // Keep flow alive with current data
+                    trySend(usersMap.values.toList())
                     return@addSnapshotListener
                 }
                 
@@ -104,9 +108,9 @@ class FirestoreUserDataSource @Inject constructor(
                             photoUrl = doc.getString("photoUrl")
                         )
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing user ${doc.id}", e)
                     }
                 }
+                
                 
                 // Emit the combined results from all batches
                 trySend(usersMap.values.toList())

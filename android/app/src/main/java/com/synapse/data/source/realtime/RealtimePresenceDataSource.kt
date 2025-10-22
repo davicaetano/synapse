@@ -85,6 +85,7 @@ class RealtimePresenceDataSource @Inject constructor(
      * Returns a Map<userId, PresenceEntity> that updates whenever any user's presence changes.
      */
     fun listenMultiplePresence(userIds: List<String>): Flow<Map<String, PresenceEntity>> = callbackFlow {
+        
         if (userIds.isEmpty()) {
             trySend(emptyMap())
             awaitClose {}
@@ -104,21 +105,19 @@ class RealtimePresenceDataSource @Inject constructor(
                     
                     presenceMap[userId] = PresenceEntity(online = online, lastSeenMs = lastSeenMs)
                     
+                    
                     // Safe send - only send if channel is not closed
                     try {
                         trySend(presenceMap.toMap()).isSuccess
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to send presence update for $userId", e)
                     }
                 }
                 
                 override fun onCancelled(error: DatabaseError) {
-                    Log.e(TAG, "Presence listener cancelled for $userId, sending current map", error.toException())
                     // Keep flow alive by sending current presence map
                     try {
                         trySend(presenceMap.toMap()).isSuccess
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to send presence map after cancellation", e)
                     }
                 }
             }
@@ -281,21 +280,17 @@ class RealtimePresenceDataSource @Inject constructor(
     suspend fun setTyping(conversationId: String) {
         val userId = auth.currentUser?.uid
         if (userId == null) {
-            Log.e("TYPING_DEBUG", "Cannot set typing: user not authenticated")
             return
         }
         
         val typingRef = realtimeDb.child("typing").child(conversationId).child(userId)
         val timestamp = System.currentTimeMillis()
         
-        Log.d("TYPING_DEBUG", "RealtimeDB.setTyping: path=/typing/$conversationId/$userId timestamp=$timestamp")
         
         typingRef.setValue(timestamp)
             .addOnSuccessListener {
-                Log.d("TYPING_DEBUG", "RealtimeDB.setTyping SUCCESS: userId=$userId convId=$conversationId")
             }
             .addOnFailureListener { e ->
-                Log.e("TYPING_DEBUG", "RealtimeDB.setTyping FAILED: userId=$userId convId=$conversationId", e)
             }
         
         // Auto-remove after disconnect
@@ -333,11 +328,9 @@ class RealtimePresenceDataSource @Inject constructor(
     fun listenTypingInConversation(conversationId: String): Flow<Map<String, Long>> = callbackFlow {
         val ref = realtimeDb.child("typing").child(conversationId)
         
-        Log.d("TYPING_DEBUG", "listenTypingInConversation: Setting up listener for convId=$conversationId path=/typing/$conversationId")
         
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                Log.d("TYPING_DEBUG", "listenTypingInConversation.onDataChange: convId=$conversationId childrenCount=${snapshot.childrenCount}")
                 
                 val typingUsers = mutableMapOf<String, Long>()
                 
@@ -345,43 +338,35 @@ class RealtimePresenceDataSource @Inject constructor(
                     val userId = userSnapshot.key
                     val timestamp = userSnapshot.getValue(Long::class.java)
                     
-                    Log.d("TYPING_DEBUG", "listenTypingInConversation: userId=$userId timestamp=$timestamp")
                     
                     if (userId != null && timestamp != null) {
                         // Only include if timestamp is recent (< 5 seconds old)
                         // This handles stale data from network issues
                         val age = System.currentTimeMillis() - timestamp
-                        Log.d("TYPING_DEBUG", "listenTypingInConversation: age=${age}ms (threshold=5000ms)")
                         if (age < 5000) {
                             typingUsers[userId] = timestamp
                         } else {
-                            Log.d("TYPING_DEBUG", "listenTypingInConversation: SKIPPING stale timestamp userId=$userId")
                         }
                     }
                 }
                 
-                Log.d("TYPING_DEBUG", "listenTypingInConversation: Sending ${typingUsers.size} typing users to Flow")
                 
                 try {
                     trySend(typingUsers).isSuccess
                 } catch (e: Exception) {
-                    Log.e("TYPING_DEBUG", "Failed to send typing update for $conversationId", e)
                 }
             }
             
             override fun onCancelled(error: DatabaseError) {
-                Log.e("TYPING_DEBUG", "Typing listener CANCELLED for convId=$conversationId", error.toException())
                 try {
                     trySend(emptyMap()).isSuccess
                 } catch (e: Exception) {
-                    Log.e("TYPING_DEBUG", "Failed to send empty typing map", e)
                 }
             }
         }
         
         ref.addValueEventListener(listener)
         awaitClose { 
-            Log.d("TYPING_DEBUG", "listenTypingInConversation: Removing listener for convId=$conversationId")
             ref.removeEventListener(listener) 
         }
     }

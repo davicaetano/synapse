@@ -72,7 +72,6 @@ class ConversationViewModel @Inject constructor(
 
     val uiState: StateFlow<ConversationUIState> = conversation
         .combine(typingRepo.observeTypingTextInConversation(conversationId)) { conv, typingText ->
-            android.util.Log.d("TYPING_DEBUG", "ConversationScreen UI updated: typingText='$typingText' convId=$conversationId")
             val currentUserId = auth.currentUser?.uid
             val summary = conv.summary
             
@@ -184,14 +183,12 @@ class ConversationViewModel @Inject constructor(
      * - Removes typing indicator after 3 seconds of inactivity
      */
     fun onTextChanged(text: String) {
-        android.util.Log.d("TYPING_DEBUG", "onTextChanged: text='${text.take(20)}...' convId=$conversationId")
         
         // Cancel previous timeout job
         typingTimeoutJob?.cancel()
         
         if (text.isNotBlank()) {
             // User is typing - set typing indicator
-            android.util.Log.d("TYPING_DEBUG", "Setting typing indicator: convId=$conversationId")
             viewModelScope.launch {
                 typingRepo.setTyping(conversationId)
             }
@@ -199,12 +196,10 @@ class ConversationViewModel @Inject constructor(
             // Start timeout to remove typing indicator after 3 seconds
             typingTimeoutJob = viewModelScope.launch {
                 delay(3000)
-                android.util.Log.d("TYPING_DEBUG", "Timeout - removing typing: convId=$conversationId")
                 typingRepo.removeTyping(conversationId)
             }
         } else {
             // Input is empty - remove typing indicator immediately
-            android.util.Log.d("TYPING_DEBUG", "Text empty - removing typing: convId=$conversationId")
             viewModelScope.launch {
                 typingRepo.removeTyping(conversationId)
             }

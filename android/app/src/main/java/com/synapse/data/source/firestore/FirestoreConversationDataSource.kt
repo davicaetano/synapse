@@ -36,13 +36,16 @@ class FirestoreConversationDataSource @Inject constructor(
      * Returns raw Firestore data without user details or presence.
      */
     fun listenConversations(userId: String): Flow<List<ConversationEntity>> = callbackFlow {
+        
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", userId)
         
         val registration = ref.addSnapshotListener { snapshot, error ->
+            val isFromCache = snapshot?.metadata?.isFromCache ?: false
+            val hasPendingWrites = snapshot?.metadata?.hasPendingWrites() ?: false
+            
             if (error != null) {
-                Log.e(TAG, "Error listening to conversations, sending empty list", error)
-                trySend(emptyList())  // Keep flow alive, will update when error resolves
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             
@@ -61,15 +64,19 @@ class FirestoreConversationDataSource @Inject constructor(
                         createdBy = doc.getString("createdBy")
                     )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing conversation ${doc.id}", e)
                     null
                 }
             } ?: emptyList()
             
+            conversations.forEach { conv ->
+            }
+            
             trySend(conversations)
         }
         
-        awaitClose { registration.remove() }
+        awaitClose { 
+            registration.remove()
+        }
     }
     
     // ============================================================
@@ -218,6 +225,7 @@ class FirestoreConversationDataSource @Inject constructor(
         lastMessageText: String,
         timestamp: Long
     ) {
+        
         try {
             firestore.collection("conversations")
                 .document(conversationId)
@@ -230,10 +238,8 @@ class FirestoreConversationDataSource @Inject constructor(
                 )
                 .await()
             
-            Log.d(TAG, "Updated conversation $conversationId metadata: lastMessageText='${lastMessageText.take(20)}...', timestamp=$timestamp")
         } catch (e: Exception) {
             // Log but don't fail - Firestore will cache this and sync when online
-            Log.w(TAG, "Error updating conversation metadata (will retry when online)", e)
         }
     }
     

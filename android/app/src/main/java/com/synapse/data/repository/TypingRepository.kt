@@ -33,7 +33,6 @@ class TypingRepository @Inject constructor(
      * Should be called when user starts typing.
      */
     suspend fun setTyping(conversationId: String) {
-        android.util.Log.d("TYPING_DEBUG", "TypingRepo.setTyping: convId=$conversationId userId=${auth.currentUser?.uid}")
         presenceDataSource.setTyping(conversationId)
     }
     
@@ -45,7 +44,6 @@ class TypingRepository @Inject constructor(
      * - User leaves conversation screen
      */
     suspend fun removeTyping(conversationId: String) {
-        android.util.Log.d("TYPING_DEBUG", "TypingRepo.removeTyping: convId=$conversationId userId=${auth.currentUser?.uid}")
         presenceDataSource.removeTyping(conversationId)
     }
     
@@ -111,7 +109,6 @@ class TypingRepository @Inject constructor(
     fun observeTypingTextInConversation(conversationId: String): Flow<String?> {
         return observeTypingUsersInConversation(conversationId)
             .map { typingUsers ->
-                android.util.Log.d("TYPING_DEBUG", "observeTypingTextInConversation: convId=$conversationId typingUsersCount=${typingUsers.size} users=${typingUsers.map { it.displayName }}")
                 when {
                     typingUsers.isEmpty() -> null
                     typingUsers.size == 1 -> "${typingUsers[0].displayName} is typing..."
@@ -123,7 +120,6 @@ class TypingRepository @Inject constructor(
                         "$first, $second and $othersCount ${if (othersCount == 1) "other" else "others"} are typing..."
                     }
                 }.also { text ->
-                    android.util.Log.d("TYPING_DEBUG", "observeTypingTextInConversation result: '$text'")
                 }
             }
             .onStart { 
