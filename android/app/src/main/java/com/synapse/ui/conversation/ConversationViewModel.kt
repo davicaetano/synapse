@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -181,7 +182,9 @@ class ConversationViewModel @Inject constructor(
                     
                     // Start sync job (tied to viewModelScope - cancels when ViewModel dies)
                     messageSyncJob = viewModelScope.launch {
-                        convRepo.listenMessagesFromFirestore(conversationId).collect { firestoreMessages ->
+                        convRepo.listenMessagesFromFirestore(conversationId)
+                            .debounce(500)  // Wait for Firestore to stop emitting before syncing
+                            .collect { firestoreMessages ->
                             // Sync Firestore → Room
                             convRepo.upsertMessagesToRoom(firestoreMessages, conversationId)
                             Log.d(TAG, "✅ Synced ${firestoreMessages.size} messages from Firestore to Room")

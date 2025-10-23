@@ -30,26 +30,7 @@ class InboxViewModel @Inject constructor(
     private val auth: FirebaseAuth,
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
-    
-    // Background: Update lastReceivedAt when messages arrive (NEW APPROACH)
-    init {
-        val userId = auth.currentUser?.uid ?: ""
-        
-        // Observe all conversations and update lastReceivedAt based on latest message
-        conversationsRepo.observeConversations(userId)
-            .distinctUntilChanged()
-            .onEach { conversations ->
-                conversations.forEach { conv ->
-                    // Use updatedAtMs (latest message timestamp) as the received timestamp
-                    // Convert millis to Timestamp
-                    val timestamp = Timestamp(conv.updatedAtMs / 1000, ((conv.updatedAtMs % 1000) * 1000000).toInt())
-                    viewModelScope.launch {
-                        conversationsRepo.updateMemberLastReceivedAt(conv.id, timestamp)
-                    }
-                }
-            }
-            .launchIn(viewModelScope)
-    }
+
     
     // StateFlow created ONCE when ViewModel is created
     val uiState: StateFlow<InboxUIState> = run {

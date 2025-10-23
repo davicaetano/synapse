@@ -192,24 +192,6 @@ class ConversationRepository @Inject constructor(
     suspend fun removeUserFromGroup(conversationId: String, userId: String) {
         conversationDataSource.removeMemberFromGroup(conversationId, userId)
     }
-
-    /**
-     * Calculate unread counts for conversations based on memberStatus timestamps.
-     * 
-     * NEW APPROACH - Uses conversation-level lastSeenAt tracking:
-     * - Takes map of conversationId → lastSeenAtMs from conversation.memberStatus
-     * - Counts messages where serverTimestamp > lastSeenAtMs
-     * - Caps at 10 per conversation (shows "10+" in UI)
-     * 
-     * This should be called FROM InboxViewModel which has access to conversations + memberStatus.
-     * 
-     * @param conversationLastSeenMap Map of conversationId → lastSeenAtMs (from memberStatus)
-     */
-    suspend fun calculateUnreadCounts(
-        conversationLastSeenMap: Map<String, Long?>
-    ): Map<String, Int> {
-        return roomMessageDataSource.calculateUnreadCounts(conversationLastSeenMap)
-    }
     
     /**
      * Update member's lastReceivedAt timestamp (when user receives messages).

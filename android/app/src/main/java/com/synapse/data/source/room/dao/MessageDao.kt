@@ -39,6 +39,13 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE conversationId IN (:conversationIds)")
     suspend fun getMessagesForConversations(conversationIds: List<String>): List<MessageRoomEntity>
 
+    /**
+     * Get the most recent message timestamp for a conversation.
+     * Used to determine which messages are new and need to be synced.
+     * Returns null if no messages exist yet.
+     */
+    @Query("SELECT MAX(createdAtMs) FROM messages WHERE conversationId = :conversationId")
+    suspend fun getLastMessageTimestamp(conversationId: String): Long?
 
     /**
      * Insert or update multiple messages.
