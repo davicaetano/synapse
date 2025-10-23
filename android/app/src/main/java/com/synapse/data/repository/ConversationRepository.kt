@@ -187,5 +187,21 @@ class ConversationRepository @Inject constructor(
     suspend fun markLastMessageAsReceived(conversationId: String) {
         messageDataSource.markLastMessageAsReceived(conversationId)
     }
+    
+    /**
+     * Send multiple messages using Firestore batch write (for performance testing).
+     * All messages are sent in a single transaction.
+     */
+    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>) {
+        messageDataSource.sendMessagesBatch(conversationId, messages)
+        // Update conversation metadata with the last message
+        if (messages.isNotEmpty()) {
+            conversationDataSource.updateConversationMetadata(
+                conversationId = conversationId,
+                lastMessageText = messages.last(),
+                timestamp = System.currentTimeMillis()
+            )
+        }
+    }
 }
 

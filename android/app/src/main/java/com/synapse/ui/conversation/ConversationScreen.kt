@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +74,7 @@ fun ConversationScreen(
         ui = ui,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
+        onSend20Messages = { vm.send20Messages() },
         onBackClick = onNavigateBack
     )
 }
@@ -83,6 +86,7 @@ fun ConversationScreen(
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
+    onSend20Messages: () -> Unit = {},
     onBackClick: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
@@ -110,7 +114,7 @@ fun ConversationScreen(
                 typingText = ui.typingText,
                 onBackClick = onBackClick,
                 onAddMemberClick = { /* TODO: Add member to group */ },
-                onMenuClick = { /* TODO: Show conversation menu */ },
+                onSend20Messages = onSend20Messages,
                 currentUserIsConnected = ui.isConnected
             )
         },
@@ -211,9 +215,10 @@ private fun ConversationTopAppBar(
     typingText: String?,
     onBackClick: () -> Unit,
     onAddMemberClick: () -> Unit,
-    onMenuClick: () -> Unit,
+    onSend20Messages: () -> Unit,
     currentUserIsConnected: Boolean
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -290,12 +295,26 @@ private fun ConversationTopAppBar(
                 }
             }
 
-            // Menu button
-            IconButton(onClick = onMenuClick) {
-                Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = "More options"
-                )
+            // Menu button with dropdown
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "More options"
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Send 20 messages (test)") },
+                        onClick = {
+                            showMenu = false
+                            onSend20Messages()
+                        }
+                    )
+                }
             }
         },
         colors = TopAppBarDefaults.topAppBarColors()

@@ -314,6 +314,18 @@ class ConversationViewModel @Inject constructor(
             convRepo.sendMessage(conversationId, text)
         }
     }
+    
+    /**
+     * Send 20 test messages using Firestore batch write for performance testing
+     */
+    fun send20Messages() {
+        viewModelScope.launch {
+            Log.d("ConversationViewModel", "Sending 20 messages via batch...")
+            val messages = (1..20).map { i -> "Test message #$i" }
+            convRepo.sendMessagesBatch(conversationId, messages)
+            Log.d("ConversationViewModel", "✅ 20 messages sent successfully")
+        }
+    }
 }
 
 

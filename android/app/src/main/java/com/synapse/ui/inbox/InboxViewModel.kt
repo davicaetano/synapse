@@ -124,7 +124,7 @@ class InboxViewModel @Inject constructor(
      * Build InboxUIState from raw data.
      * Separated for clarity and testability.
      */
-    private suspend fun buildInboxUIState(
+    private fun buildInboxUIState(
         userId: String,
         conversations: List<com.synapse.data.source.firestore.entity.ConversationEntity>,
         users: List<com.synapse.data.source.firestore.entity.UserEntity>,

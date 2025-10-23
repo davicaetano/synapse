@@ -295,6 +295,51 @@ class FirestoreMessageDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Send multiple messages using Firestore batch write.
+     * More efficient than sending messages one by one.
+     * Used for performance testing and bulk operations.
+     * 
+     * @param conversationId The conversation ID
+     * @param messages List of message texts to send
+     */
+    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        if (messages.isEmpty()) return
+        
+        try {
+            val batch = firestore.batch()
+            val timestamp = System.currentTimeMillis()
+            
+            // Create a message document for each message text
+            messages.forEachIndexed { index, text ->
+                val messageRef = firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .document()  // Auto-generate ID
+                
+                val messageData = hashMapOf(
+                    "id" to messageRef.id,
+                    "text" to text,
+                    "senderId" to userId,
+                    "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
+                    "receivedBy" to listOf(userId), // Sender has received their own message
+                    "readBy" to listOf(userId),     // Sender has read their own message
+                    "serverTimestamp" to FieldValue.serverTimestamp() // Server assigns actual timestamp
+                )
+                
+                batch.set(messageRef, messageData)
+            }
+            
+            // Commit all writes in a single transaction
+            batch.commit().await()
+            Log.d(TAG, "✅ Batch sent ${messages.size} messages to $conversationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending batch messages to $conversationId", e)
+        }
+    }
+    
     companion object {
         private const val TAG = "FirestoreMessageDS"
     }
