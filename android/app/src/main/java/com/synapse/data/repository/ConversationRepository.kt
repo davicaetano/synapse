@@ -171,13 +171,6 @@ class ConversationRepository @Inject constructor(
     }
 
     /**
-     * Mark all messages in a conversation as read.
-     */
-    suspend fun markConversationAsRead(conversationId: String) {
-        messageDataSource.markAllMessagesAsRead(conversationId)
-    }
-
-    /**
      * Get unread message count for a conversation.
      */
     fun observeUnreadMessageCount(conversationId: String): Flow<Int> {
@@ -202,6 +195,24 @@ class ConversationRepository @Inject constructor(
      */
     suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
         messageDataSource.markMessagesAsReceived(conversationId, messageIds)
+    }
+    
+    /**
+     * Observe unread messages for a specific conversation.
+     * Returns a Flow of message IDs that haven't been read yet.
+     */
+    fun observeUnreadMessages(conversationId: String): Flow<List<String>> {
+        return messageDataSource.observeUnreadMessages(conversationId)
+    }
+    
+    /**
+     * Mark specific messages as read in a conversation.
+     * 
+     * @param conversationId The conversation ID
+     * @param messageIds List of message IDs to mark as read
+     */
+    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+        messageDataSource.markMessagesAsRead(conversationId, messageIds)
     }
     
     /**

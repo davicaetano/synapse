@@ -25,7 +25,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -42,16 +44,15 @@ class ConversationViewModel @Inject constructor(
     // Job to handle typing timeout (auto-remove typing after 3 seconds of inactivity)
     private var typingTimeoutJob: Job? = null
 
+    // Background: Mark messages as read (independent side effect)
     init {
-        // Mark conversation as read when opened
-        viewModelScope.launch {
-            try {
-                convRepo.markConversationAsRead(conversationId)
-            } catch (e: Exception) {
-                // Log error but don't crash the app
-                Log.e("ConversationViewModel", "Failed to mark conversation as read", e)
+        convRepo.observeUnreadMessages(conversationId)
+            .onEach { messageIds ->
+                if (messageIds.isNotEmpty()) {
+                    convRepo.markMessagesAsRead(conversationId, messageIds)
+                }
             }
-        }
+            .launchIn(viewModelScope)
     }
     
     override fun onCleared() {

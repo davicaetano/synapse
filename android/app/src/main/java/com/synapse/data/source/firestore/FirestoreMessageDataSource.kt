@@ -67,6 +67,9 @@ class FirestoreMessageDataSource @Inject constructor(
                         notReceivedBy = (doc.get("notReceivedBy") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
+                        notReadBy = (doc.get("notReadBy") as? List<*>)
+                            ?.mapNotNull { it as? String } 
+                            ?: emptyList(),
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
@@ -116,6 +119,9 @@ class FirestoreMessageDataSource @Inject constructor(
         // notReceivedBy = all members except sender
         val notReceivedBy = memberIds.filter { it != userId }
         
+        // notReadBy = all members except sender (same as notReceivedBy initially)
+        val notReadBy = memberIds.filter { it != userId }
+        
         // memberIdsAtCreation = snapshot of all members at this moment
         val memberIdsAtCreation = memberIds
         
@@ -126,6 +132,7 @@ class FirestoreMessageDataSource @Inject constructor(
             "receivedBy" to listOf(userId),  // Sender has received their own message
             "readBy" to listOf(userId),      // Sender has read their own message
             "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
+            "notReadBy" to notReadBy,  // All other members haven't read yet
             "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
             "serverTimestamp" to FieldValue.serverTimestamp()  // Server assigns actual timestamp
         )
@@ -146,65 +153,15 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
-     * Mark ALL messages in a conversation as read by the current user.
-     * Uses efficient Firestore query to only fetch unread messages.
-     */
-    suspend fun markAllMessagesAsRead(conversationId: String) {
-        val userId = auth.currentUser?.uid ?: return
-        
-        try {
-            // Query only messages not sent by me (more efficient than downloading everything)
-            val snapshot = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .whereNotEqualTo("senderId", userId)  // Only messages from others
-                .get()
-                .await()
-            
-            if (snapshot.isEmpty) {
-                Log.d(TAG, "No messages from others to mark as read")
-                return
-            }
-            
-            // Use batch to update all unread messages
-            val batch = firestore.batch()
-            var updatedCount = 0
-            
-            snapshot.documents.forEach { doc ->
-                val readBy = (doc.get("readBy") as? List<*>)
-                    ?.mapNotNull { it as? String }
-                    ?: emptyList()
-                
-                // Only update if not already read
-                if (userId !in readBy) {
-                    batch.update(doc.reference, "readBy", FieldValue.arrayUnion(userId))
-                    batch.update(doc.reference, "receivedBy", FieldValue.arrayUnion(userId))
-                    updatedCount++
-                }
-            }
-            
-            if (updatedCount > 0) {
-                batch.commit().await()
-                Log.d(TAG, "Marked $updatedCount messages as read and received in $conversationId")
-            } else {
-                Log.d(TAG, "No unread messages to mark in $conversationId")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error marking all messages as read in $conversationId", e)
-        }
-    }
-
-    /**
      * Observe unread message count in a conversation for the current user.
+     * 
+     * OPTIMIZED: Uses notReadBy field for super efficient counting.
+     * Only fetches messages where notReadBy contains the current user.
      * 
      * FLOW STRATEGY:
      * 1. Emits 0 immediately (instant UI render)
      * 2. Listens to Firestore in real-time (snapshot listener)
-     * 3. Emits updated count whenever messages change
-     * 
-     * A message is unread if:
-     * - senderId != currentUserId (not my message)
-     * - readBy does NOT contain currentUserId (I haven't read it)
+     * 3. Emits updated count whenever unread messages change
      */
     fun observeUnreadMessageCount(conversationId: String): Flow<Int> = callbackFlow {
         val userId = auth.currentUser?.uid
@@ -218,29 +175,20 @@ class FirestoreMessageDataSource @Inject constructor(
         // 1️⃣ Send 0 immediately (instant UI)
         send(0)
         
-        // 2️⃣ Listen to Firestore in real-time
+        // 2️⃣ Listen only to messages where notReadBy contains my userId
         val listenerRegistration = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
-            .whereNotEqualTo("senderId", userId)  // Not my messages
+            .whereArrayContains("notReadBy", userId)  // ✅ Only unread messages!
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e(TAG, "Error listening to unread messages in $conversationId", error)
                     return@addSnapshotListener
                 }
                 
-                if (snapshot != null) {
-                    // Count messages where readBy doesn't contain current user
-                    val unreadCount = snapshot.documents.count { doc ->
-                        val readBy = (doc.get("readBy") as? List<*>)
-                            ?.mapNotNull { it as? String }
-                            ?: emptyList()
-                        userId !in readBy
-                    }
-                    
-                    // 3️⃣ Send updated count
-                    trySend(unreadCount)
-                }
+                // ✅ Just count the snapshot size - no filtering needed!
+                val unreadCount = snapshot?.size() ?: 0
+                trySend(unreadCount)
             }
         
         awaitClose {
@@ -331,6 +279,87 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
+     * Observe unread messages for a specific conversation.
+     * 
+     * Uses the NEW notReadBy field for efficient querying.
+     * Only fetches messages where notReadBy contains the current user.
+     * 
+     * @return Flow of message IDs that haven't been read yet
+     */
+    fun observeUnreadMessages(conversationId: String): Flow<List<String>> = callbackFlow {
+        val userId = auth.currentUser?.uid
+        
+        if (userId == null) {
+            send(emptyList())
+            close()
+            return@callbackFlow
+        }
+        
+        // Listen to messages where notReadBy contains my userId
+        val listener = firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereArrayContains("notReadBy", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "❌ Error observing unread messages in $conversationId", error)
+                    trySend(emptyList())
+                    return@addSnapshotListener
+                }
+                
+                val messageIds = snapshot?.documents?.map { it.id } ?: emptyList()
+                trySend(messageIds)
+                Log.d(TAG, "✅ Unread messages in $conversationId: ${messageIds.size}")
+            }
+        
+        awaitClose { listener.remove() }
+    }
+    
+    /**
+     * Mark specific messages as read by the current user.
+     * 
+     * Updates:
+     * - Removes userId from notReadBy array
+     * - Adds userId to readBy array
+     * - Also marks as received (can't read without receiving)
+     * 
+     * @param conversationId The conversation ID
+     * @param messageIds List of message IDs to mark as read
+     */
+    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        if (messageIds.isEmpty()) {
+            // Nothing to mark!
+            return
+        }
+        
+        try {
+            // Use batch to update all unread messages
+            val batch = firestore.batch()
+            
+            messageIds.forEach { messageId ->
+                val docRef = firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .document(messageId)
+                
+                // Remove from notReadBy + Add to readBy
+                batch.update(docRef, "notReadBy", FieldValue.arrayRemove(userId))
+                batch.update(docRef, "readBy", FieldValue.arrayUnion(userId))
+                // Also mark as received (can't read without receiving first)
+                batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
+                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+            }
+            
+            batch.commit().await()
+            Log.d(TAG, "✅ Marked ${messageIds.size} messages as read in $conversationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error marking messages as read in $conversationId", e)
+        }
+    }
+    
+    /**
      * Send multiple messages using Firestore batch write.
      * More efficient than sending messages one by one.
      * Used for performance testing and bulk operations.
@@ -347,6 +376,9 @@ class FirestoreMessageDataSource @Inject constructor(
         try {
             // notReceivedBy = all members except sender
             val notReceivedBy = memberIds.filter { it != userId }
+            
+            // notReadBy = all members except sender (same as notReceivedBy initially)
+            val notReadBy = memberIds.filter { it != userId }
             
             // memberIdsAtCreation = snapshot of all members at this moment
             val memberIdsAtCreation = memberIds
@@ -369,6 +401,7 @@ class FirestoreMessageDataSource @Inject constructor(
                     "receivedBy" to listOf(userId), // Sender has received their own message
                     "readBy" to listOf(userId),     // Sender has read their own message
                     "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
+                    "notReadBy" to notReadBy,  // All other members haven't read yet
                     "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
                     "serverTimestamp" to FieldValue.serverTimestamp() // Server assigns actual timestamp
                 )

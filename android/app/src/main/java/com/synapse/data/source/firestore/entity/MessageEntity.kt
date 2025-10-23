@@ -12,6 +12,7 @@ data class MessageEntity(
     val receivedBy: List<String>,  // List of user IDs who received this message
     val readBy: List<String>,      // List of user IDs who read this message
     val notReceivedBy: List<String> = emptyList(),  // List of user IDs who have NOT received yet
+    val notReadBy: List<String> = emptyList(),  // List of user IDs who have NOT read yet
     val memberIdsAtCreation: List<String> = emptyList(),  // Snapshot of group members when message was created
     val serverTimestamp: Long? = null  // Server-assigned timestamp (null = never reached server)
 )
