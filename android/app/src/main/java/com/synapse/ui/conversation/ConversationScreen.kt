@@ -45,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -66,7 +65,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// Helper function to format timestamp
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return ""
     val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -82,15 +80,14 @@ fun ConversationScreen(
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages if available (Room + Paging3)
-    val pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>? = 
-        vm.messagesPaged?.collectAsLazyPagingItems()
+    val pagedMessages = vm.messagesPaged?.collectAsLazyPagingItems()
     
     // Log which implementation is being used
-    LaunchedEffect(Unit) {
+    LaunchedEffect(pagedMessages, ui.messages.size) {
         if (pagedMessages != null) {
-            android.util.Log.d("ConversationScreen", "🔥 Using PAGING3 implementation")
+            android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
         } else {
-            android.util.Log.d("ConversationScreen", "📋 Using REGULAR list implementation")
+            android.util.Log.d("ConversationScreen", "📋 Using REGULAR list: ${ui.messages.size} items")
         }
     }
 
@@ -128,7 +125,6 @@ fun ConversationScreen(
         } else {
             ui.messages.isNotEmpty()
         }
-        
         if (hasMessages) {
             scope.launch {
                 listState.animateScrollToItem(0)
@@ -174,25 +170,23 @@ fun ConversationScreen(
                     bottom = 8.dp
                 )
             ) {
-                // Use paged messages if available (Room + Paging3), otherwise use regular list
+                // Use paged messages if available, otherwise regular list
                 if (pagedMessages != null) {
-                    // Paging3 implementation - loads 50 at a time
-                    android.util.Log.d("ConversationScreen", "📄 Paging3: itemCount=${pagedMessages.itemCount}")
+                    // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
-                        val m = pagedMessages[index]
-                        if (m != null) {
+                        pagedMessages[index]?.let { m ->
                             MessageBubble(
                                 text = m.text,
                                 displayTime = formatTime(m.createdAtMs),
                                 isMine = m.isMine,
                                 isReadByEveryone = m.isReadByEveryone,
-                                senderName = null,  // TODO: Get from users map
+                                senderName = null,
                                 status = m.status
                             )
                         }
                     }
                 } else {
-                    // Regular implementation - loads all at once
+                    // Regular - loads all at once
                     items(ui.messages.reversed()) { m ->
                         MessageBubble(
                             text = m.text,

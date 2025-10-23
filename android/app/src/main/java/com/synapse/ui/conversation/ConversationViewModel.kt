@@ -4,7 +4,11 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.map
 import com.google.firebase.auth.FirebaseAuth
+import com.synapse.BuildConfig
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.ConversationRepository
@@ -65,12 +69,20 @@ class ConversationViewModel @Inject constructor(
 
     val uiState: StateFlow<ConversationUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "🚀 Building uiState...")
         
         // STEP 1: Get the conversation entity
         val conversationFlow = convRepo.observeConversation(userId, conversationId)
+            .onEach { Log.d(TAG, "⏱️ conversationFlow emitted in ${System.currentTimeMillis() - startTime}ms") }
         
         // STEP 2: Get messages for this conversation
-        val messagesFlow = convRepo.observeMessages(conversationId)
+        // When using Paging3, don't load regular messages (avoid double loading!)
+        val messagesFlow = if (true) {  // BuildConfig.USE_ROOM_MESSAGES
+            flowOf(emptyList())  // Paging3 handles messages separately
+        } else {
+            convRepo.observeMessages(conversationId)
+        }.onEach { Log.d(TAG, "⏱️ messagesFlow emitted ${it.size} msgs in ${System.currentTimeMillis() - startTime}ms") }
         
         // STEP 3: Extract member IDs (stable)
         val memberIdsFlow = conversationFlow
@@ -86,6 +98,7 @@ class ConversationViewModel @Inject constructor(
                     convRepo.observeUsers(memberIds)
                 }
             }
+            .onEach { Log.d(TAG, "⏱️ usersFlow emitted ${it.size} users in ${System.currentTimeMillis() - startTime}ms") }
         
         // STEP 5: Observe presence (only recreates when members change)
         val presenceFlow = memberIdsFlow
@@ -96,6 +109,7 @@ class ConversationViewModel @Inject constructor(
                     convRepo.observePresence(memberIds)
                 }
             }
+            .onEach { Log.d(TAG, "⏱️ presenceFlow emitted ${it.size} in ${System.currentTimeMillis() - startTime}ms") }
         
         // STEP 6: Observe typing
         val typingFlow = typingRepo.observeTypingTextInConversation(conversationId)
@@ -116,6 +130,7 @@ class ConversationViewModel @Inject constructor(
             presenceFlow,
             typingAndConnectivityFlow
         ) { conversation, messages, users, presence, typingAndConnectivity ->
+            Log.d(TAG, "⏱️ combine() executed in ${System.currentTimeMillis() - startTime}ms")
             val (typingText, isConnected) = typingAndConnectivity
             buildConversationUIState(
                 userId = userId,
@@ -136,6 +151,27 @@ class ConversationViewModel @Inject constructor(
                 convType = ConversationType.DIRECT
             )
         )
+    }
+    
+    /**
+     * Paged messages flow (only available when Room is enabled).
+     * Provides efficient pagination for large message lists.
+     * 
+     * UI should use this instead of uiState.messages when available.
+     */
+    val messagesPaged: kotlinx.coroutines.flow.Flow<PagingData<Message>>? = if (true) {
+        convRepo.observeMessagesPaged(conversationId)
+            ?.map { pagingData ->
+                pagingData.map { messageEntity ->
+                    messageEntity.toDomain(
+                        currentUserId = auth.currentUser?.uid,
+                        memberCount = messageEntity.memberIdsAtCreation.size + 1  // +1 for sender
+                    )
+                }
+            }
+            ?.cachedIn(viewModelScope)
+    } else {
+        null
     }
     
     /**
@@ -348,8 +384,12 @@ class ConversationViewModel @Inject constructor(
             
             val messages = (1..500).map { i -> "Test message #$i" }
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
-            Log.d("ConversationViewModel", "✅ 500 messages sent successfully")
+            Log.d(TAG, "✅ 500 messages sent successfully")
         }
+    }
+    
+    companion object {
+        private const val TAG = "ConversationVM"
     }
 }
 

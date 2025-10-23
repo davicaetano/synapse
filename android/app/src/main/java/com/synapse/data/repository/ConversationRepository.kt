@@ -80,7 +80,7 @@ class ConversationRepository @Inject constructor(
      * Falls back to null if Room is not enabled.
      */
     fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>>? {
-        return if (BuildConfig.USE_ROOM_MESSAGES && messageDataSource is RoomMessageDataSource) {
+        return if (true && messageDataSource is RoomMessageDataSource) {
             (messageDataSource as RoomMessageDataSource).observeMessagesPaged(conversationId)
         } else {
             null  // Paging only available with Room
