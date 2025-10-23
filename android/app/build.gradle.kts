@@ -81,7 +81,12 @@ dependencies {
     // Room - Local database for caching
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.paging)
     kapt(libs.androidx.room.compiler)
+    
+    // Paging3 - Efficient pagination
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
     
     // Timber - Better logging (auto-removes logs in release builds)
     implementation("com.jakewharton.timber:timber:5.0.1")

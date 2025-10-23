@@ -1,5 +1,6 @@
 package com.synapse.data.repository
 
+import androidx.paging.PagingData
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.BuildConfig
 import com.synapse.data.source.IMessageDataSource
@@ -70,6 +71,20 @@ class ConversationRepository @Inject constructor(
      */
     fun observeMessages(conversationId: String): Flow<List<MessageEntity>> {
         return messageDataSource.listenMessages(conversationId)
+    }
+
+    /**
+     * Observe messages with pagination support (only available with Room).
+     * Returns PagingData for efficient lazy loading.
+     * 
+     * Falls back to null if Room is not enabled.
+     */
+    fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>>? {
+        return if (BuildConfig.USE_ROOM_MESSAGES && messageDataSource is RoomMessageDataSource) {
+            (messageDataSource as RoomMessageDataSource).observeMessagesPaged(conversationId)
+        } else {
+            null  // Paging only available with Room
+        }
     }
 
     /**

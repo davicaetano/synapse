@@ -55,12 +55,23 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.MessageStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import com.synapse.ui.theme.SynapseTheme
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+// Helper function to format timestamp
+private fun formatTime(ms: Long): String {
+    if (ms <= 0) return ""
+    val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return fmt.format(Date(ms))
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,9 +80,23 @@ fun ConversationScreen(
     onNavigateBack: () -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
+    
+    // Use paged messages if available (Room + Paging3)
+    val pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>? = 
+        vm.messagesPaged?.collectAsLazyPagingItems()
+    
+    // Log which implementation is being used
+    LaunchedEffect(Unit) {
+        if (pagedMessages != null) {
+            android.util.Log.d("ConversationScreen", "🔥 Using PAGING3 implementation")
+        } else {
+            android.util.Log.d("ConversationScreen", "📋 Using REGULAR list implementation")
+        }
+    }
 
     ConversationScreen(
         ui = ui,
+        pagedMessages = pagedMessages,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
@@ -86,6 +111,7 @@ fun ConversationScreen(
     ui: ConversationUIState,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
+    pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>? = null,
     onTextChanged: (text: String) -> Unit = {},
     onSend20Messages: () -> Unit = {},
     onSend500Messages: () -> Unit = {},
@@ -96,8 +122,14 @@ fun ConversationScreen(
     val scope = rememberCoroutineScope()
 
     // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(ui.messages.size) {
-        if (ui.messages.isNotEmpty()) {
+    LaunchedEffect(pagedMessages?.itemCount ?: ui.messages.size) {
+        val hasMessages = if (pagedMessages != null) {
+            pagedMessages.itemCount > 0
+        } else {
+            ui.messages.isNotEmpty()
+        }
+        
+        if (hasMessages) {
             scope.launch {
                 listState.animateScrollToItem(0)
             }
@@ -142,15 +174,35 @@ fun ConversationScreen(
                     bottom = 8.dp
                 )
             ) {
-                items(ui.messages.reversed()) { m ->
-                    MessageBubble(
-                        text = m.text,
-                        displayTime = m.displayTime,
-                        isMine = m.isMine,
-                        isReadByEveryone = m.isReadByEveryone,
-                        senderName = m.senderName,
-                        status = m.status
-                    )
+                // Use paged messages if available (Room + Paging3), otherwise use regular list
+                if (pagedMessages != null) {
+                    // Paging3 implementation - loads 50 at a time
+                    android.util.Log.d("ConversationScreen", "📄 Paging3: itemCount=${pagedMessages.itemCount}")
+                    items(count = pagedMessages.itemCount) { index ->
+                        val m = pagedMessages[index]
+                        if (m != null) {
+                            MessageBubble(
+                                text = m.text,
+                                displayTime = formatTime(m.createdAtMs),
+                                isMine = m.isMine,
+                                isReadByEveryone = m.isReadByEveryone,
+                                senderName = null,  // TODO: Get from users map
+                                status = m.status
+                            )
+                        }
+                    }
+                } else {
+                    // Regular implementation - loads all at once
+                    items(ui.messages.reversed()) { m ->
+                        MessageBubble(
+                            text = m.text,
+                            displayTime = m.displayTime,
+                            isMine = m.isMine,
+                            isReadByEveryone = m.isReadByEveryone,
+                            senderName = m.senderName,
+                            status = m.status
+                        )
+                    }
                 }
             }
 

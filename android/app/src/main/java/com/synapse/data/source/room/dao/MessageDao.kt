@@ -1,5 +1,6 @@
 package com.synapse.data.source.room.dao
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -15,8 +16,18 @@ import kotlinx.coroutines.flow.Flow
 interface MessageDao {
 
     /**
+     * Observe messages for a conversation with pagination support.
+     * Returns PagingSource for efficient loading of large message lists.
+     * 
+     * Sorted DESC so newest messages appear first (for reverseLayout in LazyColumn).
+     */
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAtMs DESC")
+    fun observeMessagesPaged(conversationId: String): PagingSource<Int, MessageRoomEntity>
+
+    /**
      * Observe all messages for a conversation (sorted by timestamp).
      * Returns a Flow that updates automatically when Room data changes.
+     * Used for non-paged scenarios.
      */
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAtMs ASC")
     fun observeMessages(conversationId: String): Flow<List<MessageRoomEntity>>

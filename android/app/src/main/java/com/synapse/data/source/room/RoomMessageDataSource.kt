@@ -1,6 +1,10 @@
 package com.synapse.data.source.room
 
 import android.util.Log
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.entity.MessageEntity
@@ -103,6 +107,36 @@ class RoomMessageDataSource @Inject constructor(
             syncJob.cancel()
             emitJob.cancel()
             Log.d(TAG, "🔌 [ROOM] listenMessages CLOSED: $conversationId")
+        }
+    }
+    
+    /**
+     * Observe messages with Paging3 support (efficient for large lists).
+     * 
+     * BENEFITS:
+     * - Loads messages in chunks (50 at a time)
+     * - Scroll up → automatically loads more
+     * - UI always responsive (never loads all 2500 at once!)
+     * 
+     * Also starts Firebase sync in background.
+     */
+    fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>> {
+        Log.d(TAG, "📄 [ROOM] observeMessagesPaged START: $conversationId")
+        
+        // Start Firebase → Room sync in background
+        ensureConversationSync(conversationId)
+        
+        // Return Pager with Room as data source
+        return Pager(
+            config = PagingConfig(
+                pageSize = 50,
+                prefetchDistance = 15,
+                enablePlaceholders = false,
+                initialLoadSize = 50
+            ),
+            pagingSourceFactory = { messageDao.observeMessagesPaged(conversationId) }
+        ).flow.map { pagingData ->
+            pagingData.map { roomEntity -> roomEntity.toEntity() }
         }
     }
     
