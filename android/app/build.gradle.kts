@@ -24,7 +24,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "USE_ROOM_MESSAGES", "false")  // Feature flag for Room cache
+        }
         release {
+            buildConfigField("boolean", "USE_ROOM_MESSAGES", "false")  // Feature flag for Room cache
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -73,6 +77,11 @@ dependencies {
     implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.coil.compose)
+    
+    // Room - Local database for caching
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    kapt(libs.androidx.room.compiler)
     
     // Timber - Better logging (auto-removes logs in release builds)
     implementation("com.jakewharton.timber:timber:5.0.1")

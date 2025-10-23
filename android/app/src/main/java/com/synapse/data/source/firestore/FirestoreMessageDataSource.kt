@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.entity.MessageEntity
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,7 @@ import javax.inject.Singleton
 class FirestoreMessageDataSource @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
-) {
+) : IMessageDataSource {
     
     // ============================================================
     // READ OPERATIONS
@@ -35,7 +36,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * Listen to all messages in a conversation, ordered by creation time.
      * Returns raw Firestore data.
      */
-    fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
+    override fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ listenMessages START: $conversationId")
         
@@ -114,7 +115,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param text The message text
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    suspend fun sendMessage(
+    override suspend fun sendMessage(
         conversationId: String,
         text: String,
         memberIds: List<String>
@@ -174,7 +175,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * 
      * This is MUCH more efficient than creating separate listeners per conversation.
      */
-    fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> = callbackFlow {
+    override fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ observeAllUnreadCounts START")
         
@@ -228,7 +229,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * 
      * This is MUCH more efficient than creating separate listeners per conversation.
      */
-    fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> = callbackFlow {
+    override fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ observeAllUnreceivedMessages START")
         
@@ -284,7 +285,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param conversationId The conversation ID
      * @param messageIds List of message IDs to mark as received
      */
-    suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
+    override suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
         val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
@@ -331,7 +332,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * 
      * @return Flow of message IDs that haven't been read yet
      */
-    fun observeUnreadMessages(conversationId: String): Flow<List<String>> = callbackFlow {
+    override fun observeUnreadMessages(conversationId: String): Flow<List<String>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ observeUnreadMessages START: $conversationId")
         
@@ -381,7 +382,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param conversationId The conversation ID
      * @param messageIds List of message IDs to mark as read
      */
-    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+    override suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
         val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
@@ -432,7 +433,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param messages List of message texts to send
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
+    override suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
         val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         

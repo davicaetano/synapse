@@ -1,6 +1,8 @@
 package com.synapse.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
+import com.synapse.BuildConfig
+import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.FirestoreUserDataSource
@@ -9,6 +11,7 @@ import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.data.source.realtime.entity.PresenceEntity
+import com.synapse.data.source.room.RoomMessageDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -23,16 +26,30 @@ import javax.inject.Singleton
  * - NO combining multiple flows (ViewModel does that)
  * - Only coordinates write operations (send message + update metadata)
  *
+ * BRANCH BY ABSTRACTION:
+ * - Uses RoomMessageDataSource when BuildConfig.USE_ROOM_MESSAGES = true
+ * - Falls back to FirestoreMessageDataSource when false
+ * - Allows safe testing of Room implementation without breaking existing code
+ *
  * Philosophy: Keep it simple. Repository exposes data, ViewModel processes it.
  */
 @Singleton
 class ConversationRepository @Inject constructor(
     private val conversationDataSource: FirestoreConversationDataSource,
-    private val messageDataSource: FirestoreMessageDataSource,
+    private val firestoreMessageDataSource: FirestoreMessageDataSource,
+    private val roomMessageDataSource: RoomMessageDataSource,
     private val userDataSource: FirestoreUserDataSource,
     private val presenceDataSource: RealtimePresenceDataSource,
     private val auth: FirebaseAuth
 ) {
+    
+    // Branch by Abstraction: Choose message data source based on feature flag
+//    private val messageDataSource: IMessageDataSource = if (BuildConfig.USE_ROOM_MESSAGES) {
+    private val messageDataSource: IMessageDataSource = if (true) {
+        roomMessageDataSource
+    } else {
+        firestoreMessageDataSource
+    }
 
     // ============================================================
     // READ OPERATIONS (simple flows, NO complex transformations)
