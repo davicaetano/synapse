@@ -311,7 +311,11 @@ class ConversationViewModel @Inject constructor(
         // Remove typing indicator when sending message
         viewModelScope.launch {
             typingRepo.removeTyping(conversationId)
-            convRepo.sendMessage(conversationId, text)
+            
+            // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
+            val memberIds = uiState.value.members.map { it.id }
+            
+            convRepo.sendMessage(conversationId, text, memberIds)
         }
     }
     
@@ -321,8 +325,12 @@ class ConversationViewModel @Inject constructor(
     fun send20Messages() {
         viewModelScope.launch {
             Log.d("ConversationViewModel", "Sending 20 messages via batch...")
+            
+            // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
+            val memberIds = uiState.value.members.map { it.id }
+            
             val messages = (1..20).map { i -> "Test message #$i" }
-            convRepo.sendMessagesBatch(conversationId, messages)
+            convRepo.sendMessagesBatch(conversationId, messages, memberIds)
             Log.d("ConversationViewModel", "✅ 20 messages sent successfully")
         }
     }

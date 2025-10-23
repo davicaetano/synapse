@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -28,8 +30,18 @@ class InboxViewModel @Inject constructor(
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
     
-    override fun onCleared() {
-        super.onCleared()
+    // Background: Mark messages as received (independent side effect)
+    init {
+        val userId = auth.currentUser?.uid ?: ""
+        conversationsRepo.observeAllUnreceivedMessages(userId)
+            .onEach { unreceivedByConv ->
+                unreceivedByConv.forEach { (convId, messageIds) ->
+                    viewModelScope.launch {
+                        conversationsRepo.markMessagesAsReceived(convId, messageIds)
+                    }
+                }
+            }
+            .launchIn(viewModelScope)
     }
     
     // StateFlow created ONCE when ViewModel is created
@@ -105,7 +117,7 @@ class InboxViewModel @Inject constructor(
             Triple(typing, unreadCounts, isConnected)
         }
         
-        // STEP 9: Combine everything and build UI state (max 5 flows)
+        // STEP 9: Combine everything and build UI state
         combine(
             conversationsFlow,
             usersFlow,
@@ -144,13 +156,6 @@ class InboxViewModel @Inject constructor(
         val items = conversations.mapNotNull { conv ->
             buildInboxItem(userId, conv, usersMap, presence, typing, unreadCounts)
         }.sortedByDescending { it.updatedAtMs }
-        
-        // Background: mark messages as received (don't wait for this)
-        conversations.forEach { conv ->
-            viewModelScope.launch {
-                conversationsRepo.markLastMessageAsReceived(conv.id)
-            }
-        }
         
         return InboxUIState(items = items, isLoading = false, isConnected = isConnected)
     }

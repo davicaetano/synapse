@@ -64,6 +64,12 @@ class FirestoreMessageDataSource @Inject constructor(
                         readBy = (doc.get("readBy") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
+                        notReceivedBy = (doc.get("notReceivedBy") as? List<*>)
+                            ?.mapNotNull { it as? String } 
+                            ?: emptyList(),
+                        memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
+                            ?.mapNotNull { it as? String } 
+                            ?: emptyList(),
                         serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
                     )
                 } catch (e: Exception) {
@@ -92,16 +98,26 @@ class FirestoreMessageDataSource @Inject constructor(
      * Returns the new message ID if successful.
      * 
      * Note: The sender is automatically added to receivedBy and readBy.
+     * 
+     * @param conversationId The conversation ID
+     * @param text The message text
+     * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
     suspend fun sendMessage(
         conversationId: String,
-        text: String
+        text: String,
+        memberIds: List<String>
     ): String? {
         val userId = auth.currentUser?.uid
         if (userId == null) {
             return null
         }
         
+        // notReceivedBy = all members except sender
+        val notReceivedBy = memberIds.filter { it != userId }
+        
+        // memberIdsAtCreation = snapshot of all members at this moment
+        val memberIdsAtCreation = memberIds
         
         val messageData = hashMapOf(
             "text" to text,
@@ -109,6 +125,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "createdAtMs" to System.currentTimeMillis(),
             "receivedBy" to listOf(userId),  // Sender has received their own message
             "readBy" to listOf(userId),      // Sender has read their own message
+            "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
+            "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
             "serverTimestamp" to FieldValue.serverTimestamp()  // Server assigns actual timestamp
         )
         
@@ -124,37 +142,6 @@ class FirestoreMessageDataSource @Inject constructor(
             // Even if there's an error (e.g. offline), Firestore should have cached it
             // The listener will pick it up and show it as PENDING
             null
-        }
-    }
-    
-    /**
-     * Mark multiple messages as read by the current user.
-     * Also marks them as received (you can't read without receiving first).
-     * Batch operation for efficiency.
-     */
-    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
-        val userId = auth.currentUser?.uid ?: return
-        if (messageIds.isEmpty()) return
-        
-        try {
-            // Use batch write for efficiency
-            val batch = firestore.batch()
-            
-            messageIds.forEach { messageId ->
-                val docRef = firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .document(messageId)
-                
-                // Update BOTH readBy and receivedBy
-                batch.update(docRef, "readBy", FieldValue.arrayUnion(userId))
-                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
-            }
-            
-            batch.commit().await()
-            Log.d(TAG, "Marked ${messageIds.size} messages as read and received")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error marking messages as read", e)
         }
     }
     
@@ -262,36 +249,84 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
-     * Mark the last message in a conversation as received by the current user.
-     * Uses the optimization: if the last message is received, all previous ones are too.
+     * Observe ALL unreceived messages across ALL conversations for a user.
+     * 
+     * Uses collectionGroup to query across all conversations in a single query!
+     * Returns a Map of conversationId → list of unreceived messageIds.
+     * 
+     * This is MUCH more efficient than creating separate listeners per conversation.
      */
-    suspend fun markLastMessageAsReceived(conversationId: String) {
+    fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> = callbackFlow {
+        if (userId.isEmpty()) {
+            send(emptyMap())
+            close()
+            return@callbackFlow
+        }
+        
+        // Single listener for ALL unreceived messages across ALL conversations!
+        val listener = firestore.collectionGroup("messages")
+            .whereArrayContains("notReceivedBy", userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "❌ Error observing unreceived messages", error)
+                    trySend(emptyMap())
+                    return@addSnapshotListener
+                }
+                
+                // Group messages by conversationId
+                val messagesByConv = snapshot?.documents
+                    ?.groupBy { doc ->
+                        // Extract conversationId from path: conversations/{convId}/messages/{msgId}
+                        doc.reference.parent.parent?.id ?: ""
+                    }
+                    ?.filterKeys { it.isNotEmpty() }
+                    ?.mapValues { (_, docs) -> docs.map { it.id } }
+                    ?: emptyMap()
+                
+                trySend(messagesByConv)
+                Log.d(TAG, "✅ Unreceived messages: ${messagesByConv.size} conversations, ${messagesByConv.values.sumOf { it.size }} total messages")
+            }
+        
+        awaitClose { listener.remove() }
+    }
+    
+    /**
+     * Mark specific messages as received by the current user.
+     * 
+     * Updates:
+     * - Removes userId from notReceivedBy array
+     * - Adds userId to receivedBy array
+     * 
+     * @param conversationId The conversation ID
+     * @param messageIds List of message IDs to mark as received
+     */
+    suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
         val userId = auth.currentUser?.uid ?: return
         
+        if (messageIds.isEmpty()) {
+            // Nothing to mark!
+            return
+        }
+        
         try {
-            // Get the last message (ordered by createdAtMs descending, limit 1)
-            val lastMessageSnapshot = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .orderBy("createdAtMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                .limit(1)
-                .get()
-                .await()
+            // Use batch to update all unreceived messages
+            val batch = firestore.batch()
             
-            val lastMessage = lastMessageSnapshot.documents.firstOrNull()
-            if (lastMessage != null) {
-                val receivedBy = (lastMessage.get("receivedBy") as? List<*>)
-                    ?.mapNotNull { it as? String }
-                    ?: emptyList()
+            messageIds.forEach { messageId ->
+                val docRef = firestore.collection("conversations")
+                    .document(conversationId)
+                    .collection("messages")
+                    .document(messageId)
                 
-                // Only update if current user is not already in receivedBy
-                if (userId !in receivedBy) {
-                    lastMessage.reference.update("receivedBy", FieldValue.arrayUnion(userId)).await()
-                    Log.d(TAG, "Marked last message in $conversationId as received")
-                }
+                // Remove from notReceivedBy + Add to receivedBy
+                batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
+                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
             }
+            
+            batch.commit().await()
+            Log.d(TAG, "✅ Marked ${messageIds.size} messages as received in $conversationId")
         } catch (e: Exception) {
-            Log.e(TAG, "Error marking last message as received in $conversationId", e)
+            Log.e(TAG, "❌ Error marking messages as received in $conversationId", e)
         }
     }
     
@@ -302,13 +337,20 @@ class FirestoreMessageDataSource @Inject constructor(
      * 
      * @param conversationId The conversation ID
      * @param messages List of message texts to send
+     * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>) {
+    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
         val userId = auth.currentUser?.uid ?: return
         
         if (messages.isEmpty()) return
         
         try {
+            // notReceivedBy = all members except sender
+            val notReceivedBy = memberIds.filter { it != userId }
+            
+            // memberIdsAtCreation = snapshot of all members at this moment
+            val memberIdsAtCreation = memberIds
+            
             val batch = firestore.batch()
             val timestamp = System.currentTimeMillis()
             
@@ -326,6 +368,8 @@ class FirestoreMessageDataSource @Inject constructor(
                     "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
                     "receivedBy" to listOf(userId), // Sender has received their own message
                     "readBy" to listOf(userId),     // Sender has read their own message
+                    "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
+                    "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
                     "serverTimestamp" to FieldValue.serverTimestamp() // Server assigns actual timestamp
                 )
                 

@@ -96,11 +96,15 @@ class ConversationRepository @Inject constructor(
     /**
      * Send a message to a conversation.
      * Coordinates: create message + update conversation metadata.
+     * 
+     * @param conversationId The conversation ID
+     * @param text The message text
+     * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    suspend fun sendMessage(conversationId: String, text: String) {
+    suspend fun sendMessage(conversationId: String, text: String, memberIds: List<String>) {
 
         // Send message (may return null if offline, but Firestore caches it)
-        messageDataSource.sendMessage(conversationId, text)
+        messageDataSource.sendMessage(conversationId, text, memberIds)
 
         // ALWAYS update conversation metadata, even if messageId is null
         // This ensures the inbox shows the latest message immediately,
@@ -181,19 +185,35 @@ class ConversationRepository @Inject constructor(
     }
 
     /**
-     * Mark the last message in a conversation as received.
-     * Optimization: if last message is received, all previous ones are too.
+     * Observe ALL unreceived messages across ALL conversations for the current user.
+     * Returns a Map of conversationId → list of unreceived messageIds.
+     * 
+     * Uses a single Firestore collectionGroup query - MUCH more efficient!
      */
-    suspend fun markLastMessageAsReceived(conversationId: String) {
-        messageDataSource.markLastMessageAsReceived(conversationId)
+    fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> {
+        return messageDataSource.observeAllUnreceivedMessages(userId)
+    }
+    
+    /**
+     * Mark specific messages as received in a conversation.
+     * 
+     * @param conversationId The conversation ID
+     * @param messageIds List of message IDs to mark as received
+     */
+    suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
+        messageDataSource.markMessagesAsReceived(conversationId, messageIds)
     }
     
     /**
      * Send multiple messages using Firestore batch write (for performance testing).
      * All messages are sent in a single transaction.
+     * 
+     * @param conversationId The conversation ID
+     * @param messages List of message texts to send
+     * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>) {
-        messageDataSource.sendMessagesBatch(conversationId, messages)
+    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
+        messageDataSource.sendMessagesBatch(conversationId, messages, memberIds)
         // Update conversation metadata with the last message
         if (messages.isNotEmpty()) {
             conversationDataSource.updateConversationMetadata(
