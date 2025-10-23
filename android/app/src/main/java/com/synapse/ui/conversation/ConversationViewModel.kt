@@ -382,6 +382,10 @@ class ConversationViewModel @Inject constructor(
             
             val messages = (1..20).map { i -> "Test message #$i" }
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
+            
+            // Update lastMessageSentAt (for badge logic)
+            convRepo.updateMemberLastMessageSentAtNow(conversationId)
+            
             Log.d("ConversationViewModel", "✅ 20 messages sent successfully")
         }
     }
@@ -398,6 +402,10 @@ class ConversationViewModel @Inject constructor(
             
             val messages = (1..500).map { i -> "Test message #$i" }
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
+            
+            // Update lastMessageSentAt (for badge logic)
+            convRepo.updateMemberLastMessageSentAtNow(conversationId)
+            
             Log.d(TAG, "✅ 500 messages sent successfully")
         }
     }
