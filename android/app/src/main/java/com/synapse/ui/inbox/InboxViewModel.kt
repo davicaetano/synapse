@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 @HiltViewModel
 class InboxViewModel @Inject constructor(
@@ -74,18 +73,46 @@ class InboxViewModel @Inject constructor(
                 }
             }
         
-        // STEP 6: Observe network connectivity
+        // STEP 6: Observe unread counts for all conversations
+        val unreadCountsFlow = conversationsFlow
+            .map { convs -> convs.map { it.id } }
+            .distinctUntilChanged()
+            .flatMapLatest { conversationIds ->
+                if (conversationIds.isEmpty()) {
+                    flowOf(emptyMap())
+                } else {
+                    // Combine unread count Flows for all conversations
+                    combine(
+                        conversationIds.map { convId ->
+                            conversationsRepo.observeUnreadMessageCount(convId)
+                                .map { count -> convId to count }
+                        }
+                    ) { countsArray ->
+                        countsArray.toMap()
+                    }
+                }
+            }
+        
+        // STEP 7: Observe network connectivity
         val isConnectedFlow = networkMonitor.isConnected
         
-        // STEP 7: Combine everything and build UI state
+        // STEP 8: Combine typing + unreadCounts + isConnected (to avoid 6-flow limit)
+        val typingAndCountsFlow = combine(
+            typingFlow,
+            unreadCountsFlow,
+            isConnectedFlow
+        ) { typing, unreadCounts, isConnected ->
+            Triple(typing, unreadCounts, isConnected)
+        }
+        
+        // STEP 9: Combine everything and build UI state (max 5 flows)
         combine(
             conversationsFlow,
             usersFlow,
             presenceFlow,
-            typingFlow,
-            isConnectedFlow
-        ) { conversations, users, presence, typing, isConnected ->
-            buildInboxUIState(userId, conversations, users, presence, typing, isConnected)
+            typingAndCountsFlow
+        ) { conversations, users, presence, (typing, unreadCounts, isConnected) ->
+            buildInboxUIState(userId, conversations, users, presence, typing, unreadCounts, isConnected)
         }.stateIn(
             viewModelScope,
             SharingStarted.Lazily, // Keep listeners active - no reload when navigating back
@@ -103,6 +130,7 @@ class InboxViewModel @Inject constructor(
         users: List<com.synapse.data.source.firestore.entity.UserEntity>,
         presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
         typing: Map<String, List<com.synapse.domain.user.User>>,
+        unreadCounts: Map<String, Int>,
         isConnected: Boolean
     ): InboxUIState {
         if (conversations.isEmpty()) {
@@ -112,14 +140,7 @@ class InboxViewModel @Inject constructor(
         // Build user map
         val usersMap = users.associateBy { it.id }
         
-        // Get unread counts with timeout (don't block UI if Firestore is slow)
-        val unreadCounts = withTimeoutOrNull(2000) {
-            conversations.associate { conv ->
-                conv.id to conversationsRepo.getUnreadMessageCount(conv.id)
-            }
-        } ?: emptyMap()
-        
-        // Transform to UI items
+        // Transform to UI items (unreadCounts comes from reactive Flow)
         val items = conversations.mapNotNull { conv ->
             buildInboxItem(userId, conv, usersMap, presence, typing, unreadCounts)
         }.sortedByDescending { it.updatedAtMs }

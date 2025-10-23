@@ -17,12 +17,12 @@ import javax.inject.Singleton
 
 /**
  * Repository for conversation operations.
- * 
+ *
  * RESPONSIBILITY: Simple data access - expose flows from DataSources.
  * - NO complex transformations or nested flatMapLatest
  * - NO combining multiple flows (ViewModel does that)
  * - Only coordinates write operations (send message + update metadata)
- * 
+ *
  * Philosophy: Keep it simple. Repository exposes data, ViewModel processes it.
  */
 @Singleton
@@ -33,11 +33,11 @@ class ConversationRepository @Inject constructor(
     private val presenceDataSource: RealtimePresenceDataSource,
     private val auth: FirebaseAuth
 ) {
-    
+
     // ============================================================
     // READ OPERATIONS (simple flows, NO complex transformations)
     // ============================================================
-    
+
     /**
      * Observe raw conversations for a user.
      * Returns ConversationEntity without users or presence data.
@@ -46,7 +46,7 @@ class ConversationRepository @Inject constructor(
     fun observeConversations(userId: String): Flow<List<ConversationEntity>> {
         return conversationDataSource.listenConversations(userId)
     }
-    
+
     /**
      * Observe messages in a conversation.
      * Returns raw MessageEntity list.
@@ -54,7 +54,7 @@ class ConversationRepository @Inject constructor(
     fun observeMessages(conversationId: String): Flow<List<MessageEntity>> {
         return messageDataSource.listenMessages(conversationId)
     }
-    
+
     /**
      * Observe users by IDs.
      * Simple passthrough - ViewModel manages when to call this.
@@ -66,7 +66,7 @@ class ConversationRepository @Inject constructor(
             userDataSource.listenUsersByIds(userIds)
         }
     }
-    
+
     /**
      * Observe presence for multiple users.
      * Simple passthrough - ViewModel manages when to call this.
@@ -78,7 +78,7 @@ class ConversationRepository @Inject constructor(
             presenceDataSource.listenMultiplePresence(userIds)
         }
     }
-    
+
     /**
      * Get a single conversation entity by ID.
      * Observes all user's conversations and filters by ID.
@@ -88,20 +88,20 @@ class ConversationRepository @Inject constructor(
         return conversationDataSource.listenConversations(userId)
             .map { conversations -> conversations.find { it.id == conversationId } }
     }
-    
+
     // ============================================================
     // WRITE OPERATIONS (coordinating multiple DataSources)
     // ============================================================
-    
+
     /**
      * Send a message to a conversation.
      * Coordinates: create message + update conversation metadata.
      */
     suspend fun sendMessage(conversationId: String, text: String) {
-        
+
         // Send message (may return null if offline, but Firestore caches it)
-        val messageId = messageDataSource.sendMessage(conversationId, text)
-        
+        messageDataSource.sendMessage(conversationId, text)
+
         // ALWAYS update conversation metadata, even if messageId is null
         // This ensures the inbox shows the latest message immediately,
         // even when offline (Firestore will sync when back online)
@@ -112,7 +112,7 @@ class ConversationRepository @Inject constructor(
             timestamp = timestamp
         )
     }
-    
+
     /**
      * Get or create a direct conversation with another user.
      * Returns conversation ID.
@@ -120,10 +120,10 @@ class ConversationRepository @Inject constructor(
     suspend fun getOrCreateDirectConversation(otherUserId: String): String? {
         val myId = auth.currentUser?.uid ?: return null
         val userIds = listOf(myId, otherUserId).sorted()
-        
+
         return conversationDataSource.createDirectConversation(userIds)
     }
-    
+
     /**
      * Create a self conversation (user talking to themselves / AI).
      */
@@ -131,55 +131,55 @@ class ConversationRepository @Inject constructor(
         val userId = auth.currentUser?.uid ?: return null
         return conversationDataSource.createSelfConversation(userId)
     }
-    
+
     /**
      * Create a group conversation.
      * Current user is automatically set as the admin/creator.
-     * 
+     *
      * @param memberIds List of user IDs to add to group (can be empty to create group with just yourself)
      * @param groupName Optional group name
      */
     suspend fun createGroupConversation(memberIds: List<String>, groupName: String? = null): String? {
         val currentUserId = auth.currentUser?.uid ?: return null
-        
+
         // Always include current user in the group
         val allMemberIds = (memberIds + currentUserId).distinct()
-        
+
         return conversationDataSource.createGroupConversation(
             memberIds = allMemberIds,
             groupName = groupName,
             createdBy = currentUserId  // Current user is the admin
         )
     }
-    
+
     /**
      * Add a user to a group conversation.
      */
     suspend fun addUserToGroup(conversationId: String, userId: String) {
         conversationDataSource.addMemberToGroup(conversationId, userId)
     }
-    
+
     /**
      * Remove a user from a group conversation.
      */
     suspend fun removeUserFromGroup(conversationId: String, userId: String) {
         conversationDataSource.removeMemberFromGroup(conversationId, userId)
     }
-    
+
     /**
      * Mark all messages in a conversation as read.
      */
     suspend fun markConversationAsRead(conversationId: String) {
         messageDataSource.markAllMessagesAsRead(conversationId)
     }
-    
+
     /**
      * Get unread message count for a conversation.
      */
-    suspend fun getUnreadMessageCount(conversationId: String): Int {
-        return messageDataSource.getUnreadMessageCount(conversationId)
+    fun observeUnreadMessageCount(conversationId: String): Flow<Int> {
+        return messageDataSource.observeUnreadMessageCount(conversationId)
     }
-    
+
     /**
      * Mark the last message in a conversation as received.
      * Optimization: if last message is received, all previous ones are too.

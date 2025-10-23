@@ -208,32 +208,56 @@ class FirestoreMessageDataSource @Inject constructor(
     }
 
     /**
-     * Count unread messages in a conversation for the current user.
+     * Observe unread message count in a conversation for the current user.
+     * 
+     * FLOW STRATEGY:
+     * 1. Emits 0 immediately (instant UI render)
+     * 2. Listens to Firestore in real-time (snapshot listener)
+     * 3. Emits updated count whenever messages change
+     * 
      * A message is unread if:
      * - senderId != currentUserId (not my message)
      * - readBy does NOT contain currentUserId (I haven't read it)
      */
-    suspend fun getUnreadMessageCount(conversationId: String): Int {
-        val userId = auth.currentUser?.uid ?: return 0
+    fun observeUnreadMessageCount(conversationId: String): Flow<Int> = callbackFlow {
+        val userId = auth.currentUser?.uid
         
-        return try {
-            val snapshot = firestore.collection("conversations")
-                .document(conversationId)
-                .collection("messages")
-                .whereNotEqualTo("senderId", userId)  // Not my messages
-                .get()
-                .await()
-            
-            // Count messages where readBy doesn't contain current user
-            snapshot.documents.count { doc ->
-                val readBy = (doc.get("readBy") as? List<*>)
-                    ?.mapNotNull { it as? String }
-                    ?: emptyList()
-                userId !in readBy
+        if (userId == null) {
+            send(0)
+            close()
+            return@callbackFlow
+        }
+
+        // 1️⃣ Send 0 immediately (instant UI)
+        send(0)
+        
+        // 2️⃣ Listen to Firestore in real-time
+        val listenerRegistration = firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .whereNotEqualTo("senderId", userId)  // Not my messages
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error listening to unread messages in $conversationId", error)
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    // Count messages where readBy doesn't contain current user
+                    val unreadCount = snapshot.documents.count { doc ->
+                        val readBy = (doc.get("readBy") as? List<*>)
+                            ?.mapNotNull { it as? String }
+                            ?: emptyList()
+                        userId !in readBy
+                    }
+                    
+                    // 3️⃣ Send updated count
+                    trySend(unreadCount)
+                }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error counting unread messages in $conversationId", e)
-            0
+        
+        awaitClose {
+            listenerRegistration.remove()
         }
     }
     
