@@ -171,10 +171,13 @@ class ConversationRepository @Inject constructor(
     }
 
     /**
-     * Get unread message count for a conversation.
+     * Observe unread message counts across ALL conversations for a user.
+     * Returns a Map of conversationId → unread count.
+     * 
+     * Uses a single Firestore collectionGroup query - MUCH more efficient!
      */
-    fun observeUnreadMessageCount(conversationId: String): Flow<Int> {
-        return messageDataSource.observeUnreadMessageCount(conversationId)
+    fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> {
+        return messageDataSource.observeAllUnreadCounts(userId)
     }
 
     /**

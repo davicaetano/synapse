@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -33,7 +34,7 @@ class InboxViewModel @Inject constructor(
     // Background: Mark messages as received (independent side effect)
     init {
         val userId = auth.currentUser?.uid ?: ""
-        conversationsRepo.observeAllUnreceivedMessages(userId)
+        conversationsRepo.observeAllUnreceivedMessages(userId).distinctUntilChanged()
             .onEach { unreceivedByConv ->
                 unreceivedByConv.forEach { (convId, messageIds) ->
                     viewModelScope.launch {
@@ -85,25 +86,9 @@ class InboxViewModel @Inject constructor(
                 }
             }
         
-        // STEP 6: Observe unread counts for all conversations
-        val unreadCountsFlow = conversationsFlow
-            .map { convs -> convs.map { it.id } }
-            .distinctUntilChanged()
-            .flatMapLatest { conversationIds ->
-                if (conversationIds.isEmpty()) {
-                    flowOf(emptyMap())
-                } else {
-                    // Combine unread count Flows for all conversations
-                    combine(
-                        conversationIds.map { convId ->
-                            conversationsRepo.observeUnreadMessageCount(convId)
-                                .map { count -> convId to count }
-                        }
-                    ) { countsArray ->
-                        countsArray.toMap()
-                    }
-                }
-            }
+        // STEP 6: Observe unread counts for all conversations (1 listener!)
+        val unreadCountsFlow = conversationsRepo.observeAllUnreadCounts(userId)
+            .onStart { emit(emptyMap()) }  // ✅ Emit immediately - don't wait for Firestore!
         
         // STEP 7: Observe network connectivity
         val isConnectedFlow = networkMonitor.isConnected

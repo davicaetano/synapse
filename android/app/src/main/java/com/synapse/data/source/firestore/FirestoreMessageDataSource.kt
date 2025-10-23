@@ -36,15 +36,17 @@ class FirestoreMessageDataSource @Inject constructor(
      * Returns raw Firestore data.
      */
     fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "⏱️ listenMessages START: $conversationId")
         
         val ref = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
             .orderBy("createdAtMs")
         
+        var firstEmission = true
         val registration = ref.addSnapshotListener { snapshot, error ->
             val isFromCache = snapshot?.metadata?.isFromCache ?: false
-            val hasPendingWrites = snapshot?.metadata?.hasPendingWrites() ?: false
             
             if (error != null) {
                 trySend(emptyList())
@@ -84,6 +86,12 @@ class FirestoreMessageDataSource @Inject constructor(
                 val last = messages.last()
             }
             
+            if (firstEmission) {
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d(TAG, "⏱️ listenMessages FIRST EMIT: $conversationId - ${messages.size} msgs in ${elapsed}ms (fromCache=$isFromCache)")
+                firstEmission = false
+            }
+            
             trySend(messages)
         }
         
@@ -111,6 +119,7 @@ class FirestoreMessageDataSource @Inject constructor(
         text: String,
         memberIds: List<String>
     ): String? {
+        val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid
         if (userId == null) {
             return null
@@ -144,8 +153,13 @@ class FirestoreMessageDataSource @Inject constructor(
                 .add(messageData)
                 .await()
             
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ sendMessage: ${elapsed}ms")
+            
             docRef.id
         } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "⏱️ sendMessage FAILED: ${elapsed}ms", e)
             // Even if there's an error (e.g. offline), Firestore should have cached it
             // The listener will pick it up and show it as PENDING
             null
@@ -153,47 +167,57 @@ class FirestoreMessageDataSource @Inject constructor(
     }
     
     /**
-     * Observe unread message count in a conversation for the current user.
+     * Observe unread message counts across ALL conversations for a user.
      * 
-     * OPTIMIZED: Uses notReadBy field for super efficient counting.
-     * Only fetches messages where notReadBy contains the current user.
+     * Uses collectionGroup to query across all conversations in a single query!
+     * Returns a Map of conversationId → unread count.
      * 
-     * FLOW STRATEGY:
-     * 1. Emits 0 immediately (instant UI render)
-     * 2. Listens to Firestore in real-time (snapshot listener)
-     * 3. Emits updated count whenever unread messages change
+     * This is MUCH more efficient than creating separate listeners per conversation.
      */
-    fun observeUnreadMessageCount(conversationId: String): Flow<Int> = callbackFlow {
-        val userId = auth.currentUser?.uid
+    fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> = callbackFlow {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "⏱️ observeAllUnreadCounts START")
         
-        if (userId == null) {
-            send(0)
+        if (userId.isEmpty()) {
+            send(emptyMap())
             close()
             return@callbackFlow
         }
-
-        // 1️⃣ Send 0 immediately (instant UI)
-        send(0)
         
-        // 2️⃣ Listen only to messages where notReadBy contains my userId
-        val listenerRegistration = firestore.collection("conversations")
-            .document(conversationId)
-            .collection("messages")
-            .whereArrayContains("notReadBy", userId)  // ✅ Only unread messages!
+        // Emit empty map immediately so UI doesn't wait for Firestore
+        send(emptyMap())
+        
+        var firstEmission = true
+        // Single listener for ALL unread messages across ALL conversations!
+        val listener = firestore.collectionGroup("messages")
+            .whereArrayContains("notReadBy", userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    Log.e(TAG, "Error listening to unread messages in $conversationId", error)
+                    Log.e(TAG, "❌ Error observing unread counts", error)
+                    trySend(emptyMap())
                     return@addSnapshotListener
                 }
                 
-                // ✅ Just count the snapshot size - no filtering needed!
-                val unreadCount = snapshot?.size() ?: 0
-                trySend(unreadCount)
+                // Group messages by conversationId and COUNT them
+                val countsByConv = snapshot?.documents
+                    ?.groupBy { doc ->
+                        // Extract conversationId from path: conversations/{convId}/messages/{msgId}
+                        doc.reference.parent.parent?.id ?: ""
+                    }
+                    ?.filterKeys { it.isNotEmpty() }
+                    ?.mapValues { (_, docs) -> docs.size }  // Just count the docs!
+                    ?: emptyMap()
+                
+                if (firstEmission) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    Log.d(TAG, "⏱️ observeAllUnreadCounts FIRST EMIT: ${countsByConv.size} convs, ${countsByConv.values.sum()} total unread in ${elapsed}ms")
+                    firstEmission = false
+                }
+                
+                trySend(countsByConv)
             }
         
-        awaitClose {
-            listenerRegistration.remove()
-        }
+        awaitClose { listener.remove() }
     }
     
     /**
@@ -205,12 +229,19 @@ class FirestoreMessageDataSource @Inject constructor(
      * This is MUCH more efficient than creating separate listeners per conversation.
      */
     fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> = callbackFlow {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "⏱️ observeAllUnreceivedMessages START")
+        
         if (userId.isEmpty()) {
             send(emptyMap())
             close()
             return@callbackFlow
         }
         
+        // Emit empty map immediately so UI doesn't wait for Firestore
+        send(emptyMap())
+        
+        var firstEmission = true
         // Single listener for ALL unreceived messages across ALL conversations!
         val listener = firestore.collectionGroup("messages")
             .whereArrayContains("notReceivedBy", userId)
@@ -231,8 +262,13 @@ class FirestoreMessageDataSource @Inject constructor(
                     ?.mapValues { (_, docs) -> docs.map { it.id } }
                     ?: emptyMap()
                 
+                if (firstEmission) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    Log.d(TAG, "⏱️ observeAllUnreceivedMessages FIRST EMIT: ${messagesByConv.size} convs, ${messagesByConv.values.sumOf { it.size }} msgs in ${elapsed}ms")
+                    firstEmission = false
+                }
+                
                 trySend(messagesByConv)
-                Log.d(TAG, "✅ Unreceived messages: ${messagesByConv.size} conversations, ${messagesByConv.values.sumOf { it.size }} total messages")
             }
         
         awaitClose { listener.remove() }
@@ -249,6 +285,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param messageIds List of message IDs to mark as received
      */
     suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
+        val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
         if (messageIds.isEmpty()) {
@@ -257,24 +294,32 @@ class FirestoreMessageDataSource @Inject constructor(
         }
         
         try {
-            // Use batch to update all unreceived messages
-            val batch = firestore.batch()
+            // Firestore batch limit: 500 operations
+            // We do 2 updates per message, so max 250 messages per batch
+            val BATCH_SIZE = 250
             
-            messageIds.forEach { messageId ->
-                val docRef = firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .document(messageId)
+            messageIds.chunked(BATCH_SIZE).forEach { chunk ->
+                val batch = firestore.batch()
                 
-                // Remove from notReceivedBy + Add to receivedBy
-                batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
-                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+                chunk.forEach { messageId ->
+                    val docRef = firestore.collection("conversations")
+                        .document(conversationId)
+                        .collection("messages")
+                        .document(messageId)
+                    
+                    // Remove from notReceivedBy + Add to receivedBy
+                    batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
+                    batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+                }
+                
+                batch.commit().await()
             }
             
-            batch.commit().await()
-            Log.d(TAG, "✅ Marked ${messageIds.size} messages as received in $conversationId")
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ markMessagesAsReceived: ${messageIds.size} msgs in ${elapsed}ms")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error marking messages as received in $conversationId", e)
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "⏱️ markMessagesAsReceived FAILED: ${elapsed}ms", e)
         }
     }
     
@@ -287,6 +332,9 @@ class FirestoreMessageDataSource @Inject constructor(
      * @return Flow of message IDs that haven't been read yet
      */
     fun observeUnreadMessages(conversationId: String): Flow<List<String>> = callbackFlow {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "⏱️ observeUnreadMessages START: $conversationId")
+        
         val userId = auth.currentUser?.uid
         
         if (userId == null) {
@@ -295,6 +343,7 @@ class FirestoreMessageDataSource @Inject constructor(
             return@callbackFlow
         }
         
+        var firstEmission = true
         // Listen to messages where notReadBy contains my userId
         val listener = firestore.collection("conversations")
             .document(conversationId)
@@ -308,8 +357,14 @@ class FirestoreMessageDataSource @Inject constructor(
                 }
                 
                 val messageIds = snapshot?.documents?.map { it.id } ?: emptyList()
+                
+                if (firstEmission) {
+                    val elapsed = System.currentTimeMillis() - startTime
+                    Log.d(TAG, "⏱️ observeUnreadMessages FIRST EMIT: $conversationId - ${messageIds.size} msgs in ${elapsed}ms")
+                    firstEmission = false
+                }
+                
                 trySend(messageIds)
-                Log.d(TAG, "✅ Unread messages in $conversationId: ${messageIds.size}")
             }
         
         awaitClose { listener.remove() }
@@ -327,6 +382,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param messageIds List of message IDs to mark as read
      */
     suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
+        val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
         if (messageIds.isEmpty()) {
@@ -335,27 +391,35 @@ class FirestoreMessageDataSource @Inject constructor(
         }
         
         try {
-            // Use batch to update all unread messages
-            val batch = firestore.batch()
+            // Firestore batch limit: 500 operations
+            // We do 4 updates per message, so max 125 messages per batch
+            val BATCH_SIZE = 125
             
-            messageIds.forEach { messageId ->
-                val docRef = firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .document(messageId)
+            messageIds.chunked(BATCH_SIZE).forEach { chunk ->
+                val batch = firestore.batch()
                 
-                // Remove from notReadBy + Add to readBy
-                batch.update(docRef, "notReadBy", FieldValue.arrayRemove(userId))
-                batch.update(docRef, "readBy", FieldValue.arrayUnion(userId))
-                // Also mark as received (can't read without receiving first)
-                batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
-                batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+                chunk.forEach { messageId ->
+                    val docRef = firestore.collection("conversations")
+                        .document(conversationId)
+                        .collection("messages")
+                        .document(messageId)
+                    
+                    // Remove from notReadBy + Add to readBy
+                    batch.update(docRef, "notReadBy", FieldValue.arrayRemove(userId))
+                    batch.update(docRef, "readBy", FieldValue.arrayUnion(userId))
+                    // Also mark as received (can't read without receiving first)
+                    batch.update(docRef, "notReceivedBy", FieldValue.arrayRemove(userId))
+                    batch.update(docRef, "receivedBy", FieldValue.arrayUnion(userId))
+                }
+                
+                batch.commit().await()
             }
             
-            batch.commit().await()
-            Log.d(TAG, "✅ Marked ${messageIds.size} messages as read in $conversationId")
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ markMessagesAsRead: ${messageIds.size} msgs in ${elapsed}ms")
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error marking messages as read in $conversationId", e)
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "⏱️ markMessagesAsRead FAILED: ${elapsed}ms", e)
         }
     }
     
@@ -369,9 +433,12 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
     suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
+        val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
         if (messages.isEmpty()) return
+        
+        Log.d(TAG, "⏱️ sendMessagesBatch START: ${messages.size} messages")
         
         try {
             // notReceivedBy = all members except sender
@@ -411,9 +478,11 @@ class FirestoreMessageDataSource @Inject constructor(
             
             // Commit all writes in a single transaction
             batch.commit().await()
-            Log.d(TAG, "✅ Batch sent ${messages.size} messages to $conversationId")
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ sendMessagesBatch: ${messages.size} msgs in ${elapsed}ms")
         } catch (e: Exception) {
-            Log.e(TAG, "Error sending batch messages to $conversationId", e)
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "⏱️ sendMessagesBatch FAILED: ${elapsed}ms", e)
         }
     }
     
