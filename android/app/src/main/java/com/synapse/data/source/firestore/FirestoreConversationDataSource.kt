@@ -79,6 +79,44 @@ class FirestoreConversationDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Listen to a single conversation by ID.
+     * More efficient than listening to all conversations and filtering.
+     */
+    fun listenConversation(conversationId: String): Flow<ConversationEntity?> = callbackFlow {
+        val registration = firestore.collection("conversations")
+            .document(conversationId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                
+                val conversation = snapshot?.let { doc ->
+                    try {
+                        ConversationEntity(
+                            id = doc.id,
+                            memberIds = (doc.get("memberIds") as? List<*>)
+                                ?.mapNotNull { it as? String } 
+                                ?: emptyList(),
+                            convType = doc.getString("convType") ?: ConversationType.DIRECT.name,
+                            lastMessageText = doc.getString("lastMessageText"),
+                            updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
+                            createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                            groupName = doc.getString("groupName"),
+                            createdBy = doc.getString("createdBy")
+                        )
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+                
+                trySend(conversation)
+            }
+        
+        awaitClose { registration.remove() }
+    }
+    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================

@@ -119,13 +119,10 @@ fun ConversationScreen(
     val scope = rememberCoroutineScope()
 
     // Auto-scroll to bottom when new messages arrive
-    LaunchedEffect(pagedMessages?.itemCount ?: ui.messages.size) {
-        val hasMessages = if (pagedMessages != null) {
-            pagedMessages.itemCount > 0
-        } else {
-            ui.messages.isNotEmpty()
-        }
-        if (hasMessages) {
+    // Use lastMessageId from UIState - only changes when a NEW message arrives
+    // Does NOT change when loading old messages (scrolling up)
+    LaunchedEffect(ui.lastMessageId) {
+        if (ui.lastMessageId != null) {
             scope.launch {
                 listState.animateScrollToItem(0)
             }

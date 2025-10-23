@@ -78,12 +78,25 @@ class ConversationRepository @Inject constructor(
      * Returns PagingData for efficient lazy loading.
      * 
      * Falls back to null if Room is not enabled.
+     * 
+     * NOTE: Does NOT automatically start Firebase sync.
+     * Call startMessageSync() separately after UI is ready.
      */
     fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>>? {
         return if (true && messageDataSource is RoomMessageDataSource) {
             (messageDataSource as RoomMessageDataSource).observeMessagesPaged(conversationId)
         } else {
             null  // Paging only available with Room
+        }
+    }
+    
+    /**
+     * Start Firebase → Room sync for messages in a conversation.
+     * Should be called AFTER the UI has rendered to avoid blocking initial load.
+     */
+    fun startMessageSync(conversationId: String) {
+        if (messageDataSource is RoomMessageDataSource) {
+            (messageDataSource as RoomMessageDataSource).startMessageSync(conversationId)
         }
     }
 
@@ -113,12 +126,10 @@ class ConversationRepository @Inject constructor(
 
     /**
      * Get a single conversation entity by ID.
-     * Observes all user's conversations and filters by ID.
-     * Returns null if not found.
+     * Uses direct document listener (much faster than filtering all conversations).
      */
     fun observeConversation(userId: String, conversationId: String): Flow<ConversationEntity?> {
-        return conversationDataSource.listenConversations(userId)
-            .map { conversations -> conversations.find { it.id == conversationId } }
+        return conversationDataSource.listenConversation(conversationId)
     }
 
     // ============================================================

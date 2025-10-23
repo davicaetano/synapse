@@ -48,16 +48,8 @@ class ConversationViewModel @Inject constructor(
     // Job to handle typing timeout (auto-remove typing after 3 seconds of inactivity)
     private var typingTimeoutJob: Job? = null
 
-    // Background: Mark messages as read (independent side effect)
-    init {
-        convRepo.observeUnreadMessages(conversationId)
-            .onEach { messageIds ->
-                if (messageIds.isNotEmpty()) {
-                    convRepo.markMessagesAsRead(conversationId, messageIds)
-                }
-            }
-            .launchIn(viewModelScope)
-    }
+    // Track if we've started message sync yet
+    private var hasStartedMessageSync = false
     
     override fun onCleared() {
         super.onCleared()
@@ -174,6 +166,29 @@ class ConversationViewModel @Inject constructor(
         null
     }
     
+    // Background side effects
+    init {
+        // Background: Mark messages as read (independent side effect)
+        convRepo.observeUnreadMessages(conversationId)
+            .onEach { messageIds ->
+                if (messageIds.isNotEmpty()) {
+                    convRepo.markMessagesAsRead(conversationId, messageIds)
+                }
+            }
+            .launchIn(viewModelScope)
+        
+        // Start message sync AFTER first UI state emission (avoid blocking avatar/UI)
+        uiState
+            .onEach { state ->
+                if (!hasStartedMessageSync && state.title.isNotBlank() && state.title != "Loading...") {
+                    hasStartedMessageSync = true
+                    Log.d(TAG, "🚀 Starting message sync AFTER UI ready")
+                    convRepo.startMessageSync(conversationId)
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+    
     /**
      * Build ConversationUIState from raw data.
      * Separated for clarity and testability.
@@ -247,6 +262,9 @@ class ConversationViewModel @Inject constructor(
         // Build user map for sender names
         val membersMap = members.associateBy { it.id }
         
+        // Get the ID of the most recent message (for auto-scroll detection)
+        val lastMessageId = domainMessages.maxByOrNull { it.createdAtMs }?.id
+        
         return ConversationUIState(
             conversationId = conversation.id,
             title = title,
@@ -262,7 +280,8 @@ class ConversationViewModel @Inject constructor(
                 members.firstOrNull { it.id != userId }?.photoUrl
             } else null,
             typingText = typingText,
-            isConnected = isConnected
+            isConnected = isConnected,
+            lastMessageId = lastMessageId
         )
     }
 

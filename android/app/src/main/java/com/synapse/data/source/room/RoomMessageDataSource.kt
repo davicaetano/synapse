@@ -118,13 +118,11 @@ class RoomMessageDataSource @Inject constructor(
      * - Scroll up → automatically loads more
      * - UI always responsive (never loads all 2500 at once!)
      * 
-     * Also starts Firebase sync in background.
+     * NOTE: Does NOT automatically start Firebase sync.
+     * Call startMessageSync() separately after UI is ready to avoid blocking.
      */
     fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>> {
         Log.d(TAG, "📄 [ROOM] observeMessagesPaged START: $conversationId")
-        
-        // Start Firebase → Room sync in background
-        ensureConversationSync(conversationId)
         
         // Return Pager with Room as data source
         return Pager(
@@ -138,6 +136,15 @@ class RoomMessageDataSource @Inject constructor(
         ).flow.map { pagingData ->
             pagingData.map { roomEntity -> roomEntity.toEntity() }
         }
+    }
+    
+    /**
+     * Start Firebase → Room sync for a conversation.
+     * Should be called AFTER the UI has rendered to avoid blocking initial load.
+     */
+    fun startMessageSync(conversationId: String) {
+        Log.d(TAG, "🔄 [ROOM] Starting message sync for: $conversationId")
+        ensureConversationSync(conversationId)
     }
     
     /**

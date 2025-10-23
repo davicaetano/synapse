@@ -26,5 +26,6 @@ data class ConversationUIState(
     val otherUserOnline: Boolean? = null, // For DIRECT - other user's online status
     val otherUserPhotoUrl: String? = null, // For DIRECT - other user's photo
     val typingText: String? = null,       // "John is typing..." or null
-    val isConnected: Boolean = true       // Network connectivity status
+    val isConnected: Boolean = true,      // Network connectivity status
+    val lastMessageId: String? = null     // ID of the most recent message (for auto-scroll detection)
 )
