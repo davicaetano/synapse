@@ -22,15 +22,8 @@ interface IMessageDataSource {
         messages: List<String>,
         memberIds: List<String>
     )
-    
-    fun observeUnreadMessages(conversationId: String): Flow<List<String>>
-    
-    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>)
-    
+
     fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>>
-    
-    fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>>
-    
-    suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>)
 }
+
 

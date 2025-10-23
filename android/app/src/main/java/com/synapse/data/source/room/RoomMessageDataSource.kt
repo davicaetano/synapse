@@ -172,21 +172,6 @@ class RoomMessageDataSource @Inject constructor(
     }
     
     /**
-     * Observe unread messages (delegates to Firestore for now).
-     * TODO: Could optimize with Room query later.
-     */
-    override fun observeUnreadMessages(conversationId: String): Flow<List<String>> {
-        return firestoreDataSource.observeUnreadMessages(conversationId)
-    }
-    
-    /**
-     * Mark messages as read (writes to Firebase, syncs to Room automatically).
-     */
-    override suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
-        firestoreDataSource.markMessagesAsRead(conversationId, messageIds)
-    }
-    
-    /**
      * Observe all unread counts.
      * 
      * HYBRID STRATEGY:
@@ -229,58 +214,6 @@ class RoomMessageDataSource @Inject constructor(
             syncJob.cancel()
             emitJob.cancel()
         }
-    }
-    
-    /**
-     * Observe all unreceived messages.
-     * 
-     * HYBRID STRATEGY:
-     * - Syncs from Firebase to populate Room
-     * - Returns Flow from Room (instant reads!)
-     */
-    override fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> = callbackFlow {
-        val startTime = System.currentTimeMillis()
-        Log.d(TAG, "⏱️ [ROOM] observeAllUnreceivedMessages START")
-        
-        // Launch 1: Firebase → Room sync (for ALL conversations)
-        val syncJob = launch {
-            firestoreDataSource.observeAllUnreceivedMessages(userId).collect { firestoreMessages ->
-                // Ensure sync is running for each conversation that has unreceived messages
-                firestoreMessages.keys.forEach { convId ->
-                    ensureConversationSync(convId)
-                }
-            }
-        }
-        
-        // Launch 2: Room → UI (instant!)
-        var firstEmission = true
-        val emitJob = launch {
-            messageDao.getUnreceivedMessagesByUser(userId).collect { unreceivedMessages ->
-                val messagesByConv = unreceivedMessages
-                    .groupBy { it.conversationId }
-                    .mapValues { (_, messages) -> messages.map { it.id } }
-                
-                if (firstEmission) {
-                    val elapsed = System.currentTimeMillis() - startTime
-                    Log.d(TAG, "⏱️ [ROOM] observeAllUnreceivedMessages FIRST EMIT: ${messagesByConv.size} convs, ${messagesByConv.values.sumOf { it.size }} msgs in ${elapsed}ms")
-                    firstEmission = false
-                }
-                
-                send(messagesByConv)
-            }
-        }
-        
-        awaitClose {
-            syncJob.cancel()
-            emitJob.cancel()
-        }
-    }
-    
-    /**
-     * Mark messages as received (writes to Firebase, syncs to Room automatically).
-     */
-    override suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
-        firestoreDataSource.markMessagesAsReceived(conversationId, messageIds)
     }
     
     companion object {

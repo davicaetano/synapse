@@ -2,7 +2,6 @@ package com.synapse.data.repository
 
 import androidx.paging.PagingData
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.BuildConfig
 import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
@@ -15,7 +14,6 @@ import com.synapse.data.source.realtime.entity.PresenceEntity
 import com.synapse.data.source.room.RoomMessageDataSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -222,43 +220,30 @@ class ConversationRepository @Inject constructor(
     fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> {
         return messageDataSource.observeAllUnreadCounts(userId)
     }
-
+    
     /**
-     * Observe ALL unreceived messages across ALL conversations for the current user.
-     * Returns a Map of conversationId → list of unreceived messageIds.
+     * Update member's lastSeenAt timestamp (when user views conversation).
+     * NEW APPROACH: Single write per conversation instead of per-message.
      * 
-     * Uses a single Firestore collectionGroup query - MUCH more efficient!
+     * @param conversationId Conversation ID
+     * @param serverTimestamp Server timestamp from the most recent message
      */
-    fun observeAllUnreceivedMessages(userId: String): Flow<Map<String, List<String>>> {
-        return messageDataSource.observeAllUnreceivedMessages(userId)
+    suspend fun updateMemberLastSeenAt(
+        conversationId: String,
+        serverTimestamp: com.google.firebase.Timestamp,
+    ) {
+        conversationDataSource.updateMemberLastSeenAt(conversationId, serverTimestamp)
     }
     
     /**
-     * Mark specific messages as received in a conversation.
+     * Update member's lastReceivedAt timestamp (when user receives messages).
+     * NEW APPROACH: Single write per conversation instead of per-message.
      * 
-     * @param conversationId The conversation ID
-     * @param messageIds List of message IDs to mark as received
+     * @param conversationId Conversation ID
+     * @param serverTimestamp Server timestamp from the most recent message
      */
-    suspend fun markMessagesAsReceived(conversationId: String, messageIds: List<String>) {
-        messageDataSource.markMessagesAsReceived(conversationId, messageIds)
-    }
-    
-    /**
-     * Observe unread messages for a specific conversation.
-     * Returns a Flow of message IDs that haven't been read yet.
-     */
-    fun observeUnreadMessages(conversationId: String): Flow<List<String>> {
-        return messageDataSource.observeUnreadMessages(conversationId)
-    }
-    
-    /**
-     * Mark specific messages as read in a conversation.
-     * 
-     * @param conversationId The conversation ID
-     * @param messageIds List of message IDs to mark as read
-     */
-    suspend fun markMessagesAsRead(conversationId: String, messageIds: List<String>) {
-        messageDataSource.markMessagesAsRead(conversationId, messageIds)
+    suspend fun updateMemberLastReceivedAt(conversationId: String, serverTimestamp: com.google.firebase.Timestamp) {
+        conversationDataSource.updateMemberLastReceivedAt(conversationId, serverTimestamp)
     }
     
     /**

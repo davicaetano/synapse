@@ -1,6 +1,7 @@
 package com.synapse.data.mapper
 
 import com.synapse.data.source.firestore.entity.ConversationEntity
+import com.synapse.data.source.firestore.entity.MemberStatus
 import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.entity.PresenceEntity
@@ -77,24 +78,50 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
 // Message Entity → Domain
 fun MessageEntity.toDomain(
     currentUserId: String?,
-    memberCount: Int
+    memberCount: Int,
+    memberStatus: Map<String, MemberStatus>? = null
 ): Message {
-    // Calculate how many other members should receive/read this message
-    // (exclude the sender from the count)
-    val otherMembersCount = memberCount - 1
-    
-    // Determine message status based on WhatsApp logic:
-    // Order matters! Check from most restrictive to least restrictive:
-    // 1. PENDING: serverTimestamp is null (never reached server)
-    // 2. SENT: Only sender in receivedBy (receivedBy <= 1)
-    // 3. READ: Everyone read (readBy >= memberCount, includes sender)
-    // 4. DELIVERED: Others received but not everyone read yet
-    val status = when {
-        serverTimestamp == null -> MessageStatus.PENDING
-        receivedBy.size <= 1 -> MessageStatus.SENT          // Only sender received
-        readBy.size >= memberCount -> MessageStatus.READ    // Everyone read (includes sender)
-        receivedBy.size > 1 -> MessageStatus.DELIVERED      // Someone else received
-        else -> MessageStatus.SENT
+    // NEW APPROACH: Calculate status based on memberStatus timestamps if available
+    val status = if (memberStatus != null && memberCount > 1) {
+        // Get all other members (exclude sender)
+        val otherMembers = memberIdsAtCreation.filter { it != senderId }
+        
+        when {
+            // PENDING: serverTimestamp is null (never reached server)
+            serverTimestamp == null -> MessageStatus.PENDING
+            
+            // SENT: No other members received yet
+            otherMembers.all { userId ->
+                val status = memberStatus[userId]
+                val lastReceivedMs = status?.lastReceivedAt?.toDate()?.time
+                lastReceivedMs == null || serverTimestamp!! > lastReceivedMs
+            } -> MessageStatus.SENT
+            
+            // READ: All other members have seen this message
+            otherMembers.all { userId ->
+                val status = memberStatus[userId]
+                val lastSeenMs = status?.lastSeenAt?.toDate()?.time
+                lastSeenMs != null && serverTimestamp!! <= lastSeenMs
+            } -> MessageStatus.READ
+            
+            // DELIVERED: At least one other member received but not everyone read yet
+            else -> MessageStatus.DELIVERED
+        }
+    } else {
+        // FALLBACK: Old approach (read from message fields)
+        // Determine message status based on WhatsApp logic:
+        // Order matters! Check from most restrictive to least restrictive:
+        // 1. PENDING: serverTimestamp is null (never reached server)
+        // 2. SENT: Only sender in receivedBy (receivedBy <= 1)
+        // 3. READ: Everyone read (readBy >= memberCount, includes sender)
+        // 4. DELIVERED: Others received but not everyone read yet
+        when {
+            serverTimestamp == null -> MessageStatus.PENDING
+            receivedBy.size <= 1 -> MessageStatus.SENT          // Only sender received
+            readBy.size >= memberCount -> MessageStatus.READ    // Everyone read (includes sender)
+            receivedBy.size > 1 -> MessageStatus.DELIVERED      // Someone else received
+            else -> MessageStatus.SENT
+        }
     }
     
     return Message(
@@ -105,7 +132,7 @@ fun MessageEntity.toDomain(
         isMine = (currentUserId != null && this.senderId == currentUserId),
         receivedBy = emptyList(), // For now, we don't populate full User objects
         readBy = emptyList(),
-        isReadByEveryone = this.readBy.size >= memberCount,
+        isReadByEveryone = status == MessageStatus.READ,
         status = status
     )
 }

@@ -150,29 +150,53 @@ class ConversationViewModel @Inject constructor(
      * Provides efficient pagination for large message lists.
      * 
      * UI should use this instead of uiState.messages when available.
+     * 
+     * Uses conversationFlow to get memberStatus for status calculation.
      */
     val messagesPaged: kotlinx.coroutines.flow.Flow<PagingData<Message>>? = if (true) {
-        convRepo.observeMessagesPaged(conversationId)
-            ?.map { pagingData ->
-                pagingData.map { messageEntity ->
-                    messageEntity.toDomain(
-                        currentUserId = auth.currentUser?.uid,
-                        memberCount = messageEntity.memberIdsAtCreation.size + 1  // +1 for sender
-                    )
+        val userId = auth.currentUser?.uid
+        val conversationFlow = convRepo.observeConversation(userId ?: "", conversationId)
+        
+        // Use flatMapLatest to switch to new PagingData when conversation changes
+        conversationFlow.flatMapLatest { conversation ->
+            convRepo.observeMessagesPaged(conversationId)
+                ?.map { pagingData ->
+                    pagingData.map { messageEntity ->
+                        messageEntity.toDomain(
+                            currentUserId = userId,
+                            memberCount = messageEntity.memberIdsAtCreation.size,
+                            memberStatus = conversation?.memberStatus  // NEW: Pass memberStatus
+                        )
+                    }
                 }
-            }
-            ?.cachedIn(viewModelScope)
+                ?: flowOf(PagingData.empty())
+        }.cachedIn(viewModelScope)
     } else {
         null
     }
     
     // Background side effects
     init {
-        // Background: Mark messages as read (independent side effect)
-        convRepo.observeUnreadMessages(conversationId)
-            .onEach { messageIds ->
-                if (messageIds.isNotEmpty()) {
-                    convRepo.markMessagesAsRead(conversationId, messageIds)
+        // Background: Update lastSeenAt when messages are viewed (NEW APPROACH)
+        // Get messages to find the most recent serverTimestamp
+        convRepo.observeMessages(conversationId)
+            .onEach { messages ->
+                Log.d(TAG, "📖 observeMessages emitted: ${messages.size} messages")
+                if (messages.isNotEmpty()) {
+                    // Get the most recent message's serverTimestamp
+                    val mostRecentMessage = messages.maxByOrNull { it.serverTimestamp ?: 0L }
+                    val serverTimestamp = mostRecentMessage?.serverTimestamp
+                    
+                    Log.d(TAG, "📖 Most recent message serverTimestamp: $serverTimestamp")
+                    
+                    if (serverTimestamp != null) {
+                        // Convert Long to Timestamp
+                        val timestamp = com.google.firebase.Timestamp(serverTimestamp / 1000, ((serverTimestamp % 1000) * 1000000).toInt())
+                        Log.d(TAG, "📖 Calling updateMemberLastSeenAt with timestamp: $timestamp")
+                        convRepo.updateMemberLastSeenAt(conversationId, timestamp)
+                    }
+                } else {
+                    Log.d(TAG, "📖 observeMessages is EMPTY - lastSeenAt NOT updated")
                 }
             }
             .launchIn(viewModelScope)
@@ -229,7 +253,8 @@ class ConversationViewModel @Inject constructor(
         val domainMessages = messages.map { msgEntity ->
             msgEntity.toDomain(
                 currentUserId = userId,
-                memberCount = members.size
+                memberCount = members.size,
+                memberStatus = conversation.memberStatus  // NEW: Pass memberStatus for status calculation
             )
         }
         

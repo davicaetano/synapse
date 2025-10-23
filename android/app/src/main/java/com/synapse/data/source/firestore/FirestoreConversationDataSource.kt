@@ -1,10 +1,12 @@
 package com.synapse.data.source.firestore
 
 import android.util.Log
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
+import com.synapse.data.source.firestore.entity.MemberStatus
 import com.synapse.domain.conversation.ConversationType
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -51,18 +53,7 @@ class FirestoreConversationDataSource @Inject constructor(
             
             val conversations = snapshot?.documents?.mapNotNull { doc ->
                 try {
-                    ConversationEntity(
-                        id = doc.id,
-                        memberIds = (doc.get("memberIds") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        convType = doc.getString("convType") ?: ConversationType.DIRECT.name,
-                        lastMessageText = doc.getString("lastMessageText"),
-                        updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
-                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                        groupName = doc.getString("groupName"),
-                        createdBy = doc.getString("createdBy")
-                    )
+                    parseConversationEntity(doc)
                 } catch (e: Exception) {
                     null
                 }
@@ -94,18 +85,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 
                 val conversation = snapshot?.let { doc ->
                     try {
-                        ConversationEntity(
-                            id = doc.id,
-                            memberIds = (doc.get("memberIds") as? List<*>)
-                                ?.mapNotNull { it as? String } 
-                                ?: emptyList(),
-                            convType = doc.getString("convType") ?: ConversationType.DIRECT.name,
-                            lastMessageText = doc.getString("lastMessageText"),
-                            updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
-                            createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                            groupName = doc.getString("groupName"),
-                            createdBy = doc.getString("createdBy")
-                        )
+                        parseConversationEntity(doc)
                     } catch (e: Exception) {
                         null
                     }
@@ -115,6 +95,41 @@ class FirestoreConversationDataSource @Inject constructor(
             }
         
         awaitClose { registration.remove() }
+    }
+    
+    /**
+     * Parse ConversationEntity from Firestore document.
+     * Handles memberStatus map parsing.
+     */
+    private fun parseConversationEntity(doc: com.google.firebase.firestore.DocumentSnapshot): ConversationEntity {
+        // Parse memberStatus map
+        val memberStatusRaw = doc.get("memberStatus") as? Map<*, *>
+        val memberStatus = memberStatusRaw?.mapNotNull { (key, value) ->
+            val userId = key as? String ?: return@mapNotNull null
+            val statusMap = value as? Map<*, *> ?: return@mapNotNull null
+            
+            val lastSeenAt = statusMap["lastSeenAt"] as? Timestamp
+            val lastReceivedAt = statusMap["lastReceivedAt"] as? Timestamp
+            
+            userId to MemberStatus(
+                lastSeenAt = lastSeenAt,
+                lastReceivedAt = lastReceivedAt
+            )
+        }?.toMap() ?: emptyMap()
+        
+        return ConversationEntity(
+            id = doc.id,
+            memberIds = (doc.get("memberIds") as? List<*>)
+                ?.mapNotNull { it as? String } 
+                ?: emptyList(),
+            convType = doc.getString("convType") ?: ConversationType.DIRECT.name,
+            lastMessageText = doc.getString("lastMessageText"),
+            updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
+            createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+            groupName = doc.getString("groupName"),
+            createdBy = doc.getString("createdBy"),
+            memberStatus = memberStatus
+        )
     }
     
     // ============================================================
@@ -314,6 +329,68 @@ class FirestoreConversationDataSource @Inject constructor(
                 .await()
         } catch (e: Exception) {
             Log.e(TAG, "Error removing member from group", e)
+        }
+    }
+    
+    /**
+     * Update member's lastSeenAt timestamp (when user views conversation).
+     * Uses server timestamp for accuracy.
+     * 
+     * @param conversationId Conversation ID
+     * @param serverTimestamp Server timestamp from the most recent message
+     */
+    suspend fun updateMemberLastSeenAt(conversationId: String, serverTimestamp: Timestamp) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .set(
+                    mapOf(
+                        "memberStatus" to mapOf(
+                            userId to mapOf(
+                                "lastSeenAt" to serverTimestamp
+                            )
+                        )
+                    ),
+                    SetOptions.merge()  // Merge with existing data - creates field if doesn't exist
+                )
+                .await()
+            
+            Log.d(TAG, "✅ Updated lastSeenAt for user $userId in conversation $conversationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating lastSeenAt", e)
+        }
+    }
+    
+    /**
+     * Update member's lastReceivedAt timestamp (when user receives messages).
+     * Uses server timestamp for accuracy.
+     * 
+     * @param conversationId Conversation ID
+     * @param serverTimestamp Server timestamp from the most recent message
+     */
+    suspend fun updateMemberLastReceivedAt(conversationId: String, serverTimestamp: Timestamp) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .set(
+                    mapOf(
+                        "memberStatus" to mapOf(
+                            userId to mapOf(
+                                "lastReceivedAt" to serverTimestamp
+                            )
+                        )
+                    ),
+                    SetOptions.merge()  // Merge with existing data - creates field if doesn't exist
+                )
+                .await()
+            
+            Log.d(TAG, "✅ Updated lastReceivedAt for user $userId in conversation $conversationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating lastReceivedAt", e)
         }
     }
     

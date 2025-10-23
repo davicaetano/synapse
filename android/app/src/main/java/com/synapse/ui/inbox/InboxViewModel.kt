@@ -2,6 +2,7 @@ package com.synapse.ui.inbox
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.network.NetworkConnectivityMonitor
@@ -31,14 +32,20 @@ class InboxViewModel @Inject constructor(
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
     
-    // Background: Mark messages as received (independent side effect)
+    // Background: Update lastReceivedAt when messages arrive (NEW APPROACH)
     init {
         val userId = auth.currentUser?.uid ?: ""
-        conversationsRepo.observeAllUnreceivedMessages(userId).distinctUntilChanged()
-            .onEach { unreceivedByConv ->
-                unreceivedByConv.forEach { (convId, messageIds) ->
+        
+        // Observe all conversations and update lastReceivedAt based on latest message
+        conversationsRepo.observeConversations(userId)
+            .distinctUntilChanged()
+            .onEach { conversations ->
+                conversations.forEach { conv ->
+                    // Use updatedAtMs (latest message timestamp) as the received timestamp
+                    // Convert millis to Timestamp
+                    val timestamp = Timestamp(conv.updatedAtMs / 1000, ((conv.updatedAtMs % 1000) * 1000000).toInt())
                     viewModelScope.launch {
-                        conversationsRepo.markMessagesAsReceived(convId, messageIds)
+                        conversationsRepo.updateMemberLastReceivedAt(conv.id, timestamp)
                     }
                 }
             }
