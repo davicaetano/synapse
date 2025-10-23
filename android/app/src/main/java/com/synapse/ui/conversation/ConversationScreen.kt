@@ -91,6 +91,7 @@ fun ConversationScreen(
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
+        onSend100Messages = { vm.send100Messages() },
         onSend500Messages = { vm.send500Messages() },
         onBackClick = onNavigateBack
     )
@@ -105,6 +106,7 @@ fun ConversationScreen(
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
     onSend20Messages: () -> Unit = {},
+    onSend100Messages: () -> Unit = {},
     onSend500Messages: () -> Unit = {},
     onBackClick: () -> Unit = {}
 ) {
@@ -136,6 +138,7 @@ fun ConversationScreen(
                 onBackClick = onBackClick,
                 onAddMemberClick = { /* TODO: Add member to group */ },
                 onSend20Messages = onSend20Messages,
+                onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
                 currentUserIsConnected = ui.isConnected
             )
@@ -241,6 +244,7 @@ private fun ConversationTopAppBar(
     onBackClick: () -> Unit,
     onAddMemberClick: () -> Unit,
     onSend20Messages: () -> Unit,
+    onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
     currentUserIsConnected: Boolean
 ) {
@@ -338,6 +342,13 @@ private fun ConversationTopAppBar(
                         onClick = {
                             showMenu = false
                             onSend20Messages()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Send 100 messages (test)") },
+                        onClick = {
+                            showMenu = false
+                            onSend100Messages()
                         }
                     )
                     DropdownMenuItem(
