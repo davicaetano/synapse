@@ -4,7 +4,6 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.entity.MessageEntity
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -26,7 +25,7 @@ import javax.inject.Singleton
 class FirestoreMessageDataSource @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
-) : IMessageDataSource {
+) {
     
     // ============================================================
     // READ OPERATIONS
@@ -36,7 +35,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * Listen to all messages in a conversation, ordered by creation time.
      * Returns raw Firestore data.
      */
-    override fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
+    fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ listenMessages START: $conversationId")
         
@@ -61,18 +60,6 @@ class FirestoreMessageDataSource @Inject constructor(
                         text = doc.getString("text") ?: "",
                         senderId = doc.getString("senderId") ?: "",
                         createdAtMs = doc.getLong("createdAtMs") ?: 0L,
-                        receivedBy = (doc.get("receivedBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        readBy = (doc.get("readBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        notReceivedBy = (doc.get("notReceivedBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
-                        notReadBy = (doc.get("notReadBy") as? List<*>)
-                            ?.mapNotNull { it as? String } 
-                            ?: emptyList(),
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
@@ -115,7 +102,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param text The message text
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    override suspend fun sendMessage(
+    suspend fun sendMessage(
         conversationId: String,
         text: String,
         memberIds: List<String>
@@ -126,12 +113,6 @@ class FirestoreMessageDataSource @Inject constructor(
             return null
         }
         
-        // notReceivedBy = all members except sender
-        val notReceivedBy = memberIds.filter { it != userId }
-        
-        // notReadBy = all members except sender (same as notReceivedBy initially)
-        val notReadBy = memberIds.filter { it != userId }
-        
         // memberIdsAtCreation = snapshot of all members at this moment
         val memberIdsAtCreation = memberIds
         
@@ -139,10 +120,6 @@ class FirestoreMessageDataSource @Inject constructor(
             "text" to text,
             "senderId" to userId,
             "createdAtMs" to System.currentTimeMillis(),
-            "receivedBy" to listOf(userId),  // Sender has received their own message
-            "readBy" to listOf(userId),      // Sender has read their own message
-            "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
-            "notReadBy" to notReadBy,  // All other members haven't read yet
             "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
             "serverTimestamp" to FieldValue.serverTimestamp()  // Server assigns actual timestamp
         )
@@ -166,60 +143,6 @@ class FirestoreMessageDataSource @Inject constructor(
             null
         }
     }
-    
-    /**
-     * Observe unread message counts across ALL conversations for a user.
-     * 
-     * Uses collectionGroup to query across all conversations in a single query!
-     * Returns a Map of conversationId → unread count.
-     * 
-     * This is MUCH more efficient than creating separate listeners per conversation.
-     */
-    override fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> = callbackFlow {
-        val startTime = System.currentTimeMillis()
-        Log.d(TAG, "⏱️ observeAllUnreadCounts START")
-        
-        if (userId.isEmpty()) {
-            send(emptyMap())
-            close()
-            return@callbackFlow
-        }
-        
-        // Emit empty map immediately so UI doesn't wait for Firestore
-        send(emptyMap())
-        
-        var firstEmission = true
-        // Single listener for ALL unread messages across ALL conversations!
-        val listener = firestore.collectionGroup("messages")
-            .whereArrayContains("notReadBy", userId)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    Log.e(TAG, "❌ Error observing unread counts", error)
-                    trySend(emptyMap())
-                    return@addSnapshotListener
-                }
-                
-                // Group messages by conversationId and COUNT them
-                val countsByConv = snapshot?.documents
-                    ?.groupBy { doc ->
-                        // Extract conversationId from path: conversations/{convId}/messages/{msgId}
-                        doc.reference.parent.parent?.id ?: ""
-                    }
-                    ?.filterKeys { it.isNotEmpty() }
-                    ?.mapValues { (_, docs) -> docs.size }  // Just count the docs!
-                    ?: emptyMap()
-                
-                if (firstEmission) {
-                    val elapsed = System.currentTimeMillis() - startTime
-                    Log.d(TAG, "⏱️ observeAllUnreadCounts FIRST EMIT: ${countsByConv.size} convs, ${countsByConv.values.sum()} total unread in ${elapsed}ms")
-                    firstEmission = false
-                }
-                
-                trySend(countsByConv)
-            }
-        
-        awaitClose { listener.remove() }
-    }
 
     /**
      * Send multiple messages using Firestore batch write.
@@ -230,7 +153,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param messages List of message texts to send
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
-    override suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
+    suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
         val startTime = System.currentTimeMillis()
         val userId = auth.currentUser?.uid ?: return
         
@@ -239,12 +162,6 @@ class FirestoreMessageDataSource @Inject constructor(
         Log.d(TAG, "⏱️ sendMessagesBatch START: ${messages.size} messages")
         
         try {
-            // notReceivedBy = all members except sender
-            val notReceivedBy = memberIds.filter { it != userId }
-            
-            // notReadBy = all members except sender (same as notReceivedBy initially)
-            val notReadBy = memberIds.filter { it != userId }
-            
             // memberIdsAtCreation = snapshot of all members at this moment
             val memberIdsAtCreation = memberIds
             
@@ -263,10 +180,6 @@ class FirestoreMessageDataSource @Inject constructor(
                     "text" to text,
                     "senderId" to userId,
                     "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
-                    "receivedBy" to listOf(userId), // Sender has received their own message
-                    "readBy" to listOf(userId),     // Sender has read their own message
-                    "notReceivedBy" to notReceivedBy,  // All other members haven't received yet
-                    "notReadBy" to notReadBy,  // All other members haven't read yet
                     "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
                     "serverTimestamp" to FieldValue.serverTimestamp() // Server assigns actual timestamp
                 )

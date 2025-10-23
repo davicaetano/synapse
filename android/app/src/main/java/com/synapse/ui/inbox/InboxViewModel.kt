@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -93,9 +92,45 @@ class InboxViewModel @Inject constructor(
                 }
             }
         
-        // STEP 6: Observe unread counts for all conversations (1 listener!)
-        val unreadCountsFlow = conversationsRepo.observeAllUnreadCounts(userId)
-            .onStart { emit(emptyMap()) }  // ✅ Emit immediately - don't wait for Firestore!
+        // STEP 6: Calculate unread indicator based on memberStatus
+        // LOGIC: Has unread if ANY other member sent message after my lastSeenAt
+        val unreadCountsFlow = conversationsFlow
+            .map { conversations ->
+                val countsByConv = mutableMapOf<String, Int>()
+                
+                conversations.forEach { conv ->
+                    val myLastSeenAtMs = conv.memberStatus[userId]?.lastSeenAt?.toDate()?.time
+                    
+                    // Get all other members (exclude myself)
+                    val otherMembers = conv.memberIds.filter { it != userId }
+                    
+                    // Check if any other member sent a message after I last saw
+                    val hasUnread = if (myLastSeenAtMs == null) {
+                        // Never opened this conversation
+                        // Check if ANY other member has sent at least one message
+                        otherMembers.any { memberId ->
+                            val lastSentAt = conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                            lastSentAt != null  // They sent at least one message
+                        }
+                    } else {
+                        // Check if any other member sent AFTER I last saw
+                        otherMembers.any { memberId ->
+                            val lastSentAt = conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                            lastSentAt != null && lastSentAt > myLastSeenAtMs
+                        }
+                    }
+                    
+                    // Show "1" as indicator (generic badge)
+                    if (hasUnread) {
+                        countsByConv[conv.id] = 1
+                    }
+                    
+                    android.util.Log.d("InboxVM", "📊 Conv ${conv.id.takeLast(6)}: myLastSeenAt=$myLastSeenAtMs, hasUnread=$hasUnread")
+                }
+                
+                android.util.Log.d("InboxVM", "📊 Unread counts: $countsByConv")
+                countsByConv
+            }
         
         // STEP 7: Observe network connectivity
         val isConnectedFlow = networkMonitor.isConnected

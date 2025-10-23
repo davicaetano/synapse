@@ -2,7 +2,6 @@ package com.synapse.data.repository
 
 import androidx.paging.PagingData
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.source.IMessageDataSource
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.FirestoreUserDataSource
@@ -25,30 +24,20 @@ import javax.inject.Singleton
  * - NO combining multiple flows (ViewModel does that)
  * - Only coordinates write operations (send message + update metadata)
  *
- * BRANCH BY ABSTRACTION:
- * - Uses RoomMessageDataSource when BuildConfig.USE_ROOM_MESSAGES = true
- * - Falls back to FirestoreMessageDataSource when false
- * - Allows safe testing of Room implementation without breaking existing code
+ * Uses RoomMessageDataSource for reads (local cache + Paging3).
+ * Uses FirestoreMessageDataSource for writes (remote).
  *
- * Philosophy: Keep it simple. Repository exposes data, ViewModel processes it.
+ * Philosophy: Keep it simple. Repository exposes data, ViewModel orchestrates sync.
  */
 @Singleton
 class ConversationRepository @Inject constructor(
     private val conversationDataSource: FirestoreConversationDataSource,
-    private val firestoreMessageDataSource: FirestoreMessageDataSource,
     private val roomMessageDataSource: RoomMessageDataSource,
+    private val firestoreMessageDataSource: FirestoreMessageDataSource,
     private val userDataSource: FirestoreUserDataSource,
     private val presenceDataSource: RealtimePresenceDataSource,
     private val auth: FirebaseAuth
 ) {
-    
-    // Branch by Abstraction: Choose message data source based on feature flag
-//    private val messageDataSource: IMessageDataSource = if (BuildConfig.USE_ROOM_MESSAGES) {
-    private val messageDataSource: IMessageDataSource = if (true) {
-        roomMessageDataSource
-    } else {
-        firestoreMessageDataSource
-    }
 
     // ============================================================
     // READ OPERATIONS (simple flows, NO complex transformations)
@@ -64,38 +53,32 @@ class ConversationRepository @Inject constructor(
     }
 
     /**
-     * Observe messages in a conversation.
-     * Returns raw MessageEntity list.
-     */
-    fun observeMessages(conversationId: String): Flow<List<MessageEntity>> {
-        return messageDataSource.listenMessages(conversationId)
-    }
-
-    /**
-     * Observe messages with pagination support (only available with Room).
+     * Observe messages with pagination support using Room + Paging3.
      * Returns PagingData for efficient lazy loading.
      * 
-     * Falls back to null if Room is not enabled.
-     * 
-     * NOTE: Does NOT automatically start Firebase sync.
-     * Call startMessageSync() separately after UI is ready.
+     * PURE ROOM - reads from local cache only.
+     * ViewModel orchestrates Firebase → Room sync separately.
      */
-    fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>>? {
-        return if (true && messageDataSource is RoomMessageDataSource) {
-            (messageDataSource as RoomMessageDataSource).observeMessagesPaged(conversationId)
-        } else {
-            null  // Paging only available with Room
-        }
+    fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>> {
+        return roomMessageDataSource.observeMessagesPaged(conversationId)
     }
     
     /**
-     * Start Firebase → Room sync for messages in a conversation.
-     * Should be called AFTER the UI has rendered to avoid blocking initial load.
+     * Listen to messages from Firestore.
+     * Returns Flow of message updates from remote.
+     * 
+     * This is used by ViewModel to sync Firestore → Room.
      */
-    fun startMessageSync(conversationId: String) {
-        if (messageDataSource is RoomMessageDataSource) {
-            (messageDataSource as RoomMessageDataSource).startMessageSync(conversationId)
-        }
+    fun listenMessagesFromFirestore(conversationId: String): Flow<List<MessageEntity>> {
+        return firestoreMessageDataSource.listenMessages(conversationId)
+    }
+    
+    /**
+     * Upsert messages into Room cache.
+     * Called by ViewModel when syncing from Firestore.
+     */
+    suspend fun upsertMessagesToRoom(messages: List<MessageEntity>, conversationId: String) {
+        roomMessageDataSource.upsertMessages(messages, conversationId)
     }
 
     /**
@@ -143,9 +126,8 @@ class ConversationRepository @Inject constructor(
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
     suspend fun sendMessage(conversationId: String, text: String, memberIds: List<String>) {
-
-        // Send message (may return null if offline, but Firestore caches it)
-        messageDataSource.sendMessage(conversationId, text, memberIds)
+        // Send message to Firestore (may return null if offline, but Firestore caches it)
+        firestoreMessageDataSource.sendMessage(conversationId, text, memberIds)
 
         // ALWAYS update conversation metadata, even if messageId is null
         // This ensures the inbox shows the latest message immediately,
@@ -212,27 +194,21 @@ class ConversationRepository @Inject constructor(
     }
 
     /**
-     * Observe unread message counts across ALL conversations for a user.
-     * Returns a Map of conversationId → unread count.
+     * Calculate unread counts for conversations based on memberStatus timestamps.
      * 
-     * Uses a single Firestore collectionGroup query - MUCH more efficient!
-     */
-    fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> {
-        return messageDataSource.observeAllUnreadCounts(userId)
-    }
-    
-    /**
-     * Update member's lastSeenAt timestamp (when user views conversation).
-     * NEW APPROACH: Single write per conversation instead of per-message.
+     * NEW APPROACH - Uses conversation-level lastSeenAt tracking:
+     * - Takes map of conversationId → lastSeenAtMs from conversation.memberStatus
+     * - Counts messages where serverTimestamp > lastSeenAtMs
+     * - Caps at 10 per conversation (shows "10+" in UI)
      * 
-     * @param conversationId Conversation ID
-     * @param serverTimestamp Server timestamp from the most recent message
+     * This should be called FROM InboxViewModel which has access to conversations + memberStatus.
+     * 
+     * @param conversationLastSeenMap Map of conversationId → lastSeenAtMs (from memberStatus)
      */
-    suspend fun updateMemberLastSeenAt(
-        conversationId: String,
-        serverTimestamp: com.google.firebase.Timestamp,
-    ) {
-        conversationDataSource.updateMemberLastSeenAt(conversationId, serverTimestamp)
+    suspend fun calculateUnreadCounts(
+        conversationLastSeenMap: Map<String, Long?>
+    ): Map<String, Int> {
+        return roomMessageDataSource.calculateUnreadCounts(conversationLastSeenMap)
     }
     
     /**
@@ -247,6 +223,22 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
+     * Update member's lastSeenAt to NOW (when user opens conversation).
+     * Badge disappears instantly.
+     */
+    suspend fun updateMemberLastSeenAtNow(conversationId: String) {
+        conversationDataSource.updateMemberLastSeenAtNow(conversationId)
+    }
+    
+    /**
+     * Update member's lastMessageSentAt to NOW (when user sends a message).
+     * Used to determine if badge should show for other users.
+     */
+    suspend fun updateMemberLastMessageSentAtNow(conversationId: String) {
+        conversationDataSource.updateMemberLastMessageSentAtNow(conversationId)
+    }
+    
+    /**
      * Send multiple messages using Firestore batch write (for performance testing).
      * All messages are sent in a single transaction.
      * 
@@ -255,7 +247,7 @@ class ConversationRepository @Inject constructor(
      * @param memberIds List of all member IDs in the conversation (from ViewModel state)
      */
     suspend fun sendMessagesBatch(conversationId: String, messages: List<String>, memberIds: List<String>) {
-        messageDataSource.sendMessagesBatch(conversationId, messages, memberIds)
+        firestoreMessageDataSource.sendMessagesBatch(conversationId, messages, memberIds)
         // Update conversation metadata with the last message
         if (messages.isNotEmpty()) {
             conversationDataSource.updateConversationMetadata(

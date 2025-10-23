@@ -7,6 +7,9 @@ import com.synapse.data.source.firestore.entity.MessageEntity
 /**
  * Room entity for caching messages locally.
  * Provides instant read performance compared to Firestore deserializing.
+ * 
+ * Status tracking is now done via conversation.memberStatus timestamps.
+ * Old per-message fields (readBy, receivedBy, etc) removed for simplicity.
  */
 @Entity(tableName = "messages")
 data class MessageRoomEntity(
@@ -15,10 +18,6 @@ data class MessageRoomEntity(
     val text: String,
     val senderId: String,
     val createdAtMs: Long,
-    val receivedBy: String,  // Stored as comma-separated: "user1,user2,user3"
-    val readBy: String,  // Stored as comma-separated: "user1,user2"
-    val notReceivedBy: String,  // Stored as comma-separated
-    val notReadBy: String,  // Stored as comma-separated
     val memberIdsAtCreation: String,  // Stored as comma-separated
     val serverTimestamp: Long?
 ) {
@@ -31,10 +30,6 @@ data class MessageRoomEntity(
             text = text,
             senderId = senderId,
             createdAtMs = createdAtMs,
-            receivedBy = receivedBy.split(",").filter { it.isNotBlank() },
-            readBy = readBy.split(",").filter { it.isNotBlank() },
-            notReceivedBy = notReceivedBy.split(",").filter { it.isNotBlank() },
-            notReadBy = notReadBy.split(",").filter { it.isNotBlank() },
             memberIdsAtCreation = memberIdsAtCreation.split(",").filter { it.isNotBlank() },
             serverTimestamp = serverTimestamp
         )
@@ -51,10 +46,6 @@ data class MessageRoomEntity(
                 text = entity.text,
                 senderId = entity.senderId,
                 createdAtMs = entity.createdAtMs,
-                receivedBy = entity.receivedBy.joinToString(","),
-                readBy = entity.readBy.joinToString(","),
-                notReceivedBy = entity.notReceivedBy.joinToString(","),
-                notReadBy = entity.notReadBy.joinToString(","),
                 memberIdsAtCreation = entity.memberIdsAtCreation.joinToString(","),
                 serverTimestamp = entity.serverTimestamp
             )

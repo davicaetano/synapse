@@ -4,11 +4,12 @@ import com.google.firebase.Timestamp
 
 /**
  * Member status in a conversation.
- * Tracks when a user last saw and received messages.
+ * Tracks when a user last saw, received, and sent messages.
  */
 data class MemberStatus(
-    val lastSeenAt: Timestamp? = null,      // Server timestamp when user last viewed conversation
-    val lastReceivedAt: Timestamp? = null   // Server timestamp when user last received messages
+    val lastSeenAt: Timestamp? = null,         // Server timestamp when user last viewed conversation
+    val lastReceivedAt: Timestamp? = null,     // Server timestamp when user last received messages
+    val lastMessageSentAt: Timestamp? = null   // Server timestamp when user last sent a message
 )
 
 /**

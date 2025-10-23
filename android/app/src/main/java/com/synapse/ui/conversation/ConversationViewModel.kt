@@ -23,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -48,8 +49,8 @@ class ConversationViewModel @Inject constructor(
     // Job to handle typing timeout (auto-remove typing after 3 seconds of inactivity)
     private var typingTimeoutJob: Job? = null
 
-    // Track if we've started message sync yet
-    private var hasStartedMessageSync = false
+    // Job for Firebase → Room sync (cancelled when ViewModel is cleared)
+    private var messageSyncJob: Job? = null
     
     override fun onCleared() {
         super.onCleared()
@@ -57,6 +58,9 @@ class ConversationViewModel @Inject constructor(
         viewModelScope.launch {
             typingRepo.removeTyping(conversationId)
         }
+        // Cancel message sync job
+        messageSyncJob?.cancel()
+        Log.d(TAG, "🔌 Message sync cancelled for: $conversationId")
     }
 
     val uiState: StateFlow<ConversationUIState> = run {
@@ -68,20 +72,12 @@ class ConversationViewModel @Inject constructor(
         val conversationFlow = convRepo.observeConversation(userId, conversationId)
             .onEach { Log.d(TAG, "⏱️ conversationFlow emitted in ${System.currentTimeMillis() - startTime}ms") }
         
-        // STEP 2: Get messages for this conversation
-        // When using Paging3, don't load regular messages (avoid double loading!)
-        val messagesFlow = if (true) {  // BuildConfig.USE_ROOM_MESSAGES
-            flowOf(emptyList())  // Paging3 handles messages separately
-        } else {
-            convRepo.observeMessages(conversationId)
-        }.onEach { Log.d(TAG, "⏱️ messagesFlow emitted ${it.size} msgs in ${System.currentTimeMillis() - startTime}ms") }
-        
-        // STEP 3: Extract member IDs (stable)
+        // STEP 2: Extract member IDs (stable)
         val memberIdsFlow = conversationFlow
             .map { conv -> conv?.memberIds?.sorted() ?: emptyList() }
             .distinctUntilChanged()
         
-        // STEP 4: Observe users (only recreates when members change)
+        // STEP 3: Observe users (only recreates when members change)
         val usersFlow = memberIdsFlow
             .flatMapLatest { memberIds ->
                 if (memberIds.isEmpty()) {
@@ -92,7 +88,7 @@ class ConversationViewModel @Inject constructor(
             }
             .onEach { Log.d(TAG, "⏱️ usersFlow emitted ${it.size} users in ${System.currentTimeMillis() - startTime}ms") }
         
-        // STEP 5: Observe presence (only recreates when members change)
+        // STEP 4: Observe presence (only recreates when members change)
         val presenceFlow = memberIdsFlow
             .flatMapLatest { memberIds ->
                 if (memberIds.isEmpty()) {
@@ -103,31 +99,30 @@ class ConversationViewModel @Inject constructor(
             }
             .onEach { Log.d(TAG, "⏱️ presenceFlow emitted ${it.size} in ${System.currentTimeMillis() - startTime}ms") }
         
-        // STEP 6: Observe typing
+        // STEP 5: Observe typing
         val typingFlow = typingRepo.observeTypingTextInConversation(conversationId)
         
-        // STEP 7: Observe network connectivity
+        // STEP 6: Observe network connectivity
         val isConnectedFlow = networkMonitor.isConnected
         
-        // STEP 8: Combine typing + connectivity (to avoid 6-flow limit)
+        // STEP 7: Combine typing + connectivity (to avoid 5-flow limit)
         val typingAndConnectivityFlow = combine(typingFlow, isConnectedFlow) { typing, connected ->
             typing to connected
         }
         
-        // STEP 9: Combine everything and build UI state
+        // STEP 8: Combine everything and build UI state
+        // NOTE: Messages are handled separately via Paging3 (messagesPaged)
         combine(
             conversationFlow,
-            messagesFlow,
             usersFlow,
             presenceFlow,
             typingAndConnectivityFlow
-        ) { conversation, messages, users, presence, typingAndConnectivity ->
+        ) { conversation, users, presence, typingAndConnectivity ->
             Log.d(TAG, "⏱️ combine() executed in ${System.currentTimeMillis() - startTime}ms")
             val (typingText, isConnected) = typingAndConnectivity
             buildConversationUIState(
                 userId = userId,
                 conversation = conversation,
-                messages = messages,
                 users = users,
                 presence = presence,
                 typingText = typingText,
@@ -146,68 +141,52 @@ class ConversationViewModel @Inject constructor(
     }
     
     /**
-     * Paged messages flow (only available when Room is enabled).
+     * Paged messages flow using Room + Paging3.
      * Provides efficient pagination for large message lists.
      * 
-     * UI should use this instead of uiState.messages when available.
-     * 
-     * Uses conversationFlow to get memberStatus for status calculation.
+     * Combines with conversationFlow to get memberStatus for status calculation.
      */
-    val messagesPaged: kotlinx.coroutines.flow.Flow<PagingData<Message>>? = if (true) {
+    val messagesPaged: Flow<PagingData<Message>> = run {
         val userId = auth.currentUser?.uid
         val conversationFlow = convRepo.observeConversation(userId ?: "", conversationId)
         
         // Use flatMapLatest to switch to new PagingData when conversation changes
         conversationFlow.flatMapLatest { conversation ->
             convRepo.observeMessagesPaged(conversationId)
-                ?.map { pagingData ->
+                .map { pagingData ->
                     pagingData.map { messageEntity ->
                         messageEntity.toDomain(
                             currentUserId = userId,
                             memberCount = messageEntity.memberIdsAtCreation.size,
-                            memberStatus = conversation?.memberStatus  // NEW: Pass memberStatus
+                            memberStatus = conversation?.memberStatus ?: emptyMap()  // Pass memberStatus for status calculation
                         )
                     }
                 }
-                ?: flowOf(PagingData.empty())
         }.cachedIn(viewModelScope)
-    } else {
-        null
     }
     
     // Background side effects
     init {
-        // Background: Update lastSeenAt when messages are viewed (NEW APPROACH)
-        // Get messages to find the most recent serverTimestamp
-        convRepo.observeMessages(conversationId)
-            .onEach { messages ->
-                Log.d(TAG, "📖 observeMessages emitted: ${messages.size} messages")
-                if (messages.isNotEmpty()) {
-                    // Get the most recent message's serverTimestamp
-                    val mostRecentMessage = messages.maxByOrNull { it.serverTimestamp ?: 0L }
-                    val serverTimestamp = mostRecentMessage?.serverTimestamp
-                    
-                    Log.d(TAG, "📖 Most recent message serverTimestamp: $serverTimestamp")
-                    
-                    if (serverTimestamp != null) {
-                        // Convert Long to Timestamp
-                        val timestamp = com.google.firebase.Timestamp(serverTimestamp / 1000, ((serverTimestamp % 1000) * 1000000).toInt())
-                        Log.d(TAG, "📖 Calling updateMemberLastSeenAt with timestamp: $timestamp")
-                        convRepo.updateMemberLastSeenAt(conversationId, timestamp)
-                    }
-                } else {
-                    Log.d(TAG, "📖 observeMessages is EMPTY - lastSeenAt NOT updated")
-                }
-            }
-            .launchIn(viewModelScope)
+        // Update lastSeenAt IMMEDIATELY when entering conversation (badge removal)
+        viewModelScope.launch {
+            Log.d(TAG, "📖 Updating lastSeenAt to NOW (entering conversation)")
+            convRepo.updateMemberLastSeenAtNow(conversationId)
+        }
         
-        // Start message sync AFTER first UI state emission (avoid blocking avatar/UI)
+        // Start Firebase → Room sync AFTER first UI state emission (avoid blocking avatar/UI)
         uiState
             .onEach { state ->
-                if (!hasStartedMessageSync && state.title.isNotBlank() && state.title != "Loading...") {
-                    hasStartedMessageSync = true
+                if (messageSyncJob == null && state.title.isNotBlank() && state.title != "Loading...") {
                     Log.d(TAG, "🚀 Starting message sync AFTER UI ready")
-                    convRepo.startMessageSync(conversationId)
+                    
+                    // Start sync job (tied to viewModelScope - cancels when ViewModel dies)
+                    messageSyncJob = viewModelScope.launch {
+                        convRepo.listenMessagesFromFirestore(conversationId).collect { firestoreMessages ->
+                            // Sync Firestore → Room
+                            convRepo.upsertMessagesToRoom(firestoreMessages, conversationId)
+                            Log.d(TAG, "✅ Synced ${firestoreMessages.size} messages from Firestore to Room")
+                        }
+                    }
                 }
             }
             .launchIn(viewModelScope)
@@ -220,7 +199,6 @@ class ConversationViewModel @Inject constructor(
     private fun buildConversationUIState(
         userId: String,
         conversation: ConversationEntity?,
-        messages: List<MessageEntity>,
         users: List<UserEntity>,
         presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
         typingText: String?,
@@ -249,14 +227,8 @@ class ConversationViewModel @Inject constructor(
             )
         }
         
-        // Build messages with domain model
-        val domainMessages = messages.map { msgEntity ->
-            msgEntity.toDomain(
-                currentUserId = userId,
-                memberCount = members.size,
-                memberStatus = conversation.memberStatus  // NEW: Pass memberStatus for status calculation
-            )
-        }
+        // NOTE: Messages are handled separately via Paging3 (messagesPaged)
+        // uiState.messages will always be empty
         
         // Build title and subtitle
         val convType = try {
@@ -284,17 +256,11 @@ class ConversationViewModel @Inject constructor(
             }
         }
         
-        // Build user map for sender names
-        val membersMap = members.associateBy { it.id }
-        
-        // Get the ID of the most recent message (for auto-scroll detection)
-        val lastMessageId = domainMessages.maxByOrNull { it.createdAtMs }?.id
-        
         return ConversationUIState(
             conversationId = conversation.id,
             title = title,
             subtitle = subtitle,
-            messages = domainMessages.map { it.toUiMessage(convType, membersMap) },
+            messages = emptyList(),  // Always empty - messages handled by Paging3
             convType = convType,
             members = members,
             isUserAdmin = conversation.createdBy == userId,
@@ -306,7 +272,7 @@ class ConversationViewModel @Inject constructor(
             } else null,
             typingText = typingText,
             isConnected = isConnected,
-            lastMessageId = lastMessageId
+            lastMessageId = null  // Not used anymore - Paging3 handles scroll detection
         )
     }
 
@@ -396,7 +362,11 @@ class ConversationViewModel @Inject constructor(
             // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
             val memberIds = uiState.value.members.map { it.id }
             
+            // Send message
             convRepo.sendMessage(conversationId, text, memberIds)
+            
+            // Update lastMessageSentAt (for badge logic)
+            convRepo.updateMemberLastMessageSentAtNow(conversationId)
         }
     }
     

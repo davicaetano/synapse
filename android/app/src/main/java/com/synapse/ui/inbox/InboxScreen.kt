@@ -421,7 +421,7 @@ private fun UnreadBadge(count: Int) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (count > 99) "99+" else count.toString(),
+                text = if (count >= 10) "10+" else count.toString(),
                 color = MaterialTheme.colorScheme.onPrimary,
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 11.sp

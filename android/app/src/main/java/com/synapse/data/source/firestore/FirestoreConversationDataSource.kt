@@ -3,6 +3,7 @@ package com.synapse.data.source.firestore
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
@@ -110,10 +111,12 @@ class FirestoreConversationDataSource @Inject constructor(
             
             val lastSeenAt = statusMap["lastSeenAt"] as? Timestamp
             val lastReceivedAt = statusMap["lastReceivedAt"] as? Timestamp
+            val lastMessageSentAt = statusMap["lastMessageSentAt"] as? Timestamp
             
             userId to MemberStatus(
                 lastSeenAt = lastSeenAt,
-                lastReceivedAt = lastReceivedAt
+                lastReceivedAt = lastReceivedAt,
+                lastMessageSentAt = lastMessageSentAt
             )
         }?.toMap() ?: emptyMap()
         
@@ -303,7 +306,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 .document(conversationId)
                 .update(
                     mapOf(
-                        "memberIds" to com.google.firebase.firestore.FieldValue.arrayUnion(userId),
+                        "memberIds" to FieldValue.arrayUnion(userId),
                         "updatedAtMs" to System.currentTimeMillis()
                     )
                 )
@@ -322,7 +325,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 .document(conversationId)
                 .update(
                     mapOf(
-                        "memberIds" to com.google.firebase.firestore.FieldValue.arrayRemove(userId),
+                        "memberIds" to FieldValue.arrayRemove(userId),
                         "updatedAtMs" to System.currentTimeMillis()
                     )
                 )
@@ -333,13 +336,12 @@ class FirestoreConversationDataSource @Inject constructor(
     }
     
     /**
-     * Update member's lastSeenAt timestamp (when user views conversation).
-     * Uses server timestamp for accuracy.
+     * Update member's lastSeenAt to NOW (when user opens conversation).
+     * Uses FieldValue.serverTimestamp() for current server time.
      * 
      * @param conversationId Conversation ID
-     * @param serverTimestamp Server timestamp from the most recent message
      */
-    suspend fun updateMemberLastSeenAt(conversationId: String, serverTimestamp: Timestamp) {
+    suspend fun updateMemberLastSeenAtNow(conversationId: String) {
         val userId = auth.currentUser?.uid ?: return
         
         try {
@@ -349,7 +351,7 @@ class FirestoreConversationDataSource @Inject constructor(
                     mapOf(
                         "memberStatus" to mapOf(
                             userId to mapOf(
-                                "lastSeenAt" to serverTimestamp
+                                "lastSeenAt" to FieldValue.serverTimestamp()
                             )
                         )
                     ),
@@ -357,7 +359,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 )
                 .await()
             
-            Log.d(TAG, "✅ Updated lastSeenAt for user $userId in conversation $conversationId")
+            Log.d(TAG, "✅ Updated lastSeenAt to NOW for user $userId in conversation $conversationId")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating lastSeenAt", e)
         }
@@ -391,6 +393,36 @@ class FirestoreConversationDataSource @Inject constructor(
             Log.d(TAG, "✅ Updated lastReceivedAt for user $userId in conversation $conversationId")
         } catch (e: Exception) {
             Log.e(TAG, "Error updating lastReceivedAt", e)
+        }
+    }
+    
+    /**
+     * Update member's lastMessageSentAt to NOW (when user sends a message).
+     * Uses FieldValue.serverTimestamp() for current server time.
+     * 
+     * @param conversationId Conversation ID
+     */
+    suspend fun updateMemberLastMessageSentAtNow(conversationId: String) {
+        val userId = auth.currentUser?.uid ?: return
+        
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .set(
+                    mapOf(
+                        "memberStatus" to mapOf(
+                            userId to mapOf(
+                                "lastMessageSentAt" to FieldValue.serverTimestamp()
+                            )
+                        )
+                    ),
+                    SetOptions.merge()
+                )
+                .await()
+            
+            Log.d(TAG, "✅ Updated lastMessageSentAt to NOW for user $userId in conversation $conversationId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating lastMessageSentAt", e)
         }
     }
     

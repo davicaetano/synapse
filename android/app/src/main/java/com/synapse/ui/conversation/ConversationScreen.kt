@@ -52,14 +52,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.MessageStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
-import com.synapse.ui.theme.SynapseTheme
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -79,16 +77,12 @@ fun ConversationScreen(
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
-    // Use paged messages if available (Room + Paging3)
-    val pagedMessages = vm.messagesPaged?.collectAsLazyPagingItems()
+    // Use paged messages (Room + Paging3)
+    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
     
-    // Log which implementation is being used
-    LaunchedEffect(pagedMessages, ui.messages.size) {
-        if (pagedMessages != null) {
-            android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
-        } else {
-            android.util.Log.d("ConversationScreen", "📋 Using REGULAR list: ${ui.messages.size} items")
-        }
+    // Log Paging3 usage
+    LaunchedEffect(pagedMessages.itemCount) {
+        android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
     }
 
     ConversationScreen(
@@ -106,9 +100,9 @@ fun ConversationScreen(
 @Composable
 fun ConversationScreen(
     ui: ConversationUIState,
+    pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
-    pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>? = null,
     onTextChanged: (text: String) -> Unit = {},
     onSend20Messages: () -> Unit = {},
     onSend500Messages: () -> Unit = {},
@@ -167,30 +161,15 @@ fun ConversationScreen(
                     bottom = 8.dp
                 )
             ) {
-                // Use paged messages if available, otherwise regular list
-                if (pagedMessages != null) {
-                    // Paging3 - loads 50 at a time
-                    items(count = pagedMessages.itemCount) { index ->
-                        pagedMessages[index]?.let { m ->
-                            MessageBubble(
-                                text = m.text,
-                                displayTime = formatTime(m.createdAtMs),
-                                isMine = m.isMine,
-                                isReadByEveryone = m.isReadByEveryone,
-                                senderName = null,
-                                status = m.status
-                            )
-                        }
-                    }
-                } else {
-                    // Regular - loads all at once
-                    items(ui.messages.reversed()) { m ->
+                // Paging3 - loads 50 at a time
+                items(count = pagedMessages.itemCount) { index ->
+                    pagedMessages[index]?.let { m ->
                         MessageBubble(
                             text = m.text,
-                            displayTime = m.displayTime,
+                            displayTime = formatTime(m.createdAtMs),
                             isMine = m.isMine,
                             isReadByEveryone = m.isReadByEveryone,
-                            senderName = m.senderName,
+                            senderName = null,
                             status = m.status
                         )
                     }
@@ -529,152 +508,4 @@ private fun MessageBubble(
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-private fun ConversationScreenPreview() {
-    SynapseTheme {
-        Column {
-            ConversationScreen(
-                modifier = Modifier.weight(1.0f),
-                ui = ConversationUIState(
-                    conversationId = "123",
-                    title = "Alice",
-                    subtitle = "online",
-                    convType = com.synapse.domain.conversation.ConversationType.DIRECT,
-                    messages = listOf(
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true
-                        ),
-                        ConversationUIMessage(
-                            id = "m2",
-                            text = "Hi!",
-                            isMine = false,
-                            displayTime = "09:13",
-                            isReadByEveryone = true
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.PENDING
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = false,
-                            status = MessageStatus.SENT
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = false,
-                            status = MessageStatus.DELIVERED
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Hello!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-                        ConversationUIMessage(
-                            id = "m1",
-                            text = "Last!",
-                            isMine = true,
-                            displayTime = "09:12",
-                            isReadByEveryone = true,
-                            status = MessageStatus.READ
-                        ),
-
-                    )
-                ),
-                onSendClick = {}
-            )
-            Column(
-                modifier = Modifier
-                    .defaultMinSize(minHeight = 50.dp)
-                    .weight(1.0f)
-            ) {
-                Text(text = "abc")
-            }
-        }
-    }
-}
-
 

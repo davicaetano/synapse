@@ -79,49 +79,35 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
 fun MessageEntity.toDomain(
     currentUserId: String?,
     memberCount: Int,
-    memberStatus: Map<String, MemberStatus>? = null
+    memberStatus: Map<String, MemberStatus>
 ): Message {
-    // NEW APPROACH: Calculate status based on memberStatus timestamps if available
-    val status = if (memberStatus != null && memberCount > 1) {
-        // Get all other members (exclude sender)
-        val otherMembers = memberIdsAtCreation.filter { it != senderId }
+    // Calculate status based on memberStatus timestamps (conversation-level tracking)
+    // Get all other members (exclude sender)
+    val otherMembers = memberIdsAtCreation.filter { it != senderId }
+    
+    val status = when {
+        // PENDING: serverTimestamp is null (never reached server)
+        serverTimestamp == null -> MessageStatus.PENDING
         
-        when {
-            // PENDING: serverTimestamp is null (never reached server)
-            serverTimestamp == null -> MessageStatus.PENDING
-            
-            // SENT: No other members received yet
-            otherMembers.all { userId ->
-                val status = memberStatus[userId]
-                val lastReceivedMs = status?.lastReceivedAt?.toDate()?.time
-                lastReceivedMs == null || serverTimestamp!! > lastReceivedMs
-            } -> MessageStatus.SENT
-            
-            // READ: All other members have seen this message
-            otherMembers.all { userId ->
-                val status = memberStatus[userId]
-                val lastSeenMs = status?.lastSeenAt?.toDate()?.time
-                lastSeenMs != null && serverTimestamp!! <= lastSeenMs
-            } -> MessageStatus.READ
-            
-            // DELIVERED: At least one other member received but not everyone read yet
-            else -> MessageStatus.DELIVERED
-        }
-    } else {
-        // FALLBACK: Old approach (read from message fields)
-        // Determine message status based on WhatsApp logic:
-        // Order matters! Check from most restrictive to least restrictive:
-        // 1. PENDING: serverTimestamp is null (never reached server)
-        // 2. SENT: Only sender in receivedBy (receivedBy <= 1)
-        // 3. READ: Everyone read (readBy >= memberCount, includes sender)
-        // 4. DELIVERED: Others received but not everyone read yet
-        when {
-            serverTimestamp == null -> MessageStatus.PENDING
-            receivedBy.size <= 1 -> MessageStatus.SENT          // Only sender received
-            readBy.size >= memberCount -> MessageStatus.READ    // Everyone read (includes sender)
-            receivedBy.size > 1 -> MessageStatus.DELIVERED      // Someone else received
-            else -> MessageStatus.SENT
-        }
+        // For single-user conversations (SELF), always mark as READ
+        otherMembers.isEmpty() -> MessageStatus.READ
+        
+        // SENT: No other members received yet
+        otherMembers.all { userId ->
+            val userStatus = memberStatus[userId]
+            val lastReceivedMs = userStatus?.lastReceivedAt?.toDate()?.time
+            lastReceivedMs == null || serverTimestamp!! > lastReceivedMs
+        } -> MessageStatus.SENT
+        
+        // READ: All other members have seen this message
+        otherMembers.all { userId ->
+            val userStatus = memberStatus[userId]
+            val lastSeenMs = userStatus?.lastSeenAt?.toDate()?.time
+            lastSeenMs != null && serverTimestamp!! <= lastSeenMs
+        } -> MessageStatus.READ
+        
+        // DELIVERED: At least one other member received but not everyone read yet
+        else -> MessageStatus.DELIVERED
     }
     
     return Message(
@@ -130,8 +116,8 @@ fun MessageEntity.toDomain(
         senderId = this.senderId,
         createdAtMs = this.createdAtMs,
         isMine = (currentUserId != null && this.senderId == currentUserId),
-        receivedBy = emptyList(), // For now, we don't populate full User objects
-        readBy = emptyList(),
+        receivedBy = emptyList(),  // Not used anymore
+        readBy = emptyList(),  // Not used anymore
         isReadByEveryone = status == MessageStatus.READ,
         status = status
     )

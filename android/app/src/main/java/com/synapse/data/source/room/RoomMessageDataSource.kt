@@ -5,110 +5,29 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
-import com.synapse.data.source.IMessageDataSource
-import com.synapse.data.source.firestore.FirestoreMessageDataSource
 import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.room.dao.MessageDao
 import com.synapse.data.source.room.entity.MessageRoomEntity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Message DataSource that uses Room as cache + Firebase as remote.
+ * Message DataSource for Room (local cache).
  * 
- * STRATEGY:
+ * PURE ROOM - NO Firestore dependencies:
  * - All READS come from Room (instant, ~50ms for 2500 messages)
- * - All WRITES go to Firebase (Room syncs automatically via listeners)
- * - Single global sync job keeps Room updated from Firebase
+ * - Provides Paging3 support for efficient lazy loading
+ * - ViewModel orchestrates Firebase → Room sync when needed
  * 
- * This provides instant UI updates while keeping data in sync with Firebase.
+ * This provides instant UI updates. Sync is managed externally.
  */
 @Singleton
 class RoomMessageDataSource @Inject constructor(
-    private val messageDao: MessageDao,
-    private val firestoreDataSource: FirestoreMessageDataSource
-) : IMessageDataSource {
-    
-    // Singleton scope for background sync (survives ViewModel lifecycle)
-    private val dataSourceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
-    // Track active sync jobs per conversation (prevents duplicates)
-    private val activeSyncJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
-    
-    /**
-     * Ensure sync is running for a specific conversation.
-     */
-    private fun ensureConversationSync(conversationId: String) {
-        if (activeSyncJobs.containsKey(conversationId)) return
-        
-        val syncJob = dataSourceScope.launch {
-            firestoreDataSource.listenMessages(conversationId).collect { firestoreMessages ->
-                val roomMessages = firestoreMessages.map { msg ->
-                    MessageRoomEntity.fromEntity(msg, conversationId)
-                }
-                messageDao.upsertMessages(roomMessages)
-                Log.d(TAG, "✅ [ROOM] Synced ${roomMessages.size} messages for $conversationId")
-            }
-        }
-        
-        activeSyncJobs[conversationId] = syncJob
-    }
-    
-    /**
-     * Listen to messages with Room as single source of truth.
-     * 
-     * FLOW:
-     * 1. Emit from Room IMMEDIATELY (instant UI, may be empty or cached)
-     * 2. Launch background job: Firebase → Room (continuous sync)
-     */
-    override fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
-        val startTime = System.currentTimeMillis()
-        Log.d(TAG, "⏱️ [ROOM] listenMessages START: $conversationId")
-        
-        // Launch 1: Room → UI (FIRST! Instant emission!)
-        var firstEmission = true
-        val emitJob = launch {
-            messageDao.observeMessages(conversationId)
-                .distinctUntilChanged()  // ✅ Only emit when data actually changes!
-                .collect { roomMessages ->
-                    val entities = roomMessages.map { it.toEntity() }
-                    
-                    if (firstEmission) {
-                        val elapsed = System.currentTimeMillis() - startTime
-                        Log.d(TAG, "⏱️ [ROOM] listenMessages FIRST EMIT: $conversationId - ${entities.size} msgs in ${elapsed}ms (from cache)")
-                        firstEmission = false
-                    }
-                    
-                    send(entities)
-                }
-        }
-        
-        // Launch 2: Firebase → Room sync (background, doesn't block UI!)
-        val syncJob = launch {
-            firestoreDataSource.listenMessages(conversationId).collect { firestoreMessages ->
-                val roomMessages = firestoreMessages.map { msg ->
-                    MessageRoomEntity.fromEntity(msg, conversationId)
-                }
-                messageDao.upsertMessages(roomMessages)
-                Log.d(TAG, "✅ [ROOM] Synced ${roomMessages.size} messages from Firebase to Room")
-            }
-        }
-        
-        awaitClose {
-            syncJob.cancel()
-            emitJob.cancel()
-            Log.d(TAG, "🔌 [ROOM] listenMessages CLOSED: $conversationId")
-        }
-    }
+    private val messageDao: MessageDao
+) {
     
     /**
      * Observe messages with Paging3 support (efficient for large lists).
@@ -118,13 +37,11 @@ class RoomMessageDataSource @Inject constructor(
      * - Scroll up → automatically loads more
      * - UI always responsive (never loads all 2500 at once!)
      * 
-     * NOTE: Does NOT automatically start Firebase sync.
-     * Call startMessageSync() separately after UI is ready to avoid blocking.
+     * PURE ROOM - reads from local cache only.
      */
     fun observeMessagesPaged(conversationId: String): Flow<PagingData<MessageEntity>> {
         Log.d(TAG, "📄 [ROOM] observeMessagesPaged START: $conversationId")
         
-        // Return Pager with Room as data source
         return Pager(
             config = PagingConfig(
                 pageSize = 50,
@@ -139,81 +56,81 @@ class RoomMessageDataSource @Inject constructor(
     }
     
     /**
-     * Start Firebase → Room sync for a conversation.
-     * Should be called AFTER the UI has rendered to avoid blocking initial load.
+     * Upsert messages into Room cache.
+     * Called by ViewModel when syncing from Firestore.
      */
-    fun startMessageSync(conversationId: String) {
-        Log.d(TAG, "🔄 [ROOM] Starting message sync for: $conversationId")
-        ensureConversationSync(conversationId)
+    suspend fun upsertMessages(messages: List<MessageEntity>, conversationId: String) {
+        val roomEntities = messages.map { MessageRoomEntity.fromEntity(it, conversationId) }
+        messageDao.upsertMessages(roomEntities)
+        Log.d(TAG, "✅ [ROOM] Upserted ${roomEntities.size} messages for $conversationId")
     }
     
     /**
-     * Send a message (writes to Firebase, syncs to Room automatically).
-     */
-    override suspend fun sendMessage(
-        conversationId: String,
-        text: String,
-        memberIds: List<String>
-    ): String? {
-        // Delegate to Firestore - Room will sync automatically via listener
-        return firestoreDataSource.sendMessage(conversationId, text, memberIds)
-    }
-    
-    /**
-     * Send multiple messages in batch (writes to Firebase, syncs to Room automatically).
-     */
-    override suspend fun sendMessagesBatch(
-        conversationId: String,
-        messages: List<String>,
-        memberIds: List<String>
-    ) {
-        // Delegate to Firestore - Room will sync automatically via listener
-        firestoreDataSource.sendMessagesBatch(conversationId, messages, memberIds)
-    }
-    
-    /**
-     * Observe all unread counts.
+     * Calculate unread counts for conversations based on memberStatus timestamps.
      * 
-     * HYBRID STRATEGY:
-     * - Syncs from Firebase to populate Room
-     * - Returns Flow from Room (instant reads!)
+     * NEW APPROACH - Uses conversation-level lastSeenAt tracking:
+     * - Takes map of conversationId → lastSeenAtMs from conversation.memberStatus
+     * - Counts messages where serverTimestamp > lastSeenAtMs
+     * - Caps at 10 per conversation (shows "10+" in UI)
+     * 
+     * This is called FROM InboxViewModel which has access to memberStatus.
+     * 
+     * Performance: ~10ms for 100 conversations
      */
-    override fun observeAllUnreadCounts(userId: String): Flow<Map<String, Int>> = callbackFlow {
+    suspend fun calculateUnreadCounts(
+        conversationLastSeenMap: Map<String, Long?>
+    ): Map<String, Int> {
         val startTime = System.currentTimeMillis()
-        Log.d(TAG, "⏱️ [ROOM] observeAllUnreadCounts START")
+        Log.d(TAG, "⏱️ [ROOM] calculateUnreadCounts START for ${conversationLastSeenMap.size} conversations")
+        Log.d(TAG, "   Input map: $conversationLastSeenMap")
         
-        // Launch 1: Firebase → Room sync (for ALL conversations)
-        val syncJob = launch {
-            firestoreDataSource.observeAllUnreadCounts(userId).collect { firestoreCounts ->
-                // Ensure sync is running for each conversation that has unread messages
-                firestoreCounts.keys.forEach { convId ->
-                    ensureConversationSync(convId)
+        val conversationIds = conversationLastSeenMap.keys.toList()
+        if (conversationIds.isEmpty()) {
+            Log.d(TAG, "   Empty conversationIds - returning empty map")
+            return emptyMap()
+        }
+        
+        Log.d(TAG, "   Querying Room for ${conversationIds.size} conversations")
+        
+        val messages = messageDao.getMessagesForConversations(conversationIds)
+        Log.d(TAG, "   Room returned ${messages.size} total messages")
+        
+        val countsByConv = mutableMapOf<String, Int>()
+        
+        // For each conversation, count messages newer than lastSeenAt
+        conversationLastSeenMap.forEach { (convId, lastSeenAtMs) ->
+            val conversationMessages = messages.filter { it.conversationId == convId }
+            Log.d(TAG, "   Conv ${convId.takeLast(6)}: ${conversationMessages.size} messages in Room, lastSeenAt=$lastSeenAtMs")
+            
+            val unreadCount = if (lastSeenAtMs == null) {
+                // Never seen - all messages are unread
+                conversationMessages.size
+            } else {
+                // Count messages with serverTimestamp > lastSeenAt
+                conversationMessages.count { msg ->
+                    val serverTimestamp = msg.serverTimestamp
+                    val isUnread = serverTimestamp != null && serverTimestamp > lastSeenAtMs
+                    if (isUnread) {
+                        Log.d(TAG, "      Unread msg: serverTimestamp=$serverTimestamp > lastSeenAt=$lastSeenAtMs")
+                    }
+                    isUnread
                 }
+            }
+            
+            Log.d(TAG, "   Conv ${convId.takeLast(6)}: $unreadCount unread messages (before cap)")
+            
+            // Cap at 10 (UI shows "10+")
+            if (unreadCount > 0) {
+                countsByConv[convId] = minOf(unreadCount, 10)
             }
         }
         
-        // Launch 2: Room → UI (instant!)
-        var firstEmission = true
-        val emitJob = launch {
-            messageDao.getUnreadMessagesByUser(userId).collect { unreadMessages ->
-                val countsByConv = unreadMessages
-                    .groupBy { it.conversationId }
-                    .mapValues { (_, messages) -> messages.size }
-                
-                if (firstEmission) {
-                    val elapsed = System.currentTimeMillis() - startTime
-                    Log.d(TAG, "⏱️ [ROOM] observeAllUnreadCounts FIRST EMIT: ${countsByConv.size} convs, ${countsByConv.values.sum()} total unread in ${elapsed}ms")
-                    firstEmission = false
-                }
-                
-                send(countsByConv)
-            }
-        }
+        val elapsed = System.currentTimeMillis() - startTime
+        val total = countsByConv.values.sum()
+        Log.d(TAG, "✅ [ROOM] calculateUnreadCounts: ${countsByConv.size} convs with unread, $total total (capped at 10+) in ${elapsed}ms")
+        Log.d(TAG, "   Final result: $countsByConv")
         
-        awaitClose {
-            syncJob.cancel()
-            emitJob.cancel()
-        }
+        return countsByConv
     }
     
     companion object {

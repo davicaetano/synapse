@@ -31,20 +31,14 @@ interface MessageDao {
      */
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAtMs ASC")
     fun observeMessages(conversationId: String): Flow<List<MessageRoomEntity>>
-
+    
     /**
-     * Get unread message count per conversation for a specific user.
-     * Returns all messages grouped by conversation where notReadBy contains the userId.
+     * Get all messages for specific conversations.
+     * Used to calculate unread counts based on memberStatus timestamps.
      */
-    @Query("SELECT * FROM messages WHERE notReadBy LIKE '%' || :userId || '%'")
-    fun getUnreadMessagesByUser(userId: String): Flow<List<MessageRoomEntity>>
+    @Query("SELECT * FROM messages WHERE conversationId IN (:conversationIds)")
+    suspend fun getMessagesForConversations(conversationIds: List<String>): List<MessageRoomEntity>
 
-    /**
-     * Get unreceived messages for a specific user.
-     * Returns all messages where notReceivedBy contains the userId.
-     */
-    @Query("SELECT * FROM messages WHERE notReceivedBy LIKE '%' || :userId || '%'")
-    fun getUnreceivedMessagesByUser(userId: String): Flow<List<MessageRoomEntity>>
 
     /**
      * Insert or update multiple messages.
