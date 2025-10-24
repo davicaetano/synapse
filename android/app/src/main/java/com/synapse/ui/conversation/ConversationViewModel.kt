@@ -62,6 +62,13 @@ class ConversationViewModel @Inject constructor(
     private val _isGeneratingSummary = kotlinx.coroutines.flow.MutableStateFlow(false)
     val isGeneratingSummary: StateFlow<Boolean> = _isGeneratingSummary
     
+    private val _summaryError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    val summaryError: StateFlow<String?> = _summaryError
+    
+    fun clearSummaryError() {
+        _summaryError.value = null
+    }
+    
     override fun onCleared() {
         super.onCleared()
         // Remove typing indicator when leaving conversation
@@ -529,6 +536,7 @@ class ConversationViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _isGeneratingSummary.value = true
+                _summaryError.value = null  // Clear previous errors
                 Log.d(TAG, "📊 Generating thread summary...")
                 
                 val result = aiRepo.summarizeThread(
@@ -541,10 +549,14 @@ class ConversationViewModel @Inject constructor(
                     Log.d(TAG, "✅ Summary generated: ${response?.message_id?.takeLast(6)}")
                     Log.d(TAG, "📈 Processed ${response?.message_count} messages in ${response?.processing_time_ms}ms")
                 } else {
-                    Log.e(TAG, "❌ Failed to generate summary", result.exceptionOrNull())
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    Log.e(TAG, "❌ Failed to generate summary: $errorMsg")
+                    _summaryError.value = errorMsg
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Exception generating summary", e)
+                val errorMsg = e.message ?: "Network error"
+                Log.e(TAG, "❌ Exception generating summary: $errorMsg", e)
+                _summaryError.value = errorMsg
             } finally {
                 _isGeneratingSummary.value = false
             }
@@ -562,6 +574,7 @@ class ConversationViewModel @Inject constructor(
     fun refineSummary(previousSummaryId: String, refinementInstructions: String) {
         viewModelScope.launch {
             try {
+                _summaryError.value = null  // Clear previous errors
                 Log.d(TAG, "🔧 Refining summary: ${previousSummaryId.takeLast(6)}")
                 
                 val result = aiRepo.refineSummary(
@@ -574,10 +587,14 @@ class ConversationViewModel @Inject constructor(
                     val response = result.getOrNull()
                     Log.d(TAG, "✅ Refined summary created: ${response?.message_id?.takeLast(6)}")
                 } else {
-                    Log.e(TAG, "❌ Failed to refine summary", result.exceptionOrNull())
+                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                    Log.e(TAG, "❌ Failed to refine summary: $errorMsg")
+                    _summaryError.value = errorMsg
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Exception refining summary", e)
+                val errorMsg = e.message ?: "Network error"
+                Log.e(TAG, "❌ Exception refining summary: $errorMsg", e)
+                _summaryError.value = errorMsg
             }
         }
     }

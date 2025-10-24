@@ -87,12 +87,26 @@ fun ConversationScreen(
     
     // AI generation state
     val isGeneratingSummary by vm.isGeneratingSummary.collectAsStateWithLifecycle()
+    val summaryError by vm.summaryError.collectAsStateWithLifecycle()
     
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
+    
+    // Show Toast for AI summary errors
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(summaryError) {
+        summaryError?.let { error ->
+            android.widget.Toast.makeText(
+                context,
+                "Failed to generate summary: $error",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            vm.clearSummaryError()  // Clear error after showing
+        }
+    }
     
     // Log Paging3 usage
     LaunchedEffect(pagedMessages.itemCount) {
