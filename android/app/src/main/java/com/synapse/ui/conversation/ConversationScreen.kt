@@ -266,17 +266,13 @@ fun ConversationScreen(
                         when (m.type) {
                             "ai_summary", "ai_error" -> {
                                 // AI messages: special full-width layout with bot avatar and name
-                                val previousMessage = if (index < pagedMessages.itemCount - 1) {
-                                    pagedMessages[index + 1]
-                                } else null
-                                val showSenderInfo = previousMessage?.senderId != m.senderId
-                                
+                                // ALWAYS show name and avatar for AI messages (even if consecutive)
                                 MessageBubble(
                                     text = m.text,
                                     displayTime = formatTime(m.createdAtMs),
                                     isMine = false,  // Always render on left side
                                     isReadByEveryone = false,
-                                    senderName = if (showSenderInfo) "Synapse AI Agent" else null,  // Hardcoded name
+                                    senderName = "Synapse AI Agent",  // Always show name for AI
                                     senderPhotoUrl = null,  // Bot avatar (will show default avatar with "S")
                                     status = m.status,
                                     isSelected = m.id == selectedMessageId,
@@ -287,7 +283,8 @@ fun ConversationScreen(
                             else -> {
                                 // Regular messages: text, bot welcome message
                                 // For group messages, find sender info from members list
-                                val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
+                                val isGroupChat = ui.convType == ConversationType.GROUP
+                                val sender = if (isGroupChat && !m.isMine) {
                                     ui.members.find { it.id == m.senderId }
                                 } else null
                                 
@@ -306,7 +303,8 @@ fun ConversationScreen(
                                     senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
                                     status = m.status,
                                     isSelected = m.id == selectedMessageId,
-                                    onClick = { onMessageClick(m.id) }
+                                    onClick = { onMessageClick(m.id) },
+                                    needsAvatarSpace = isGroupChat && !m.isMine  // Reserve space for avatar in groups
                                 )
                             }
                         }
@@ -572,7 +570,8 @@ private fun MessageBubble(
     status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED,
     isSelected: Boolean = false,
     onClick: () -> Unit = {},
-    isAIMessage: Boolean = false  // Special flag for AI messages (full-width layout)
+    isAIMessage: Boolean = false,  // Special flag for AI messages (full-width layout)
+    needsAvatarSpace: Boolean = false  // Reserve space for avatar even when not shown
 ) {
     // Message bubble colors
     val bubbleBg = if (isMine) {
@@ -607,34 +606,57 @@ private fun MessageBubble(
         verticalAlignment = Alignment.Top
     ) {
         // Avatar for group messages (large, aligned to top-left)
-        // Show avatar/space when: senderName != null (groups) OR isAIMessage (AI messages)
-        if (!isMine && (senderName != null || isAIMessage)) {
-            if (senderPhotoUrl != null) {
-                UserAvatar(
-                    photoUrl = senderPhotoUrl,
-                    displayName = senderName ?: "Synapse",
-                    size = 32.dp,
-                    showPresence = false,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-            } else {
-                // Default avatar with first letter (for AI: "S")
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = (senderName ?: "S").first().uppercase(),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
+        // ALWAYS reserve space in group chats (for alignment), show avatar only when senderName != null
+        if (!isMine && needsAvatarSpace) {
+            if (senderName != null) {
+                // Show avatar with name
+                if (senderPhotoUrl != null) {
+                    UserAvatar(
+                        photoUrl = senderPhotoUrl,
+                        displayName = senderName,
+                        size = 32.dp,
+                        showPresence = false,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
+                } else {
+                    // Default avatar with first letter
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = senderName.first().uppercase(),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                // Empty space to maintain alignment for consecutive messages from same sender
+                Spacer(modifier = Modifier.width(40.dp))  // 32dp avatar + 8dp padding
             }
+        } else if (!isMine && isAIMessage) {
+            // AI messages: always show avatar
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "S",
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
         }
         
         Column(
@@ -668,12 +690,44 @@ private fun MessageBubble(
                 .background(bubbleBg)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Message text
-            Text(
-                text = text,
-                color = bubbleFg,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            // AI messages: Expandable text with "Show more/less"
+            if (isAIMessage) {
+                var isExpanded by remember { mutableStateOf(false) }
+                val maxCharsCollapsed = 300
+                val shouldTruncate = text.length > maxCharsCollapsed
+                
+                // Message text (truncated or full)
+                Text(
+                    text = if (shouldTruncate && !isExpanded) {
+                        text.take(maxCharsCollapsed) + "..."
+                    } else {
+                        text
+                    },
+                    color = bubbleFg,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                
+                // "Show more/less" button
+                if (shouldTruncate) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isExpanded) "Show less ▲" else "Show more ▼",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 4.dp)
+                    )
+                }
+            } else {
+                // Regular messages: normal text
+                Text(
+                    text = text,
+                    color = bubbleFg,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
 
             Spacer(modifier = Modifier.height(2.dp))
 

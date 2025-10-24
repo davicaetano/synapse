@@ -54,6 +54,7 @@ class MainActivity : FragmentActivity() {
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         navController = navHostFragment.navController
         
+        // Observe auth state
         lifecycleScope.launch {
             mainVm.authState.collect { authState ->
                 when (authState) {
@@ -81,6 +82,29 @@ class MainActivity : FragmentActivity() {
                             navController?.navigate(R.id.authFragment, null, navOptions)
                         }
                     }
+                }
+            }
+        }
+        
+        // Observe AI error messages and show Toast (only if enabled in Dev Settings)
+        lifecycleScope.launch {
+            mainVm.aiErrorMessage.collect { errorMsg ->
+                if (errorMsg != null) {
+                    // Check if Toast notifications are enabled in Dev Settings
+                    val showToasts = mainVm.showAIErrorToasts.value
+                    if (showToasts) {
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            errorMsg,
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    } else {
+                        // Log error even if Toast is disabled (for debugging via logcat)
+                        Log.w(TAG, "AI Error (Toast disabled): $errorMsg")
+                    }
+                    
+                    // Clear error after handling
+                    mainVm.clearAIError()
                 }
             }
         }

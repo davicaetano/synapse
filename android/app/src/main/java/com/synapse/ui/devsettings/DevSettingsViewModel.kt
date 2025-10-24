@@ -20,13 +20,15 @@ class DevSettingsViewModel @Inject constructor(
         devPreferences.urlMode,
         devPreferences.customUrl,
         devPreferences.showBatchButtons,
-        devPreferences.forceAIError
-    ) { urlMode, customUrl, showBatchButtons, forceAIError ->
+        devPreferences.forceAIError,
+        devPreferences.showAIErrorToasts
+    ) { urlMode, customUrl, showBatchButtons, forceAIError, showAIErrorToasts ->
         DevSettingsUIState(
             urlMode = urlMode,
             customUrl = customUrl,
             showBatchButtons = showBatchButtons,
-            forceAIError = forceAIError
+            forceAIError = forceAIError,
+            showAIErrorToasts = showAIErrorToasts
         )
     }.stateIn(
         scope = viewModelScope,
@@ -55,6 +57,12 @@ class DevSettingsViewModel @Inject constructor(
     fun toggleForceAIError(force: Boolean) {
         viewModelScope.launch {
             devPreferences.setForceAIError(force)
+        }
+    }
+    
+    fun toggleShowAIErrorToasts(show: Boolean) {
+        viewModelScope.launch {
+            devPreferences.setShowAIErrorToasts(show)
         }
     }
 }

@@ -37,6 +37,7 @@ class DevPreferences @Inject constructor(
         private val CUSTOM_URL = stringPreferencesKey("custom_url")
         private val SHOW_BATCH_BUTTONS = booleanPreferencesKey("show_batch_buttons")
         private val FORCE_AI_ERROR = booleanPreferencesKey("force_ai_error")
+        private val SHOW_AI_ERROR_TOASTS = booleanPreferencesKey("show_ai_error_toasts")
         
         // Default URLs
         const val PRODUCTION_URL = "https://synapse-ai-api-4wbf.onrender.com/api/"
@@ -69,6 +70,13 @@ class DevPreferences @Inject constructor(
      */
     val forceAIError: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[FORCE_AI_ERROR] ?: false
+    }
+    
+    /**
+     * Show AI error toasts flag (for debugging)
+     */
+    val showAIErrorToasts: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[SHOW_AI_ERROR_TOASTS] ?: false
     }
     
     /**
@@ -116,6 +124,15 @@ class DevPreferences @Inject constructor(
     suspend fun setForceAIError(force: Boolean) {
         dataStore.edit { prefs ->
             prefs[FORCE_AI_ERROR] = force
+        }
+    }
+    
+    /**
+     * Toggle show AI error toasts (for debugging)
+     */
+    suspend fun setShowAIErrorToasts(show: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[SHOW_AI_ERROR_TOASTS] = show
         }
     }
 }

@@ -32,6 +32,17 @@ class AIRepository @Inject constructor(
     // Flow: Map of conversationId -> job count (for real-time UI updates)
     private val _jobCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     
+    // Flow: Global error messages (for Toast notifications in MainActivity)
+    private val _errorMessages = MutableStateFlow<String?>(null)
+    val errorMessages: Flow<String?> = _errorMessages
+    
+    /**
+     * Clear error message after Toast is shown
+     */
+    fun clearError() {
+        _errorMessages.value = null
+    }
+    
     /**
      * Observe active job count for a specific conversation
      * UI can use this to show loading spinners
@@ -84,6 +95,16 @@ class AIRepository @Inject constructor(
                 
             } catch (e: Exception) {
                 Log.e(TAG, "❌ [$jobId] AI job failed: ${e.message}", e)
+                
+                // Emit error message for MainActivity to show Toast
+                val errorMsg = when {
+                    e.message?.contains("502") == true -> "AI service is starting up. Please try again in a moment."
+                    e.message?.contains("timeout") == true -> "Request timeout. Please check your connection."
+                    e.message?.contains("401") == true -> "Authentication error. Please sign in again."
+                    else -> "AI processing failed: ${e.message}"
+                }
+                _errorMessages.value = errorMsg
+                
                 // Backend will handle error posting to Firestore
                 
             } finally {

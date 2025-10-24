@@ -137,6 +137,18 @@ fun DevSettingsScreen(
                 }
             )
             
+            // Show AI Error Toasts Toggle
+            SettingsItem(
+                title = "Show AI Error Toasts",
+                subtitle = if (state.showAIErrorToasts) "Enabled (shows Toast on AI errors)" else "Disabled",
+                trailing = {
+                    Switch(
+                        checked = state.showAIErrorToasts,
+                        onCheckedChange = { vm.toggleShowAIErrorToasts(it) }
+                    )
+                }
+            )
+            
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             // Info Section
