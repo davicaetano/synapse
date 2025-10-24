@@ -96,6 +96,67 @@ class FirestoreMessageDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Listen to a single message by ID.
+     * Used for AI summary refinement to display the previous summary.
+     * 
+     * @param conversationId The conversation ID
+     * @param messageId The specific message ID to observe
+     * @return Flow of MessageEntity (null if not found or deleted)
+     */
+    fun listenMessage(conversationId: String, messageId: String): Flow<MessageEntity?> = callbackFlow {
+        val ref = firestore.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .document(messageId)
+        
+        val registration = ref.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e(TAG, "❌ Error listening to message $messageId", error)
+                trySend(null)
+                return@addSnapshotListener
+            }
+            
+            if (snapshot == null || !snapshot.exists()) {
+                trySend(null)
+                return@addSnapshotListener
+            }
+            
+            try {
+                // Skip soft-deleted messages
+                val isDeleted = snapshot.getBoolean("isDeleted") ?: false
+                if (isDeleted) {
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                
+                val message = MessageEntity(
+                    id = snapshot.id,
+                    text = snapshot.getString("text") ?: "",
+                    senderId = snapshot.getString("senderId") ?: "",
+                    createdAtMs = snapshot.getLong("createdAtMs") ?: 0L,
+                    memberIdsAtCreation = (snapshot.get("memberIdsAtCreation") as? List<*>)
+                        ?.mapNotNull { it as? String } 
+                        ?: emptyList(),
+                    serverTimestamp = snapshot.getTimestamp("serverTimestamp")?.toDate()?.time,
+                    type = snapshot.getString("type") ?: "text",
+                    isDeleted = false,
+                    deletedBy = null,
+                    deletedAtMs = null
+                )
+                
+                trySend(message)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error parsing message $messageId", e)
+                trySend(null)
+            }
+        }
+        
+        awaitClose {
+            registration.remove()
+        }
+    }
+    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================

@@ -74,6 +74,14 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
+     * Observe a single message by ID from Firestore.
+     * Used for AI summary refinement to display the previous summary.
+     */
+    fun observeMessage(conversationId: String, messageId: String): Flow<MessageEntity?> {
+        return firestoreMessageDataSource.listenMessage(conversationId, messageId)
+    }
+    
+    /**
      * Upsert messages into Room cache.
      * Called by ViewModel when syncing from Firestore.
      */

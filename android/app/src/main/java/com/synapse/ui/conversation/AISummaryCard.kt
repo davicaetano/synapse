@@ -1,6 +1,7 @@
 package com.synapse.ui.conversation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -144,9 +145,7 @@ fun AISummaryCard(
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier
                         .padding(top = 4.dp)
-                        .then(
-                            Modifier.clickableText { isExpanded = !isExpanded }
-                        )
+                        .clickable { isExpanded = !isExpanded }
                 )
             }
             
@@ -160,12 +159,5 @@ fun AISummaryCard(
             )
         }
     }
-}
-
-// Helper extension for clickable text
-private fun Modifier.clickableText(onClick: () -> Unit): Modifier {
-    return this.then(
-        androidx.compose.foundation.clickable(onClick = onClick)
-    )
 }
 

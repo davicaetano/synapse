@@ -51,6 +51,16 @@ class ConversationFragment : Fragment() {
                                     "messageId" to messageId
                                 )
                             )
+                        },
+                        onOpenRefineSummary = { previousSummaryId ->
+                            val conversationId = arguments?.getString("conversationId") ?: ""
+                            findNavController().navigate(
+                                com.synapse.R.id.action_conversation_to_refineSummary,
+                                bundleOf(
+                                    "conversationId" to conversationId,
+                                    "previousSummaryId" to previousSummaryId
+                                )
+                            )
                         }
                     )
                 }

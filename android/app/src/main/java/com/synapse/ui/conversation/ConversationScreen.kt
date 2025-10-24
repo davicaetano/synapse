@@ -77,7 +77,8 @@ fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onOpenGroupSettings: () -> Unit = {},
-    onOpenMessageDetail: (String) -> Unit = {}
+    onOpenMessageDetail: (String) -> Unit = {},
+    onOpenRefineSummary: (String) -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
@@ -129,6 +130,7 @@ fun ConversationScreen(
         ui = ui,
         pagedMessages = pagedMessages,
         selectedMessageId = selectedMessageId,
+        isGeneratingSummary = isGeneratingSummary,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
@@ -146,7 +148,8 @@ fun ConversationScreen(
         },
         onGenerateSummary = {
             vm.generateSummary()  // Call AI summarization
-        }
+        },
+        onOpenRefineSummary = onOpenRefineSummary
     )
 }
 
@@ -156,6 +159,7 @@ fun ConversationScreen(
     ui: ConversationUIState,
     pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
     selectedMessageId: String?,
+    isGeneratingSummary: Boolean = false,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
@@ -168,7 +172,8 @@ fun ConversationScreen(
     onClearSelection: () -> Unit = {},
     onOpenMessageDetail: () -> Unit = {},
     onDeleteMessage: () -> Unit = {},
-    onGenerateSummary: () -> Unit = {}
+    onGenerateSummary: () -> Unit = {},
+    onOpenRefineSummary: (String) -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -268,13 +273,13 @@ fun ConversationScreen(
                                     text = m.text,
                                     timestamp = formatTime(m.createdAtMs),
                                     onDelete = {
-                                        // TODO: Show delete confirmation
+                                        // Show delete confirmation for AI summary
                                         onMessageClick(m.id)
                                         onDeleteMessage()
                                     },
                                     onRefine = {
-                                        // TODO: Open refine screen
-                                        // onOpenRefineScreen(m.id)
+                                        // Navigate to refine screen
+                                        onOpenRefineSummary(m.id)
                                     }
                                 )
                             }

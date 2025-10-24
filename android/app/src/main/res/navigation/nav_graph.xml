@@ -76,6 +76,14 @@
             app:exitAnim="@anim/slide_out_left"
             app:popEnterAnim="@anim/slide_in_left"
             app:popExitAnim="@anim/slide_out_right" />
+        
+        <action
+            android:id="@+id/action_conversation_to_refineSummary"
+            app:destination="@id/refineSummaryFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
     </fragment>
 
     <fragment
@@ -173,6 +181,18 @@
             app:argType="string" />
         <argument
             android:name="messageId"
+            app:argType="string" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/refineSummaryFragment"
+        android:name="com.synapse.ui.conversation.refine.RefineSummaryFragment"
+        android:label="Refine AI Summary">
+        <argument
+            android:name="conversationId"
+            app:argType="string" />
+        <argument
+            android:name="previousSummaryId"
             app:argType="string" />
     </fragment>
 
