@@ -106,16 +106,25 @@ fun CreateGroupScreen(
                     .padding(padding)
                     .fillMaxSize()
             ) {
-                // Group name input
+                // Group name input (required)
                 OutlinedTextField(
                     value = uiState.groupName,
                     onValueChange = { vm.setGroupName(it) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    label = { Text("Group Name (optional)") },
+                    label = { Text("Group Name *") },
                     placeholder = { Text("My Awesome Group") },
-                    singleLine = true
+                    singleLine = true,
+                    isError = uiState.groupName.isBlank() && !uiState.isLoading,
+                    supportingText = {
+                        if (uiState.groupName.isBlank()) {
+                            Text(
+                                text = "Group name is required",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 )
                 
                 // Selected count header

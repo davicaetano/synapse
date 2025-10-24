@@ -462,16 +462,16 @@ private fun MessageBubble(
     isSelected: Boolean = false,
     onClick: () -> Unit = {}
 ) {
-    // Material You colors - adapts to theme
-    val bg = when {
-        isSelected -> MaterialTheme.colorScheme.tertiaryContainer  // Highlight when selected
-        isMine -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+    // Message bubble colors
+    val bubbleBg = if (isMine) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
     }
-    val fg = when {
-        isSelected -> MaterialTheme.colorScheme.onTertiaryContainer
-        isMine -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val bubbleFg = if (isMine) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     // Rounded corners with pointer
@@ -481,10 +481,16 @@ private fun MessageBubble(
     else
         RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)  // Top-left pointed
 
+    // Full-width selectable background (WhatsApp-style)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .background(
+                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)  // Instant selection on click
+            .padding(horizontal = 8.dp, vertical = 2.dp),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top
     ) {
@@ -524,14 +530,13 @@ private fun MessageBubble(
             modifier = Modifier
                 .widthIn(min = 80.dp, max = 280.dp)  // Dynamic width with limits
                 .clip(shape)
-                .background(bg)
-                .clickable(onClick = onClick)
+                .background(bubbleBg)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             // Message text
             Text(
                 text = text,
-                color = fg,
+                color = bubbleFg,
                 style = MaterialTheme.typography.bodyMedium
             )
 
@@ -545,7 +550,7 @@ private fun MessageBubble(
             ) {
                 Text(
                     text = displayTime,
-                    color = fg.copy(alpha = 0.6f),
+                    color = bubbleFg.copy(alpha = 0.6f),
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 10.sp
                 )
@@ -562,7 +567,7 @@ private fun MessageBubble(
                                 Icon(
                                     imageVector = Icons.Default.Schedule,
                                     contentDescription = "Sending",
-                                    tint = fg.copy(alpha = 0.5f),
+                                    tint = bubbleFg.copy(alpha = 0.5f),
                                     modifier = Modifier.size(12.dp)
                                 )
                             }
@@ -574,7 +579,7 @@ private fun MessageBubble(
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = "Sent",
-                                    tint = fg.copy(alpha = 0.7f),
+                                    tint = bubbleFg.copy(alpha = 0.7f),
                                     modifier = Modifier.size(12.dp)
                                 )
                             }
@@ -585,13 +590,13 @@ private fun MessageBubble(
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = null,
-                                    tint = fg.copy(alpha = 0.7f),
+                                    tint = bubbleFg.copy(alpha = 0.7f),
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription = "Delivered",
-                                    tint = fg.copy(alpha = 0.7f),
+                                    tint = bubbleFg.copy(alpha = 0.7f),
                                     modifier = Modifier
                                         .padding(start = 4.dp)
                                         .size(12.dp)

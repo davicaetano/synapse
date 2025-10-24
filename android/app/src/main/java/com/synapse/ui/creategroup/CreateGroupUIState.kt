@@ -26,8 +26,8 @@ data class CreateGroupUIState(
     val selectedUserIds: List<String>
         get() = selectableUsers.filter { it.isSelected }.map { it.user.id }
     
-    // Can create even with 0 selected (group with just yourself)
+    // Can create only if group name is not blank (members are optional)
     val canCreate: Boolean
-        get() = !isLoading
+        get() = !isLoading && groupName.trim().isNotBlank()
 }
 

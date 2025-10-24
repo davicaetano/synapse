@@ -24,55 +24,56 @@ class MessageDetailViewModel @Inject constructor(
     val uiState: StateFlow<MessageDetailUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
         
-        // Observe conversation to get memberStatus and members
+        // Combine conversation + message + users to calculate individual member statuses
         convRepo.observeConversation(userId, conversationId)
             .flatMapLatest { conversation ->
                 if (conversation == null) {
                     flowOf(MessageDetailUIState(isLoading = true))
                 } else {
-                    // Get message from Firestore (via Room would be better but needs single message query)
+                    // Get message from Firestore
                     convRepo.listenMessagesFromFirestore(conversationId)
-                        .map { messages ->
+                        .flatMapLatest { messages ->
                             val message = messages.find { it.id == messageId }
                             
                             if (message == null) {
-                                MessageDetailUIState(isLoading = false)
+                                flowOf(MessageDetailUIState(isLoading = false))
                             } else {
-                                // Get sender info
-                                val senderEntity = conversation.memberIds
-                                    .find { it == message.senderId }
-                                
-                                // Calculate who delivered/read based on memberStatus
-                                val memberStatus = conversation.memberStatus
-                                val serverTimestamp = message.serverTimestamp ?: 0L
-                                
-                                // Delivered = lastReceivedAt >= serverTimestamp
-                                val deliveredUserIds = conversation.memberIds
-                                    .filter { memberId ->
-                                        if (memberId == message.senderId) return@filter false
-                                        val lastReceivedMs = memberStatus[memberId]?.lastReceivedAt?.toDate()?.time
-                                        lastReceivedMs != null && lastReceivedMs >= serverTimestamp
+                                // Get users to map IDs to User objects
+                                convRepo.observeUsers(conversation.memberIds)
+                                    .map { userEntities ->
+                                        val usersMap = userEntities.map { it.toDomain(null, it.id == userId) }
+                                            .associateBy { it.id }
+                                        
+                                        val sender = usersMap[message.senderId]
+                                        val serverTimestamp = message.serverTimestamp ?: 0L
+                                        val memberStatus = conversation.memberStatus
+                                        
+                                        // Calculate status for each member (except sender)
+                                        val memberStatuses = conversation.memberIds
+                                            .filter { it != message.senderId }  // Exclude sender
+                                            .mapNotNull { memberId ->
+                                                val user = usersMap[memberId] ?: return@mapNotNull null
+                                                
+                                                val status = calculateMemberStatus(
+                                                    serverTimestamp = serverTimestamp,
+                                                    lastReceivedAt = memberStatus[memberId]?.lastReceivedAt?.toDate()?.time,
+                                                    lastSeenAt = memberStatus[memberId]?.lastSeenAt?.toDate()?.time
+                                                )
+                                                
+                                                MemberDeliveryStatus(user = user, status = status)
+                                            }
+                                        
+                                        MessageDetailUIState(
+                                            messageId = message.id,
+                                            text = message.text,
+                                            senderId = message.senderId,
+                                            senderName = sender?.displayName ?: "Unknown",
+                                            sentAt = message.createdAtMs,
+                                            serverTimestamp = serverTimestamp,
+                                            memberStatuses = memberStatuses,
+                                            isLoading = false
+                                        )
                                     }
-                                
-                                // Read = lastSeenAt >= serverTimestamp
-                                val readUserIds = conversation.memberIds
-                                    .filter { memberId ->
-                                        if (memberId == message.senderId) return@filter false
-                                        val lastSeenMs = memberStatus[memberId]?.lastSeenAt?.toDate()?.time
-                                        lastSeenMs != null && lastSeenMs >= serverTimestamp
-                                    }
-                                
-                                MessageDetailUIState(
-                                    messageId = message.id,
-                                    text = message.text,
-                                    senderId = message.senderId,
-                                    senderName = "", // Will be filled by combining with users
-                                    sentAt = message.createdAtMs,
-                                    serverTimestamp = serverTimestamp,
-                                    deliveredTo = emptyList(), // Will be filled
-                                    readBy = emptyList(), // Will be filled
-                                    isLoading = false
-                                )
                             }
                         }
                 }
@@ -80,22 +81,24 @@ class MessageDetailViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.Lazily, MessageDetailUIState(isLoading = true))
     }
     
-    // Observe users to fill names
-    val users: StateFlow<List<com.synapse.domain.user.User>> = run {
-        val userId = auth.currentUser?.uid ?: ""
-        
-        convRepo.observeConversation(userId, conversationId)
-            .flatMapLatest { conversation ->
-                if (conversation == null || conversation.memberIds.isEmpty()) {
-                    flowOf(emptyList())
-                } else {
-                    convRepo.observeUsers(conversation.memberIds)
-                        .map { userEntities ->
-                            userEntities.map { it.toDomain(presence = null, isMyself = it.id == userId) }
-                        }
-                }
-            }
-            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    private fun calculateMemberStatus(
+        serverTimestamp: Long,
+        lastReceivedAt: Long?,
+        lastSeenAt: Long?
+    ): DeliveryStatus {
+        return when {
+            // No server timestamp yet = PENDING
+            serverTimestamp <= 0 -> DeliveryStatus.PENDING
+            
+            // Read = lastSeenAt >= serverTimestamp
+            lastSeenAt != null && lastSeenAt >= serverTimestamp -> DeliveryStatus.READ
+            
+            // Delivered = lastReceivedAt >= serverTimestamp
+            lastReceivedAt != null && lastReceivedAt >= serverTimestamp -> DeliveryStatus.DELIVERED
+            
+            // Sent to server but not received by user yet
+            else -> DeliveryStatus.SENT
+        }
     }
     
     companion object {

@@ -9,8 +9,19 @@ data class MessageDetailUIState(
     val senderName: String = "",
     val sentAt: Long = 0L,
     val serverTimestamp: Long? = null,
-    val deliveredTo: List<User> = emptyList(),
-    val readBy: List<User> = emptyList(),
+    val memberStatuses: List<MemberDeliveryStatus> = emptyList(),
     val isLoading: Boolean = false
 )
+
+data class MemberDeliveryStatus(
+    val user: User,
+    val status: DeliveryStatus
+)
+
+enum class DeliveryStatus {
+    PENDING,      // ⏱️ Not sent yet (no serverTimestamp)
+    SENT,         // ✓ Sent to server but not received by user
+    DELIVERED,    // ✓✓ Received by user (lastReceivedAt >= serverTimestamp)
+    READ          // ✓✓ (blue) Read by user (lastSeenAt >= serverTimestamp)
+}
 
