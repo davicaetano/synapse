@@ -185,7 +185,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "senderId" to senderId,  // Use provided sender ID
             "createdAtMs" to createdAtMs,  // Use provided timestamp (0 for welcome messages)
             "memberIdsAtCreation" to memberIds,
-            "serverTimestamp" to FieldValue.serverTimestamp()
+            "serverTimestamp" to FieldValue.serverTimestamp(),
+            "type" to "bot"  // Message type (bot welcome message)
         )
         
         return try {
@@ -235,7 +236,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "senderId" to userId,
             "createdAtMs" to System.currentTimeMillis(),
             "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
-            "serverTimestamp" to FieldValue.serverTimestamp()  // Server assigns actual timestamp
+            "serverTimestamp" to FieldValue.serverTimestamp(),  // Server assigns actual timestamp
+            "type" to "text"  // Message type (normal user message)
         )
         
         return try {
@@ -295,7 +297,8 @@ class FirestoreMessageDataSource @Inject constructor(
                     "senderId" to userId,
                     "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
                     "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
-                    "serverTimestamp" to FieldValue.serverTimestamp() // Server assigns actual timestamp
+                    "serverTimestamp" to FieldValue.serverTimestamp(), // Server assigns actual timestamp
+                    "type" to "text"  // Message type (normal user message)
                 )
                 
                 batch.set(messageRef, messageData)

@@ -162,11 +162,11 @@ async def create_ai_summary_message(
         message_data = {
             'id': message_ref.id,
             'text': summary_text,
-            'senderId': 'synapse-bot-system',  # Use bot ID so it appears as normal message from bot
+            'senderId': 'synapse-bot-system',  # Bot ID for identification
             'createdAtMs': timestamp_ms,
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
-            'type': 'text',  # Regular text message (will show bot name and avatar)
+            'type': 'ai_summary',  # AI summary message type (special rendering in Android)
             'isDeleted': False,
             'metadata': {
                 'generatedBy': generated_by_user_id,
@@ -220,7 +220,7 @@ async def create_error_message(
             'createdAtMs': timestamp_ms,
             'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
             'serverTimestamp': SERVER_TIMESTAMP,
-            'type': 'text',  # Regular text message
+            'type': 'ai_error',  # AI error message type (special rendering in Android)
             'isDeleted': False
         }
         

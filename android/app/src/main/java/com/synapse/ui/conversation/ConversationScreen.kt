@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -261,29 +262,54 @@ fun ConversationScreen(
                     // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->
-                        // All messages rendered as MessageBubble (including AI summaries from bot)
-                        // For group messages, find sender info from members list
-                        val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
-                            ui.members.find { it.id == m.senderId }
-                        } else null
-                        
-                        // Show name/avatar only if different from previous message sender
-                        val previousMessage = if (index < pagedMessages.itemCount - 1) {
-                            pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
-                        } else null
-                        val showSenderInfo = previousMessage?.senderId != m.senderId
-                        
-                        MessageBubble(
-                            text = m.text,
-                            displayTime = formatTime(m.createdAtMs),
-                            isMine = m.isMine,
-                            isReadByEveryone = m.isReadByEveryone,
-                            senderName = if (showSenderInfo) sender?.displayName else null,
-                            senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
-                            status = m.status,
-                            isSelected = m.id == selectedMessageId,
-                            onClick = { onMessageClick(m.id) }
-                        )
+                        // Determine message type and rendering
+                        when (m.type) {
+                            "ai_summary", "ai_error" -> {
+                                // AI messages: special full-width layout with bot avatar and name
+                                val previousMessage = if (index < pagedMessages.itemCount - 1) {
+                                    pagedMessages[index + 1]
+                                } else null
+                                val showSenderInfo = previousMessage?.senderId != m.senderId
+                                
+                                MessageBubble(
+                                    text = m.text,
+                                    displayTime = formatTime(m.createdAtMs),
+                                    isMine = false,  // Always render on left side
+                                    isReadByEveryone = false,
+                                    senderName = if (showSenderInfo) "Synapse AI Agent" else null,  // Hardcoded name
+                                    senderPhotoUrl = null,  // Bot avatar (will show default avatar with "S")
+                                    status = m.status,
+                                    isSelected = m.id == selectedMessageId,
+                                    onClick = { onMessageClick(m.id) },
+                                    isAIMessage = true  // Special flag for full-width layout
+                                )
+                            }
+                            else -> {
+                                // Regular messages: text, bot welcome message
+                                // For group messages, find sender info from members list
+                                val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
+                                    ui.members.find { it.id == m.senderId }
+                                } else null
+                                
+                                // Show name/avatar only if different from previous message sender
+                                val previousMessage = if (index < pagedMessages.itemCount - 1) {
+                                    pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
+                                } else null
+                                val showSenderInfo = previousMessage?.senderId != m.senderId
+                                
+                                MessageBubble(
+                                    text = m.text,
+                                    displayTime = formatTime(m.createdAtMs),
+                                    isMine = m.isMine,
+                                    isReadByEveryone = m.isReadByEveryone,
+                                    senderName = if (showSenderInfo) sender?.displayName else null,
+                                    senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
+                                    status = m.status,
+                                    isSelected = m.id == selectedMessageId,
+                                    onClick = { onMessageClick(m.id) }
+                                )
+                            }
+                        }
                     }
                 }
                 }  // Close LazyColumn
@@ -545,7 +571,8 @@ private fun MessageBubble(
     senderPhotoUrl: String? = null,
     status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED,
     isSelected: Boolean = false,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    isAIMessage: Boolean = false  // Special flag for AI messages (full-width layout)
 ) {
     // Message bubble colors
     val bubbleBg = if (isMine) {
@@ -580,19 +607,33 @@ private fun MessageBubble(
         verticalAlignment = Alignment.Top
     ) {
         // Avatar for group messages (large, aligned to top-left)
-        // Only show avatar/space when senderName != null (i.e., in groups)
-        if (!isMine && senderName != null) {
+        // Show avatar/space when: senderName != null (groups) OR isAIMessage (AI messages)
+        if (!isMine && (senderName != null || isAIMessage)) {
             if (senderPhotoUrl != null) {
                 UserAvatar(
                     photoUrl = senderPhotoUrl,
-                    displayName = senderName,
+                    displayName = senderName ?: "Synapse",
                     size = 32.dp,
                     showPresence = false,
                     modifier = Modifier.padding(end = 8.dp)
                 )
             } else {
-                // Empty space to maintain alignment when no avatar shown
-                Spacer(modifier = Modifier.width(40.dp))  // 32dp avatar + 8dp padding
+                // Default avatar with first letter (for AI: "S")
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = (senderName ?: "S").first().uppercase(),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
             }
         }
         
@@ -614,7 +655,15 @@ private fun MessageBubble(
         // Message bubble
         Column(
             modifier = Modifier
-                .widthIn(min = 80.dp, max = 280.dp)  // Dynamic width with limits
+                .then(
+                    if (isAIMessage) {
+                        // AI messages: full-width (go to screen edge)
+                        Modifier.fillMaxWidth()
+                    } else {
+                        // Regular messages: constrained width
+                        Modifier.widthIn(min = 80.dp, max = 280.dp)
+                    }
+                )
                 .clip(shape)
                 .background(bubbleBg)
                 .padding(horizontal = 12.dp, vertical = 8.dp)

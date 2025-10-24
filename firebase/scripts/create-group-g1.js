@@ -17,27 +17,26 @@ const db = admin.firestore();
 
 async function createGroup() {
   try {
-    console.log('🔍 Finding users...\n');
+    console.log('🔍 Creating group with specified users...\n');
 
-    // Get first 3 real users (not the bot)
-    const usersSnapshot = await db.collection('users')
-      .where('isSystemBot', '==', false)
-      .limit(3)
-      .get();
-
-    if (usersSnapshot.size < 3) {
-      console.error('❌ Need at least 3 users in the database!');
-      console.log('Current users:', usersSnapshot.size);
-      process.exit(1);
-    }
-
-    const memberIds = [];
+    // Hardcoded user IDs
+    const memberIds = [
+      'CvnL1uK3WaYDEX7boDc3TyHrSPY2',
+      'XlylnTcLSeawP3GaspFDYVwFnoj2',
+      'fOfbZadtNTXiBGwb8zldQk4Z4Lv2'
+    ];
+    
+    // Fetch user details for display
     const memberNames = [];
-
-    usersSnapshot.forEach(doc => {
-      memberIds.push(doc.id);
-      memberNames.push(doc.data().displayName || doc.data().email);
-    });
+    for (const userId of memberIds) {
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        memberNames.push(userData.displayName || userData.email);
+      } else {
+        memberNames.push(userId);
+      }
+    }
 
     console.log('👥 Selected members:');
     memberNames.forEach((name, i) => {
@@ -48,7 +47,7 @@ async function createGroup() {
 
     // Create group conversation
     const groupData = {
-      type: 'group',
+      convType: 'GROUP',  // ✅ FIXED: Was 'type: group'
       groupName: 'g1',
       memberIds: memberIds,
       createdBy: memberIds[0], // First user is the creator

@@ -27,6 +27,10 @@ async def summarize_thread(
     start_time = time.time()
     
     try:
+        # DEV: Force error for testing (triggered by Dev Settings toggle)
+        if request.custom_instructions == "FORCE_ERROR":
+            raise Exception("🧪 Forced error for testing! This was triggered by the 'Force Error' dev setting.")
+        
         # Parse dates if provided
         start_date = datetime.fromisoformat(request.start_date) if request.start_date else None
         end_date = datetime.fromisoformat(request.end_date) if request.end_date else None
