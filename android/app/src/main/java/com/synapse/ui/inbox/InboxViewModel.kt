@@ -1,5 +1,6 @@
 package com.synapse.ui.inbox
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
@@ -10,6 +11,7 @@ import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,13 +33,44 @@ class InboxViewModel @Inject constructor(
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
 
-    
+    // Guard to prevent duplicate lastReceivedAt updates while Firestore processes
+    private val lastReceivedUpdatePending = mutableSetOf<String>()
+
     // StateFlow created ONCE when ViewModel is created
     val uiState: StateFlow<InboxUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
 
-        // STEP 1: Get raw conversations
+        // STEP 1: Get raw conversations + update lastReceivedAt (with guard to prevent loop)
         val conversationsFlow = conversationsRepo.observeConversations(userId)
+            .distinctUntilChanged()
+            .onEach { conversations ->
+                // Update lastReceivedAt when new messages arrive
+                conversations.forEach { conv ->
+                    val myLastReceivedAt = conv.memberStatus[userId]?.lastReceivedAt?.toDate()?.time ?: 0L
+                    
+                    // Get all other members (exclude myself)
+                    val otherMembers = conv.memberIds.filter { it != userId }
+                    
+                    // Find the most recent lastMessageSentAt from OTHER members
+                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
+                        conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                    }.maxOrNull()
+                    
+                    Log.d("InboxVM", "🔵 Loop check - 2: convId=${conv.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastReceivedAt, pending=${conv.id in lastReceivedUpdatePending}")
+                    
+                    // Guard: only update if someone ELSE sent a message AFTER my lastReceivedAt AND not already pending
+                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastReceivedAt && conv.id !in lastReceivedUpdatePending) {
+                        lastReceivedUpdatePending.add(conv.id)
+                        Log.d("InboxVM", "🔴 UPDATING lastReceivedAt for ${conv.id.takeLast(6)}")
+                        val ts = Timestamp(mostRecentOtherSentAt / 1000, ((mostRecentOtherSentAt % 1000) * 1000000).toInt())
+                        viewModelScope.launch {
+                            conversationsRepo.updateMemberLastReceivedAt(conv.id, ts)
+                            delay(1000)  // Wait for Firestore write to complete
+                            lastReceivedUpdatePending.remove(conv.id)
+                        }
+                    }
+                }
+            }
         
         // STEP 2: Extract member IDs (stable - only changes when conversations change)
         val memberIdsFlow = conversationsFlow

@@ -1,6 +1,7 @@
 package com.synapse.ui.conversation
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,7 +27,7 @@ class ConversationFragment : Fragment() {
         //       → ConversationViewModel reads from savedStateHandle.get("conversationId")
         //
         // This is the recommended pattern for Fragment Navigation + Hilt ViewModels.
-        
+        Log.v("DAVIDAVIDAVI", "ConversationFragment")
         return ComposeView(requireContext()).apply {
             setContent {
                 SynapseTheme {

@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -35,6 +34,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -53,6 +53,9 @@ class ConversationViewModel @Inject constructor(
     // Job for Firebase → Room sync (cancelled when ViewModel is cleared)
     private var messageSyncJob: Job? = null
     
+    // Guard to prevent duplicate lastSeenAt updates while Firestore processes
+    private var lastSeenUpdatePending = false
+    
     override fun onCleared() {
         super.onCleared()
         // Remove typing indicator when leaving conversation
@@ -69,9 +72,38 @@ class ConversationViewModel @Inject constructor(
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "🚀 Building uiState...")
         
-        // STEP 1: Get the conversation entity
+        // STEP 1: Get the conversation entity + update lastSeenAt when needed
         val conversationFlow = convRepo.observeConversation(userId, conversationId)
-            .onEach { Log.d(TAG, "⏱️ conversationFlow emitted in ${System.currentTimeMillis() - startTime}ms") }
+            .distinctUntilChanged()
+            .onEach { conversation ->
+                // Update lastSeenAt if there are new messages (guard prevents loop)
+                if (conversation != null) {
+                    val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
+                    
+                    // Get all other members (exclude myself)
+                    val otherMembers = conversation.memberIds.filter { it != userId }
+                    
+                    // Find the most recent lastMessageSentAt from OTHER members
+                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
+                        conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                    }.maxOrNull()
+                    
+                    Log.d(TAG, "🔵 Loop check - 1: mostRecentOtherSent=$mostRecentOtherSentAt, myLastSeenAt=$myLastSeenAt, pending=$lastSeenUpdatePending")
+                    
+                    // Guard: only update if someone ELSE sent a message AFTER I last saw AND not already pending
+                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt && !lastSeenUpdatePending) {
+                        lastSeenUpdatePending = true
+                        Log.d(TAG, "🔴 UPDATING lastSeenAt")
+                        viewModelScope.launch {
+                            convRepo.updateMemberLastSeenAtNow(conversationId)
+                            delay(1000)  // Wait for Firestore write to complete and propagate
+                            lastSeenUpdatePending = false
+                        }
+                    }
+                }
+                
+                Log.d(TAG, "⏱️ conversationFlow emitted in ${System.currentTimeMillis() - startTime}ms")
+            }
         
         // STEP 2: Extract member IDs (stable)
         val memberIdsFlow = conversationFlow
@@ -168,11 +200,34 @@ class ConversationViewModel @Inject constructor(
     
     // Background side effects
     init {
-        // Update lastSeenAt IMMEDIATELY when entering conversation (badge removal)
-        viewModelScope.launch {
-            Log.d(TAG, "📖 Updating lastSeenAt to NOW (entering conversation)")
-            convRepo.updateMemberLastSeenAtNow(conversationId)
-        }
+//        // Update lastSeenAt when entering conversation (with guard to prevent unnecessary writes)
+//        val userId = auth.currentUser?.uid ?: ""
+//        viewModelScope.launch {
+//            // Wait for first conversation emission to check if update is needed
+//            convRepo.observeConversation(userId, conversationId)
+//                .take(1)
+//                .collect { conversation ->
+//                    if (conversation != null) {
+//                        val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
+//
+//                        // Get all other members (exclude myself)
+//                        val otherMembers = conversation.memberIds.filter { it != userId }
+//
+//                        // Find the most recent lastMessageSentAt from OTHER members
+//                        val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
+//                            conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+//                        }.maxOrNull()
+//                        android.util.Log.d("InboxVM", "🔵 Loop check - 3: convId=${conversation.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastSeenAt")
+//                        // Only update if someone ELSE sent a message AFTER I last saw
+//                        if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt) {
+//                            Log.d(TAG, "📖 Updating lastSeenAt (has unread messages)")
+//                            convRepo.updateMemberLastSeenAtNow(conversationId)
+//                        } else {
+//                            Log.d(TAG, "📖 Skip lastSeenAt update (no new messages)")
+//                        }
+//                    }
+//                }
+//        }
         
         // Start Firebase → Room sync AFTER first UI state emission (avoid blocking avatar/UI)
         uiState
@@ -183,7 +238,6 @@ class ConversationViewModel @Inject constructor(
                     // Start sync job (tied to viewModelScope - cancels when ViewModel dies)
                     messageSyncJob = viewModelScope.launch {
                         convRepo.listenMessagesFromFirestore(conversationId)
-                            .debounce(500)  // Wait for Firestore to stop emitting before syncing
                             .collect { firestoreMessages ->
                             // Sync Firestore → Room
                             convRepo.upsertMessagesToRoom(firestoreMessages, conversationId)

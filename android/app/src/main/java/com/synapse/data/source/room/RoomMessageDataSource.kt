@@ -59,26 +59,15 @@ class RoomMessageDataSource @Inject constructor(
      * Upsert messages into Room cache.
      * Called by ViewModel when syncing from Firestore.
      * 
-     * OPTIMIZATION: Only inserts NEW messages (timestamp > last cached message).
-     * This avoids re-writing 3000+ messages when only 20 are new.
+     * NO FILTERING: Always upsert all messages to ensure updates (e.g. serverTimestamp) propagate.
+     * Room's REPLACE strategy is efficient - only writes if data changed.
      */
     suspend fun upsertMessages(messages: List<MessageEntity>, conversationId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         if (messages.isEmpty()) return@withContext
         
-        // Get the most recent message timestamp we already have
-        val lastCachedTimestamp = messageDao.getLastMessageTimestamp(conversationId) ?: 0L
-        
-        // Filter only NEW messages (timestamp > what we have)
-        val newMessages = messages.filter { it.createdAtMs > lastCachedTimestamp }
-        
-        if (newMessages.isEmpty()) {
-            Log.d(TAG, "✅ [ROOM] No new messages to upsert for $conversationId (already cached)")
-            return@withContext
-        }
-        
-        val roomEntities = newMessages.map { MessageRoomEntity.fromEntity(it, conversationId) }
+        val roomEntities = messages.map { MessageRoomEntity.fromEntity(it, conversationId) }
         messageDao.upsertMessages(roomEntities)
-        Log.d(TAG, "✅ [ROOM] Upserted ${roomEntities.size} NEW messages for $conversationId (filtered from ${messages.size} total)")
+        Log.d(TAG, "✅ [ROOM] Upserted ${roomEntities.size} messages for $conversationId")
     }
     
     /**

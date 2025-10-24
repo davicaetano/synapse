@@ -50,41 +50,11 @@ class SynapseMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["preview"] ?: "New message"
         val conversationId = message.data[NotificationExtras.CHAT_ID]
         val messageId = message.data[NotificationExtras.MESSAGE_ID]
-        
+
         // Mark message as received (DELIVERED status)
         // This happens as soon as FCM delivers the notification to the device
-        markMessageAsReceived(conversationId, messageId)
-        
+
         notificationHelper.showMessageNotification(title, body, conversationId, messageId)
-    }
-    
-    /**
-     * Marks a message as received by adding the current user to receivedBy array.
-     * This triggers the ✓✓ DELIVERED status in the sender's UI.
-     */
-    private fun markMessageAsReceived(conversationId: String?, messageId: String?) {
-        if (conversationId == null || messageId == null) {
-            return
-        }
-        
-        val currentUserId = auth.currentUser?.uid
-        if (currentUserId == null) {
-            return
-        }
-        
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                firestore.collection("conversations")
-                    .document(conversationId)
-                    .collection("messages")
-                    .document(messageId)
-                    .update("receivedBy", FieldValue.arrayUnion(currentUserId))
-                    .await()
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error marking message as received", e)
-            }
-        }
     }
 }
 
