@@ -55,6 +55,10 @@ class FirestoreMessageDataSource @Inject constructor(
             
             val messages = snapshot?.documents?.mapNotNull { doc ->
                 try {
+                    // Skip soft-deleted messages
+                    val isDeleted = doc.getBoolean("isDeleted") ?: false
+                    if (isDeleted) return@mapNotNull null
+                    
                     MessageEntity(
                         id = doc.id,
                         text = doc.getString("text") ?: "",
@@ -63,7 +67,11 @@ class FirestoreMessageDataSource @Inject constructor(
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
-                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time
+                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
+                        type = doc.getString("type") ?: "text",
+                        isDeleted = false,  // Already filtered above
+                        deletedBy = null,
+                        deletedAtMs = null
                     )
                 } catch (e: Exception) {
                     null
@@ -194,6 +202,31 @@ class FirestoreMessageDataSource @Inject constructor(
         } catch (e: Exception) {
             val elapsed = System.currentTimeMillis() - startTime
             Log.e(TAG, "⏱️ sendMessagesBatch FAILED: ${elapsed}ms", e)
+        }
+    }
+    
+    /**
+     * Delete a message (soft delete).
+     * Marks the message as deleted by updating isDeleted flag in Firestore.
+     */
+    suspend fun deleteMessage(conversationId: String, messageId: String, deletedBy: String, timestamp: Long) {
+        try {
+            val messageRef = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .document(messageId)
+            
+            val updates = hashMapOf<String, Any>(
+                "isDeleted" to true,
+                "deletedBy" to deletedBy,
+                "deletedAtMs" to timestamp
+            )
+            
+            messageRef.update(updates).await()
+            Log.d(TAG, "✅ Message deleted: $messageId")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to delete message: $messageId", e)
+            throw e
         }
     }
     

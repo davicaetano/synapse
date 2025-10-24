@@ -4,11 +4,15 @@ LangChain-powered AI service for intelligent features
 
 import os
 from typing import List, Dict, Any
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser, JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from models.schemas import Message, ActionItem, Decision
+
+# Load environment variables
+load_dotenv()
 
 # Initialize LangChain ChatOpenAI
 llm = ChatOpenAI(
@@ -21,9 +25,10 @@ llm = ChatOpenAI(
 # THREAD SUMMARIZATION
 # ============================================================
 
-async def summarize_thread(messages: List[Message]) -> Dict[str, Any]:
+async def summarize_thread(messages: List[Message], custom_instructions: str = None) -> Dict[str, Any]:
     """
     Generate a comprehensive summary of conversation thread using LangChain
+    Supports custom instructions for focused summaries
     """
     # Build conversation context
     conversation_text = "\n".join([
@@ -31,12 +36,15 @@ async def summarize_thread(messages: List[Message]) -> Dict[str, Any]:
         for msg in messages
     ])
     
-    # Create prompt template
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert at summarizing team conversations for remote professionals."),
-        ("user", """Analyze this conversation and provide:
+    # Build user prompt with optional custom instructions
+    user_prompt = """Analyze this conversation and provide:
 1. A concise overall summary (2-3 sentences)
-2. Key points discussed (bullet points)
+2. Key points discussed (bullet points)"""
+    
+    if custom_instructions:
+        user_prompt += f"\n\n**Special Instructions:** {custom_instructions}"
+    
+    user_prompt += """
 
 Conversation:
 {conversation}
@@ -45,7 +53,12 @@ Respond in JSON format:
 {{
     "summary": "overall summary here",
     "key_points": ["point 1", "point 2", ...]
-}}""")
+}}"""
+    
+    # Create prompt template
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert at summarizing team conversations for remote professionals."),
+        ("user", user_prompt)
     ])
     
     # Create chain with JSON output

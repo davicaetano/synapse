@@ -25,7 +25,9 @@ object DatabaseModule {
             context,
             SynapseDatabase::class.java,
             "synapse-db"
-        ).build()
+        )
+            .fallbackToDestructiveMigration()  // For development - recreate DB on schema changes
+            .build()
     }
 
     @Provides

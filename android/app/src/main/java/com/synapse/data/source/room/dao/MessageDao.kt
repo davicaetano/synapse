@@ -20,23 +20,26 @@ interface MessageDao {
      * Returns PagingSource for efficient loading of large message lists.
      * 
      * Sorted DESC so newest messages appear first (for reverseLayout in LazyColumn).
+     * Filters out soft-deleted messages.
      */
-    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAtMs DESC")
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isDeleted = 0 ORDER BY createdAtMs DESC")
     fun observeMessagesPaged(conversationId: String): PagingSource<Int, MessageRoomEntity>
 
     /**
      * Observe all messages for a conversation (sorted by timestamp).
      * Returns a Flow that updates automatically when Room data changes.
      * Used for non-paged scenarios.
+     * Filters out soft-deleted messages.
      */
-    @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAtMs ASC")
+    @Query("SELECT * FROM messages WHERE conversationId = :conversationId AND isDeleted = 0 ORDER BY createdAtMs ASC")
     fun observeMessages(conversationId: String): Flow<List<MessageRoomEntity>>
     
     /**
      * Get all messages for specific conversations.
      * Used to calculate unread counts based on memberStatus timestamps.
+     * Filters out soft-deleted messages.
      */
-    @Query("SELECT * FROM messages WHERE conversationId IN (:conversationIds)")
+    @Query("SELECT * FROM messages WHERE conversationId IN (:conversationIds) AND isDeleted = 0")
     suspend fun getMessagesForConversations(conversationIds: List<String>): List<MessageRoomEntity>
 
     /**
@@ -66,5 +69,12 @@ interface MessageDao {
      */
     @Query("DELETE FROM messages")
     suspend fun deleteAllMessages()
+    
+    /**
+     * Mark a message as deleted (soft delete).
+     * Updates isDeleted flag without physically removing the record.
+     */
+    @Query("UPDATE messages SET isDeleted = 1, deletedBy = :deletedBy, deletedAtMs = :deletedAtMs WHERE id = :messageId")
+    suspend fun markMessageAsDeleted(messageId: String, deletedBy: String, deletedAtMs: Long)
 }
 

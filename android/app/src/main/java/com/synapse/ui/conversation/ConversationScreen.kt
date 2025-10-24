@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
@@ -87,9 +88,39 @@ fun ConversationScreen(
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
+    // Delete confirmation dialog state
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    
     // Log Paging3 usage
     LaunchedEffect(pagedMessages.itemCount) {
         android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { androidx.compose.material3.Text("Delete message?") },
+            text = { androidx.compose.material3.Text("This message will be deleted for everyone in the conversation.") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        selectedMessageId?.let { 
+                            vm.deleteMessage(it)
+                            selectedMessageId = null
+                        }
+                        showDeleteDialog = false
+                    }
+                ) {
+                    androidx.compose.material3.Text("Delete", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteDialog = false }) {
+                    androidx.compose.material3.Text("Cancel")
+                }
+            }
+        )
     }
 
     ConversationScreen(
@@ -107,6 +138,9 @@ fun ConversationScreen(
         onClearSelection = { selectedMessageId = null },
         onOpenMessageDetail = { 
             selectedMessageId?.let { onOpenMessageDetail(it) }
+        },
+        onDeleteMessage = {
+            showDeleteDialog = true  // Show confirmation dialog instead of deleting directly
         }
     )
 }
@@ -127,7 +161,8 @@ fun ConversationScreen(
     onOpenGroupSettings: () -> Unit = {},
     onMessageClick: (String) -> Unit = {},
     onClearSelection: () -> Unit = {},
-    onOpenMessageDetail: () -> Unit = {}
+    onOpenMessageDetail: () -> Unit = {},
+    onDeleteMessage: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -158,6 +193,7 @@ fun ConversationScreen(
                 onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
                 onOpenMessageDetail = onOpenMessageDetail,
+                onDeleteMessage = onDeleteMessage,
                 onSend20Messages = onSend20Messages,
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
@@ -309,6 +345,7 @@ private fun ConversationTopAppBar(
     onBackClick: () -> Unit,
     onOpenGroupSettings: () -> Unit,
     onOpenMessageDetail: () -> Unit,
+    onDeleteMessage: () -> Unit,
     onSend20Messages: () -> Unit,
     onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
@@ -381,8 +418,14 @@ private fun ConversationTopAppBar(
             }
         },
         actions = {
-            // Show Info button when message is selected
+            // Show Delete + Info buttons when message is selected
             if (hasSelection) {
+                IconButton(onClick = onDeleteMessage) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete message"
+                    )
+                }
                 IconButton(onClick = onOpenMessageDetail) {
                     Icon(
                         imageVector = Icons.Filled.Info,

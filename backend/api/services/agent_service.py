@@ -11,12 +11,16 @@ Uses LangGraph for:
 
 import os
 from typing import List, Dict, Any, TypedDict, Annotated
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import JsonOutputParser
+from langchain_core.output_parsers import JsonOutputParser
 from models.schemas import Message, ActionItem, Decision
 from services import openai_service
+
+# Load environment variables
+load_dotenv()
 
 # Initialize LLM for agent
 agent_llm = ChatOpenAI(
@@ -138,6 +142,21 @@ async def step_6_format_document(state: AgentState) -> AgentState:
     
     date_range = f"{state['messages'][0].created_at.strftime('%B %d, %Y')} - {state['messages'][-1].created_at.strftime('%B %d, %Y')}"
     
+    # Format lists (can't use chr(10) inside f-string expressions)
+    key_points_text = '\n'.join([f'- {point}' for point in state['key_points']])
+    
+    decisions_text = '\n'.join([
+        f'- **{dec["decision"]}**  \n  Decided by: {", ".join(dec["decided_by"])} (Confidence: {int(dec["confidence"] * 100)}%)'
+        for dec in state['decisions']
+    ]) if state['decisions'] else '_No formal decisions recorded_'
+    
+    action_items_text = '\n'.join([
+        f'- [ ] **{item["task"]}**  \n  Assigned to: {item.get("assigned_to") or "Unassigned"}  \n  Deadline: {item.get("deadline") or "TBD"}  \n  Priority: {item["priority"].upper()}'
+        for item in state['action_items']
+    ]) if state['action_items'] else '_No action items identified_'
+    
+    next_steps_text = '\n'.join([f'{i+1}. {step}' for i, step in enumerate(state['next_steps'])])
+    
     # Format markdown document
     doc = f"""# {state['title']}
 
@@ -154,25 +173,25 @@ async def step_6_format_document(state: AgentState) -> AgentState:
 
 ## Key Discussion Points
 
-{chr(10).join([f'- {point}' for point in state['key_points']])}
+{key_points_text}
 
 ---
 
 ## Decisions Made
 
-{chr(10).join([f'- **{dec["decision"]}**  \n  Decided by: {", ".join(dec["decided_by"])} (Confidence: {int(dec["confidence"] * 100)}%)' for dec in state['decisions']]) if state['decisions'] else '_No formal decisions recorded_'}
+{decisions_text}
 
 ---
 
 ## Action Items
 
-{chr(10).join([f'- [ ] **{item["task"]}**  \n  Assigned to: {item.get("assigned_to") or "Unassigned"}  \n  Deadline: {item.get("deadline") or "TBD"}  \n  Priority: {item["priority"].upper()}' for item in state['action_items']]) if state['action_items'] else '_No action items identified_'}
+{action_items_text}
 
 ---
 
 ## Next Steps
 
-{chr(10).join([f'{i+1}. {step}' for i, step in enumerate(state['next_steps'])])}
+{next_steps_text}
 
 ---
 

@@ -499,6 +499,21 @@ class ConversationViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Delete a message (soft delete).
+     * The message will be marked as deleted in both Firestore and Room cache.
+     */
+    fun deleteMessage(messageId: String) {
+        viewModelScope.launch {
+            try {
+                convRepo.deleteMessage(conversationId, messageId)
+                Log.d(TAG, "✅ Message deleted: $messageId")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to delete message: $messageId", e)
+            }
+        }
+    }
+    
     companion object {
         private const val TAG = "ConversationVM"
     }

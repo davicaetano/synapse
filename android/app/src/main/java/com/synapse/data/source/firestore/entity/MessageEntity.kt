@@ -13,6 +13,10 @@ data class MessageEntity(
     val senderId: String,
     val createdAtMs: Long,
     val memberIdsAtCreation: List<String> = emptyList(),  // Snapshot of group members when message was created
-    val serverTimestamp: Long? = null  // Server-assigned timestamp (null = never reached server)
+    val serverTimestamp: Long? = null,  // Server-assigned timestamp (null = never reached server)
+    val type: String = "text",  // Message type: "text", "AI_SUMMARY"
+    val isDeleted: Boolean = false,  // Soft delete flag
+    val deletedBy: String? = null,  // User who deleted the message
+    val deletedAtMs: Long? = null  // Timestamp of deletion
 )
 

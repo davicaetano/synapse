@@ -71,6 +71,15 @@ class RoomMessageDataSource @Inject constructor(
     }
     
     /**
+     * Mark a message as deleted (soft delete) in Room cache.
+     * Called when user deletes a message.
+     */
+    suspend fun markMessageAsDeleted(messageId: String, deletedBy: String, timestamp: Long) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        messageDao.markMessageAsDeleted(messageId, deletedBy, timestamp)
+        Log.d(TAG, "✅ [ROOM] Marked message as deleted: $messageId")
+    }
+    
+    /**
      * Calculate unread counts for conversations based on memberStatus timestamps.
      * 
      * NEW APPROACH - Uses conversation-level lastSeenAt tracking:

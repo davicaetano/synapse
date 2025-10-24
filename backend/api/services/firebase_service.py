@@ -2,10 +2,21 @@
 Firebase Firestore service for fetching conversation data
 """
 
-from firebase_admin import firestore
+import os
+import firebase_admin
+from firebase_admin import credentials, firestore
 from typing import List, Optional
 from datetime import datetime
 from models.schemas import Message
+
+# Initialize Firebase Admin SDK (only once)
+try:
+    firebase_admin.get_app()
+except ValueError:
+    # Not initialized yet
+    cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "./firebase-credentials.json")
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
@@ -17,13 +28,17 @@ async def get_conversation_messages(
 ) -> List[Message]:
     """
     Fetch messages from Firestore conversation
+    Filters out soft-deleted messages (isDeleted = true)
     """
     try:
         # Reference to messages subcollection
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         
-        # Build query
-        query = messages_ref.order_by('createdAtMs', direction=firestore.Query.DESCENDING).limit(max_messages)
+        # Build query - filter out deleted messages
+        query = (messages_ref
+                 .where('isDeleted', '==', False)
+                 .order_by('createdAtMs', direction=firestore.Query.DESCENDING)
+                 .limit(max_messages))
         
         # Apply date filters if provided
         if start_date:
@@ -113,4 +128,58 @@ async def get_message_by_id(conversation_id: str, message_id: str) -> Optional[M
     except Exception as e:
         print(f"❌ Error fetching message: {e}")
         return None
+
+async def create_ai_summary_message(
+    conversation_id: str,
+    summary_text: str,
+    generated_by_user_id: str,
+    member_ids: List[str],
+    message_count: int,
+    custom_instructions: Optional[str] = None
+) -> str:
+    """
+    Create an AI summary message in Firestore
+    Returns the created message ID
+    """
+    try:
+        import time
+        from google.cloud.firestore import SERVER_TIMESTAMP
+        
+        # Create message document
+        messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
+        message_ref = messages_ref.document()  # Auto-generate ID
+        
+        timestamp_ms = int(time.time() * 1000)
+        
+        message_data = {
+            'id': message_ref.id,
+            'text': summary_text,
+            'senderId': 'SYSTEM_AI',
+            'createdAtMs': timestamp_ms,
+            'memberIdsAtCreation': member_ids,
+            'serverTimestamp': SERVER_TIMESTAMP,
+            'type': 'AI_SUMMARY',
+            'isDeleted': False,
+            'metadata': {
+                'generatedBy': generated_by_user_id,
+                'messageCount': message_count,
+                'customInstructions': custom_instructions or ''
+            }
+        }
+        
+        message_ref.set(message_data)
+        
+        # Update conversation metadata
+        conv_ref = db.collection('conversations').document(conversation_id)
+        conv_ref.update({
+            'lastMessageText': '🤖 AI Summary generated',
+            'updatedAtMs': timestamp_ms
+        })
+        
+        print(f"✅ Created AI summary message: {message_ref.id}")
+        return message_ref.id
+    
+    except Exception as e:
+        print(f"❌ Error creating AI summary message: {e}")
+        raise
 

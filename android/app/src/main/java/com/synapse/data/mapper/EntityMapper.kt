@@ -119,7 +119,8 @@ fun MessageEntity.toDomain(
         receivedBy = emptyList(),  // Not used anymore
         readBy = emptyList(),  // Not used anymore
         isReadByEveryone = status == MessageStatus.READ,
-        status = status
+        status = status,
+        type = this.type
     )
 }
 

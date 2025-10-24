@@ -19,7 +19,11 @@ data class MessageRoomEntity(
     val senderId: String,
     val createdAtMs: Long,
     val memberIdsAtCreation: String,  // Stored as comma-separated
-    val serverTimestamp: Long?
+    val serverTimestamp: Long?,
+    val type: String = "text",  // Message type: "text", "AI_SUMMARY"
+    val isDeleted: Boolean = false,  // Soft delete flag
+    val deletedBy: String? = null,  // User who deleted the message
+    val deletedAtMs: Long? = null  // Timestamp of deletion
 ) {
     /**
      * Convert Room entity back to Firestore entity.
@@ -31,7 +35,11 @@ data class MessageRoomEntity(
             senderId = senderId,
             createdAtMs = createdAtMs,
             memberIdsAtCreation = memberIdsAtCreation.split(",").filter { it.isNotBlank() },
-            serverTimestamp = serverTimestamp
+            serverTimestamp = serverTimestamp,
+            type = type,
+            isDeleted = isDeleted,
+            deletedBy = deletedBy,
+            deletedAtMs = deletedAtMs
         )
     }
     
@@ -47,7 +55,11 @@ data class MessageRoomEntity(
                 senderId = entity.senderId,
                 createdAtMs = entity.createdAtMs,
                 memberIdsAtCreation = entity.memberIdsAtCreation.joinToString(","),
-                serverTimestamp = entity.serverTimestamp
+                serverTimestamp = entity.serverTimestamp,
+                type = entity.type,
+                isDeleted = entity.isDeleted,
+                deletedBy = entity.deletedBy,
+                deletedAtMs = entity.deletedAtMs
             )
         }
     }

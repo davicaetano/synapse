@@ -11,7 +11,7 @@ import com.synapse.data.source.room.entity.MessageRoomEntity
  */
 @Database(
     entities = [MessageRoomEntity::class],
-    version = 1,
+    version = 2,  // Incremented for new fields: type, isDeleted, deletedBy, deletedAtMs
     exportSchema = false
 )
 abstract class SynapseDatabase : RoomDatabase() {

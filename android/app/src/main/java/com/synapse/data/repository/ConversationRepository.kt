@@ -246,5 +246,24 @@ class ConversationRepository @Inject constructor(
             )
         }
     }
+    
+    /**
+     * Delete a message (soft delete).
+     * Marks the message as deleted in both Firestore and Room cache.
+     * The message will no longer appear in the conversation.
+     * 
+     * @param conversationId The conversation ID
+     * @param messageId The message ID to delete
+     */
+    suspend fun deleteMessage(conversationId: String, messageId: String) {
+        val currentUserId = auth.currentUser?.uid ?: return
+        val timestamp = System.currentTimeMillis()
+        
+        // Update Firestore (soft delete)
+        firestoreMessageDataSource.deleteMessage(conversationId, messageId, currentUserId, timestamp)
+        
+        // Update Room cache (soft delete)
+        roomMessageDataSource.markMessageAsDeleted(messageId, currentUserId, timestamp)
+    }
 }
 

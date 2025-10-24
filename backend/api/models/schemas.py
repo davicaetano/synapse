@@ -14,7 +14,8 @@ class SummarizeRequest(BaseModel):
     conversation_id: str = Field(..., description="Firestore conversation ID")
     start_date: Optional[str] = Field(None, description="ISO format start date")
     end_date: Optional[str] = Field(None, description="ISO format end date")
-    max_messages: int = Field(100, description="Max messages to analyze")
+    max_messages: int = Field(1000, description="Max messages to analyze")
+    custom_instructions: Optional[str] = Field(None, description="Custom instructions for focused summary")
 
 class SummaryResponse(BaseModel):
     conversation_id: str

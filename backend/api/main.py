@@ -6,8 +6,7 @@ FastAPI server for Remote Team Professional AI features
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import firebase_admin
-from firebase_admin import credentials, auth as firebase_auth
+from firebase_admin import auth as firebase_auth
 import os
 from dotenv import load_dotenv
 
@@ -16,9 +15,7 @@ from routers import summarization, action_items, search, priority, decisions, ag
 # Load environment variables
 load_dotenv()
 
-# Initialize Firebase Admin
-cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH"))
-firebase_admin.initialize_app(cred)
+# Firebase is initialized in firebase_service.py
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
