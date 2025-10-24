@@ -194,6 +194,13 @@ class ConversationRepository @Inject constructor(
     }
     
     /**
+     * Update group conversation name.
+     */
+    suspend fun updateGroupName(conversationId: String, groupName: String) {
+        conversationDataSource.updateGroupName(conversationId, groupName)
+    }
+    
+    /**
      * Update member's lastReceivedAt timestamp (when user receives messages).
      * NEW APPROACH: Single write per conversation instead of per-message.
      * 

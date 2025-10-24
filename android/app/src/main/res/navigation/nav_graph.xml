@@ -60,6 +60,14 @@
         <argument
             android:name="conversationId"
             app:argType="string" />
+        
+        <action
+            android:id="@+id/action_conversation_to_groupSettings"
+            app:destination="@id/groupSettingsFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
     </fragment>
 
     <fragment
@@ -104,6 +112,23 @@
         android:id="@+id/settingsFragment"
         android:name="com.synapse.ui.settings.SettingsFragment"
         android:label="Settings" />
+    
+    <fragment
+        android:id="@+id/groupSettingsFragment"
+        android:name="com.synapse.ui.groupsettings.GroupSettingsFragment"
+        android:label="Group Settings">
+        <argument
+            android:name="conversationId"
+            app:argType="string" />
+        
+        <action
+            android:id="@+id/action_groupSettings_to_userPicker"
+            app:destination="@id/userPickerFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
+    </fragment>
 
 </navigation>
 

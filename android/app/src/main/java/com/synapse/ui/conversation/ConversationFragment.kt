@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
+import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.synapse.ui.theme.SynapseTheme
@@ -34,6 +35,13 @@ class ConversationFragment : Fragment() {
                     ConversationScreen(
                         onNavigateBack = {
                             findNavController().popBackStack()
+                        },
+                        onOpenGroupSettings = {
+                            val conversationId = arguments?.getString("conversationId") ?: ""
+                            findNavController().navigate(
+                                com.synapse.R.id.action_conversation_to_groupSettings,
+                                bundleOf("conversationId" to conversationId)
+                            )
                         }
                     )
                 }

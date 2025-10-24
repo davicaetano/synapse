@@ -325,6 +325,26 @@ class FirestoreConversationDataSource @Inject constructor(
     }
     
     /**
+     * Update group conversation name.
+     */
+    suspend fun updateGroupName(conversationId: String, groupName: String) {
+        try {
+            firestore.collection("conversations")
+                .document(conversationId)
+                .update(
+                    mapOf(
+                        "groupName" to groupName,
+                        "updatedAtMs" to System.currentTimeMillis()
+                    )
+                )
+                .await()
+            Log.d(TAG, "Group name updated to: $groupName")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating group name", e)
+        }
+    }
+    
+    /**
      * Update member's lastSeenAt to NOW (when user opens conversation).
      * Uses FieldValue.serverTimestamp() for current server time.
      * 

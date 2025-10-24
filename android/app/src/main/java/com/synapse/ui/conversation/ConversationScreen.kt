@@ -92,7 +92,8 @@ fun ConversationScreen(
         onSend20Messages = { vm.send20Messages() },
         onSend100Messages = { vm.send100Messages() },
         onSend500Messages = { vm.send500Messages() },
-        onBackClick = onNavigateBack
+        onBackClick = onNavigateBack,
+        onOpenGroupSettings = onOpenGroupSettings
     )
 }
 
@@ -107,7 +108,8 @@ fun ConversationScreen(
     onSend20Messages: () -> Unit = {},
     onSend100Messages: () -> Unit = {},
     onSend500Messages: () -> Unit = {},
-    onBackClick: () -> Unit = {}
+    onBackClick: () -> Unit = {},
+    onOpenGroupSettings: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -135,7 +137,7 @@ fun ConversationScreen(
                 isUserAdmin = ui.isUserAdmin,
                 typingText = ui.typingText,
                 onBackClick = onBackClick,
-                onAddMemberClick = { /* TODO: Add member to group */ },
+                onOpenGroupSettings = onOpenGroupSettings,
                 onSend20Messages = onSend20Messages,
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
@@ -282,7 +284,7 @@ private fun ConversationTopAppBar(
     isUserAdmin: Boolean,
     typingText: String?,
     onBackClick: () -> Unit,
-    onAddMemberClick: () -> Unit,
+    onOpenGroupSettings: () -> Unit,
     onSend20Messages: () -> Unit,
     onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
@@ -355,12 +357,12 @@ private fun ConversationTopAppBar(
             }
         },
         actions = {
-            // Show "Add member" for group admins
-            if (convType == ConversationType.GROUP && isUserAdmin) {
-                IconButton(onClick = onAddMemberClick) {
+            // Show "Info/Settings" for groups
+            if (convType == ConversationType.GROUP) {
+                IconButton(onClick = onOpenGroupSettings) {
                     Icon(
-                        imageVector = Icons.Filled.PersonAdd,
-                        contentDescription = "Add member"
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = "Group info"
                     )
                 }
             }
