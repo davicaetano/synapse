@@ -26,10 +26,18 @@ class GroupSettingsFragment : Fragment() {
                         onNavigateBack = {
                             findNavController().popBackStack()
                         },
-                        onAddMember = {
-                            // Navigate to UserPicker to select member to add
+                        onAddMembers = {
+                            val conversationId = arguments?.getString("conversationId") ?: ""
                             findNavController().navigate(
-                                com.synapse.R.id.action_groupSettings_to_userPicker
+                                com.synapse.R.id.action_groupSettings_to_addMembers,
+                                bundleOf("conversationId" to conversationId)
+                            )
+                        },
+                        onRemoveMembers = {
+                            val conversationId = arguments?.getString("conversationId") ?: ""
+                            findNavController().navigate(
+                                com.synapse.R.id.action_groupSettings_to_removeMembers,
+                                bundleOf("conversationId" to conversationId)
                             )
                         }
                     )

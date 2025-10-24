@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Schedule
@@ -33,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -72,7 +74,8 @@ private fun formatTime(ms: Long): String {
 @Composable
 fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onOpenGroupSettings: () -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
@@ -357,16 +360,6 @@ private fun ConversationTopAppBar(
             }
         },
         actions = {
-            // Show "Info/Settings" for groups
-            if (convType == ConversationType.GROUP) {
-                IconButton(onClick = onOpenGroupSettings) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = "Group info"
-                    )
-                }
-            }
-
             // Menu button with dropdown
             Box {
                 IconButton(onClick = { showMenu = true }) {
@@ -379,6 +372,18 @@ private fun ConversationTopAppBar(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
+                    // Group info (only for groups)
+                    if (convType == ConversationType.GROUP) {
+                        DropdownMenuItem(
+                            text = { Text("Group info") },
+                            onClick = {
+                                showMenu = false
+                                onOpenGroupSettings()
+                            }
+                        )
+                        HorizontalDivider()
+                    }
+                    
                     DropdownMenuItem(
                         text = { Text("Send 20 messages (test)") },
                         onClick = {

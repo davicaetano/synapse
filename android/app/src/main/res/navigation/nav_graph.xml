@@ -122,12 +122,38 @@
             app:argType="string" />
         
         <action
-            android:id="@+id/action_groupSettings_to_userPicker"
-            app:destination="@id/userPickerFragment"
+            android:id="@+id/action_groupSettings_to_addMembers"
+            app:destination="@id/addMembersFragment"
             app:enterAnim="@anim/slide_in_right"
             app:exitAnim="@anim/slide_out_left"
             app:popEnterAnim="@anim/slide_in_left"
             app:popExitAnim="@anim/slide_out_right" />
+        
+        <action
+            android:id="@+id/action_groupSettings_to_removeMembers"
+            app:destination="@id/removeMembersFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/addMembersFragment"
+        android:name="com.synapse.ui.groupsettings.addmembers.AddMembersFragment"
+        android:label="Add Members">
+        <argument
+            android:name="conversationId"
+            app:argType="string" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/removeMembersFragment"
+        android:name="com.synapse.ui.groupsettings.removemembers.RemoveMembersFragment"
+        android:label="Remove Members">
+        <argument
+            android:name="conversationId"
+            app:argType="string" />
     </fragment>
 
 </navigation>
