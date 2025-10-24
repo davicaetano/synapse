@@ -56,6 +56,9 @@ class ConversationViewModel @Inject constructor(
     // Guard to prevent duplicate lastSeenAt updates while Firestore processes
     private var lastSeenUpdatePending = false
     
+    // Global message counter for batch testing (increments with each batch sent)
+    private var globalMessageCounter = 0
+    
     override fun onCleared() {
         super.onCleared()
         // Remove typing indicator when leaving conversation
@@ -437,13 +440,16 @@ class ConversationViewModel @Inject constructor(
             // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
             val memberIds = uiState.value.members.map { it.id }
             
-            val messages = (1..20).map { i -> "Test message #$i" }
+            val startNum = globalMessageCounter + 1
+            val messages = (startNum until startNum + 20).map { i -> "Test message #$i" }
+            globalMessageCounter += 20
+            
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
             
             // Update lastMessageSentAt (for badge logic)
             convRepo.updateMemberLastMessageSentAtNow(conversationId)
             
-            Log.d("ConversationViewModel", "✅ 20 messages sent successfully")
+            Log.d("ConversationViewModel", "✅ 20 messages sent successfully (#$startNum-#$globalMessageCounter)")
         }
     }
     
@@ -457,13 +463,16 @@ class ConversationViewModel @Inject constructor(
             // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
             val memberIds = uiState.value.members.map { it.id }
             
-            val messages = (1..100).map { i -> "Test message #$i" }
+            val startNum = globalMessageCounter + 1
+            val messages = (startNum until startNum + 100).map { i -> "Test message #$i" }
+            globalMessageCounter += 100
+            
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
             
             // Update lastMessageSentAt (for badge logic)
             convRepo.updateMemberLastMessageSentAtNow(conversationId)
             
-            Log.d(TAG, "✅ 100 messages sent successfully")
+            Log.d(TAG, "✅ 100 messages sent successfully (#$startNum-#$globalMessageCounter)")
         }
     }
     
@@ -477,13 +486,16 @@ class ConversationViewModel @Inject constructor(
             // Get memberIds from current state (already loaded in memory - no extra Firestore read!)
             val memberIds = uiState.value.members.map { it.id }
             
-            val messages = (1..500).map { i -> "Test message #$i" }
+            val startNum = globalMessageCounter + 1
+            val messages = (startNum until startNum + 500).map { i -> "Test message #$i" }
+            globalMessageCounter += 500
+            
             convRepo.sendMessagesBatch(conversationId, messages, memberIds)
             
             // Update lastMessageSentAt (for badge logic)
             convRepo.updateMemberLastMessageSentAtNow(conversationId)
             
-            Log.d(TAG, "✅ 500 messages sent successfully")
+            Log.d(TAG, "✅ 500 messages sent successfully (#$startNum-#$globalMessageCounter)")
         }
     }
     
