@@ -68,6 +68,40 @@ class FirestoreUserDataSource @Inject constructor(
     }
     
     /**
+     * Listen to a single user by ID.
+     * More efficient than listening to all users and filtering.
+     */
+    fun listenUser(userId: String): Flow<UserEntity?> = callbackFlow {
+        val registration = firestore.collection("users")
+            .document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error listening to user $userId", error)
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                
+                val user = snapshot?.let { doc ->
+                    try {
+                        UserEntity(
+                            id = doc.id,
+                            displayName = doc.getString("displayName"),
+                            email = doc.getString("email"),
+                            photoUrl = doc.getString("photoUrl")
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing user ${doc.id}", e)
+                        null
+                    }
+                }
+                
+                trySend(user)
+            }
+        
+        awaitClose { registration.remove() }
+    }
+    
+    /**
      * Listen to specific users by their IDs.
      * Useful for fetching only conversation members.
      * 

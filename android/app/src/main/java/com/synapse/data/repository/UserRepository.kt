@@ -1,6 +1,7 @@
 package com.synapse.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.source.firestore.FirestoreUserDataSource
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -80,6 +82,35 @@ class UserRepository @Inject constructor(
      */
     suspend fun upsertCurrentUser() {
         userDataSource.upsertCurrentUser()
+    }
+    
+    /**
+     * Observe a single user by ID (for settings screen).
+     */
+    fun observeUser(userId: String): Flow<com.synapse.data.source.firestore.entity.UserEntity?> {
+        return userDataSource.listenUser(userId)
+    }
+    
+    /**
+     * Update user display name.
+     */
+    suspend fun updateDisplayName(userId: String, displayName: String) {
+        userDataSource.updateUserProfile(userId, displayName = displayName)
+    }
+    
+    /**
+     * Update user email.
+     */
+    suspend fun updateEmail(userId: String, email: String) {
+        // Update email field directly in Firestore
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(userId)
+            .update(mapOf(
+                "email" to email,
+                "updatedAtMs" to System.currentTimeMillis()
+            ))
+            .await()
     }
     
     /**

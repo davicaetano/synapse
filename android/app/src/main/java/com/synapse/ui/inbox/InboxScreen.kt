@@ -53,6 +53,7 @@ import com.synapse.ui.components.UserAvatar
 @Composable
 fun InboxScreen(
     onOpenConversation: (String) -> Unit,
+    onOpenSettings: () -> Unit = {},
     vm: InboxViewModel = hiltViewModel(),
     mainVm: MainActivityViewModel = hiltViewModel(),
 ) {
@@ -124,9 +125,8 @@ fun InboxScreen(
                                 text = { Text("Settings") },
                                 onClick = {
                                     showMenu = false
-                                    // TODO: Navigate to settings
-                                },
-                                enabled = false
+                                    onOpenSettings()
+                                }
                             )
                             
                             HorizontalDivider()

@@ -45,6 +45,11 @@ class InboxFragment : Fragment() {
                                     )
                                 }
                             }
+                        },
+                        onOpenSettings = {
+                            findNavController().navigate(
+                                com.synapse.R.id.action_inbox_to_settings
+                            )
                         }
                     )
                 }
