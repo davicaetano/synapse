@@ -34,9 +34,10 @@ async def get_conversation_messages(
         # Reference to messages subcollection
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         
-        # Build query - filter out deleted messages
+        # Build query
+        # Note: Not filtering by isDeleted here because old messages don't have this field
+        # Android already filters deleted messages locally
         query = (messages_ref
-                 .where('isDeleted', '==', False)
                  .order_by('createdAtMs', direction=firestore.Query.DESCENDING)
                  .limit(max_messages))
         
@@ -52,6 +53,13 @@ async def get_conversation_messages(
         messages = []
         for doc in docs:
             data = doc.to_dict()
+            
+            # Skip deleted messages and AI summaries
+            if data.get('isDeleted', False):
+                continue
+            if data.get('type') == 'AI_SUMMARY':
+                continue
+            
             messages.append(Message(
                 id=doc.id,
                 text=data.get('text', ''),

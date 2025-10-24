@@ -25,7 +25,9 @@ import javax.inject.Singleton
 object NetworkModule {
     
     // TODO: Change to production URL when deploying
-    private const val BASE_URL = "http://10.0.2.2:8000/api/"  // Android emulator localhost
+    // For Emulator: use 10.0.2.2
+    // For Physical Device: use your machine's IP (check with: ipconfig getifaddr en0)
+    private const val BASE_URL = "http://192.168.1.156:8000/api/"  // Your Mac's IP
     // private const val BASE_URL = "https://synapse-ai.onrender.com/api/"  // Production
     
     /**
@@ -38,11 +40,19 @@ object NetworkModule {
         return Interceptor { chain ->
             val originalRequest = chain.request()
             
+            android.util.Log.d("NetworkModule", "🌐 Request: ${originalRequest.method} ${originalRequest.url}")
+            
             // Get Firebase ID token synchronously (blocking)
             val token = runBlocking {
                 try {
-                    auth.currentUser?.getIdToken(false)?.await()?.token
+                    val user = auth.currentUser
+                    android.util.Log.d("NetworkModule", "🔐 User: ${user?.uid ?: "NO USER"}")
+                    
+                    val result = user?.getIdToken(false)?.await()?.token
+                    android.util.Log.d("NetworkModule", "✅ Token: ${if (result != null) "OK (${result.takeLast(10)})" else "NULL"}")
+                    result
                 } catch (e: Exception) {
+                    android.util.Log.e("NetworkModule", "❌ Token error: ${e.message}", e)
                     null
                 }
             }
@@ -53,10 +63,13 @@ object NetworkModule {
                     .addHeader("Authorization", "Bearer $token")
                     .build()
             } else {
+                android.util.Log.w("NetworkModule", "⚠️ Proceeding without auth token")
                 originalRequest
             }
             
-            chain.proceed(newRequest)
+            val response = chain.proceed(newRequest)
+            android.util.Log.d("NetworkModule", "📥 Response: ${response.code} ${response.message}")
+            response
         }
     }
     
