@@ -15,8 +15,10 @@ from models.schemas import Message, ActionItem, Decision
 load_dotenv()
 
 # Initialize LangChain ChatOpenAI
+# Using GPT-3.5-turbo for fast responses (~2-3s for 30 messages)
+# GPT-4 is too slow for real-time chat summaries (~10s for 30 messages)
 llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
+    model="gpt-3.5-turbo",
     temperature=0.3,
     api_key=os.getenv("OPENAI_API_KEY")
 )
@@ -120,7 +122,7 @@ Respond in JSON format:
     ])
     
     # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0.2)
+    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
     parser = JsonOutputParser()
     chain = prompt | llm_low_temp | parser
     
@@ -203,7 +205,7 @@ Respond in JSON format:
     ])
     
     # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0.2)
+    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
     parser = JsonOutputParser()
     chain = prompt | llm_low_temp | parser
     
@@ -260,7 +262,7 @@ Respond in JSON format:
     ])
     
     # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0.2)
+    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
     parser = JsonOutputParser()
     chain = prompt | llm_low_temp | parser
     

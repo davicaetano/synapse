@@ -49,7 +49,8 @@ data class SummarizeRequest(
     val custom_instructions: String? = null,
     val start_date: String? = null,
     val end_date: String? = null,
-    val max_messages: Int = 1000
+    val max_messages: Int = 1000,
+    val include_processing_time: Boolean = false
 )
 
 /**

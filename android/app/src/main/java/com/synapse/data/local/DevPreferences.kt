@@ -38,6 +38,7 @@ class DevPreferences @Inject constructor(
         private val SHOW_BATCH_BUTTONS = booleanPreferencesKey("show_batch_buttons")
         private val FORCE_AI_ERROR = booleanPreferencesKey("force_ai_error")
         private val SHOW_AI_ERROR_TOASTS = booleanPreferencesKey("show_ai_error_toasts")
+        private val SHOW_AI_PROCESSING_TIME = booleanPreferencesKey("show_ai_processing_time")
         
         // Default URLs
         const val PRODUCTION_URL = "https://synapse-ai-api-4wbf.onrender.com/api/"
@@ -77,6 +78,13 @@ class DevPreferences @Inject constructor(
      */
     val showAIErrorToasts: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[SHOW_AI_ERROR_TOASTS] ?: false
+    }
+    
+    /**
+     * Show AI processing time in generated messages (for performance monitoring)
+     */
+    val showAIProcessingTime: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[SHOW_AI_PROCESSING_TIME] ?: false
     }
     
     /**
@@ -133,6 +141,15 @@ class DevPreferences @Inject constructor(
     suspend fun setShowAIErrorToasts(show: Boolean) {
         dataStore.edit { prefs ->
             prefs[SHOW_AI_ERROR_TOASTS] = show
+        }
+    }
+    
+    /**
+     * Toggle show AI processing time in messages (for performance monitoring)
+     */
+    suspend fun setShowAIProcessingTime(show: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[SHOW_AI_PROCESSING_TIME] = show
         }
     }
 }

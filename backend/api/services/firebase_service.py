@@ -54,10 +54,13 @@ async def get_conversation_messages(
         for doc in docs:
             data = doc.to_dict()
             
-            # Skip deleted messages and AI summaries
+            # Skip deleted messages
             if data.get('isDeleted', False):
                 continue
-            if data.get('type') == 'AI_SUMMARY':
+            
+            # Only analyze user text messages (ignore AI summaries, errors, bot messages)
+            message_type = data.get('type', 'text')  # Default to 'text' for old messages without type
+            if message_type != 'text':
                 continue
             
             messages.append(Message(

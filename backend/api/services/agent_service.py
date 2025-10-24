@@ -24,7 +24,7 @@ load_dotenv()
 
 # Initialize LLM for agent
 agent_llm = ChatOpenAI(
-    model="gpt-4-turbo-preview",
+    model="gpt-3.5-turbo",
     temperature=0.3,
     api_key=os.getenv("OPENAI_API_KEY")
 )

@@ -1,12 +1,14 @@
 package com.synapse.data.repository
 
 import android.util.Log
+import com.synapse.data.local.DevPreferences
 import com.synapse.data.remote.SummarizeRequest
 import com.synapse.data.remote.SynapseAIApi
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -24,7 +26,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class AIRepository @Inject constructor(
-    private val api: SynapseAIApi
+    private val api: SynapseAIApi,
+    private val devPreferences: DevPreferences
 ) {
     // Application-level scope (survives Activity/ViewModel destruction)
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -82,10 +85,14 @@ class AIRepository @Inject constructor(
                 incrementJobCount(conversationId)
                 Log.d(TAG, "🚀 [$jobId] Starting AI job (active: ${getJobCount(conversationId)})")
                 
+                // Read dev preference for processing time
+                val includeProcessingTime = devPreferences.showAIProcessingTime.first()
+                
                 // Call backend API (auth token is added automatically by interceptor)
                 val request = SummarizeRequest(
                     conversation_id = conversationId,
-                    custom_instructions = customInstructions
+                    custom_instructions = customInstructions,
+                    include_processing_time = includeProcessingTime
                 )
                 
                 val response = api.summarizeThread(request)

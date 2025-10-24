@@ -36,11 +36,12 @@ async def summarize_thread(
         end_date = datetime.fromisoformat(request.end_date) if request.end_date else None
         
         # Fetch messages from Firestore (excluding deleted and AI summaries)
+        # Limit to 50 most recent messages for faster processing
         messages = await firebase_service.get_conversation_messages(
             conversation_id=request.conversation_id,
             start_date=start_date,
             end_date=end_date,
-            max_messages=request.max_messages
+            max_messages=min(request.max_messages, 50)  # Cap at 50 for performance
         )
         
         if not messages:
@@ -56,12 +57,19 @@ async def summarize_thread(
             custom_instructions=request.custom_instructions
         )
         
+        # Calculate processing time
+        processing_time = int((time.time() - start_time) * 1000)
+        
         # Format summary text for message (with markdown formatting)
         summary_text = f"📊 **Thread Summary**\n\n{summary_data['summary']}\n\n**Key Points:**\n"
         for i, point in enumerate(summary_data['key_points'], 1):
             summary_text += f"{i}. {point}\n"
         
-        summary_text += f"\n_({len(messages)} messages analyzed)_"
+        # Add message count and optionally processing time
+        if request.include_processing_time:
+            summary_text += f"\n_({len(messages)} messages analyzed • Generated in {processing_time}ms)_"
+        else:
+            summary_text += f"\n_({len(messages)} messages analyzed)_"
         
         # Create AI summary message in Firestore
         message_id = await firebase_service.create_ai_summary_message(
@@ -72,8 +80,6 @@ async def summarize_thread(
             message_count=len(messages),
             custom_instructions=request.custom_instructions
         )
-        
-        processing_time = int((time.time() - start_time) * 1000)
         
         return {
             "success": True,

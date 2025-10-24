@@ -19,16 +19,25 @@ class DevSettingsViewModel @Inject constructor(
     val uiState: StateFlow<DevSettingsUIState> = combine(
         devPreferences.urlMode,
         devPreferences.customUrl,
-        devPreferences.showBatchButtons,
-        devPreferences.forceAIError,
-        devPreferences.showAIErrorToasts
-    ) { urlMode, customUrl, showBatchButtons, forceAIError, showAIErrorToasts ->
+        devPreferences.showBatchButtons
+    ) { urlMode, customUrl, showBatchButtons ->
+        Triple(urlMode, customUrl, showBatchButtons)
+    }.combine(
+        combine(
+            devPreferences.forceAIError,
+            devPreferences.showAIErrorToasts,
+            devPreferences.showAIProcessingTime
+        ) { forceAIError, showAIErrorToasts, showAIProcessingTime ->
+            Triple(forceAIError, showAIErrorToasts, showAIProcessingTime)
+        }
+    ) { first, second ->
         DevSettingsUIState(
-            urlMode = urlMode,
-            customUrl = customUrl,
-            showBatchButtons = showBatchButtons,
-            forceAIError = forceAIError,
-            showAIErrorToasts = showAIErrorToasts
+            urlMode = first.first,
+            customUrl = first.second,
+            showBatchButtons = first.third,
+            forceAIError = second.first,
+            showAIErrorToasts = second.second,
+            showAIProcessingTime = second.third
         )
     }.stateIn(
         scope = viewModelScope,
@@ -63,6 +72,12 @@ class DevSettingsViewModel @Inject constructor(
     fun toggleShowAIErrorToasts(show: Boolean) {
         viewModelScope.launch {
             devPreferences.setShowAIErrorToasts(show)
+        }
+    }
+    
+    fun toggleShowAIProcessingTime(show: Boolean) {
+        viewModelScope.launch {
+            devPreferences.setShowAIProcessingTime(show)
         }
     }
 }

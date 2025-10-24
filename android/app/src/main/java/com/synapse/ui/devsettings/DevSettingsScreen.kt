@@ -149,6 +149,18 @@ fun DevSettingsScreen(
                 }
             )
             
+            // Show AI Processing Time Toggle
+            SettingsItem(
+                title = "Show AI Processing Time",
+                subtitle = if (state.showAIProcessingTime) "Enabled (shows generation time in AI messages)" else "Disabled",
+                trailing = {
+                    Switch(
+                        checked = state.showAIProcessingTime,
+                        onCheckedChange = { vm.toggleShowAIProcessingTime(it) }
+                    )
+                }
+            )
+            
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             // Info Section

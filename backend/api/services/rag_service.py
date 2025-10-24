@@ -131,7 +131,7 @@ async def hybrid_search(
             })
     
     # Rerank with LLM
-    llm = ChatOpenAI(model="gpt-4-turbo-preview", temperature=0.1)
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.1)
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a search relevance expert."),
         ("user", """Query: "{query}"
