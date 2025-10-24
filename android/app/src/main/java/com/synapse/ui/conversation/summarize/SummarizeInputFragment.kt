@@ -4,13 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -38,6 +33,9 @@ class SummarizeInputFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setContent {
                 SynapseTheme {
+                    // Collect dev setting: should Force Error option be shown?
+                    val forceAIErrorEnabled by viewModel.forceAIError.collectAsState()
+                    
                     SummarizeInputScreen(
                         onBack = { findNavController().navigateUp() },
                         onGenerate = { customInstructions ->
@@ -46,7 +44,8 @@ class SummarizeInputFragment : Fragment() {
                             
                             // Navigate back immediately - user will see spinner in ConversationScreen
                             findNavController().navigateUp()
-                        }
+                        },
+                        forceAIErrorEnabled = forceAIErrorEnabled
                     )
                 }
             }

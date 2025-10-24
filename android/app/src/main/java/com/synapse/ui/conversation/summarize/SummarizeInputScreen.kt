@@ -19,7 +19,8 @@ import androidx.compose.ui.unit.dp
 enum class AIAgentMode {
     THREAD_SUMMARIZATION,
     ACTION_ITEMS,
-    CUSTOM
+    CUSTOM,
+    FORCE_ERROR  // Dev only: Force backend to throw error
 }
 
 /**
@@ -35,6 +36,7 @@ enum class AIAgentMode {
 fun SummarizeInputScreen(
     onBack: () -> Unit,
     onGenerate: (customInstructions: String?) -> Unit,
+    forceAIErrorEnabled: Boolean = false,  // Dev setting
     modifier: Modifier = Modifier
 ) {
     var selectedMode by remember { mutableStateOf(AIAgentMode.THREAD_SUMMARIZATION) }
@@ -173,6 +175,39 @@ fun SummarizeInputScreen(
                         )
                     }
                 }
+                
+                // Option 4: Force Error (Dev only - shown if enabled in Dev Settings)
+                if (forceAIErrorEnabled) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = selectedMode == AIAgentMode.FORCE_ERROR,
+                                onClick = { selectedMode = AIAgentMode.FORCE_ERROR },
+                                role = Role.RadioButton
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selectedMode == AIAgentMode.FORCE_ERROR,
+                            onClick = null
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "⚠️ Force Error (Dev)",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Test error handling by forcing the backend to fail",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
             }
             
             // Custom text field (always visible, enabled/disabled based on selection)
@@ -205,6 +240,7 @@ fun SummarizeInputScreen(
                         AIAgentMode.THREAD_SUMMARIZATION -> null  // Default summary
                         AIAgentMode.ACTION_ITEMS -> "Extract all action items from this conversation. For each action item, identify: the task, who is responsible, deadline (if mentioned), and priority level."
                         AIAgentMode.CUSTOM -> customText.trim().takeIf { it.isNotEmpty() }
+                        AIAgentMode.FORCE_ERROR -> "FORCE_ERROR"  // Special trigger for backend error testing
                     }
                     onGenerate(instructions)
                 },

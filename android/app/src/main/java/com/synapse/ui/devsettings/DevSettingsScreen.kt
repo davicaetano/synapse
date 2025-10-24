@@ -125,6 +125,18 @@ fun DevSettingsScreen(
                 }
             )
             
+            // Force AI Error Toggle
+            SettingsItem(
+                title = "Force AI Error",
+                subtitle = if (state.forceAIError) "Enabled (adds 'Force Error' option in AI Agent)" else "Disabled",
+                trailing = {
+                    Switch(
+                        checked = state.forceAIError,
+                        onCheckedChange = { vm.toggleForceAIError(it) }
+                    )
+                }
+            )
+            
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
             // Info Section

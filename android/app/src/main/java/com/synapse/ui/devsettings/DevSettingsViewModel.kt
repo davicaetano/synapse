@@ -19,12 +19,14 @@ class DevSettingsViewModel @Inject constructor(
     val uiState: StateFlow<DevSettingsUIState> = combine(
         devPreferences.urlMode,
         devPreferences.customUrl,
-        devPreferences.showBatchButtons
-    ) { urlMode, customUrl, showBatchButtons ->
+        devPreferences.showBatchButtons,
+        devPreferences.forceAIError
+    ) { urlMode, customUrl, showBatchButtons, forceAIError ->
         DevSettingsUIState(
             urlMode = urlMode,
             customUrl = customUrl,
-            showBatchButtons = showBatchButtons
+            showBatchButtons = showBatchButtons,
+            forceAIError = forceAIError
         )
     }.stateIn(
         scope = viewModelScope,
@@ -47,6 +49,12 @@ class DevSettingsViewModel @Inject constructor(
     fun toggleBatchButtons(show: Boolean) {
         viewModelScope.launch {
             devPreferences.setShowBatchButtons(show)
+        }
+    }
+    
+    fun toggleForceAIError(force: Boolean) {
+        viewModelScope.launch {
+            devPreferences.setForceAIError(force)
         }
     }
 }
