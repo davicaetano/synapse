@@ -19,6 +19,7 @@ import com.synapse.ui.components.UserAvatar
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit = {},
+    onOpenDevSettings: () -> Unit = {},
     vm: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by vm.uiState.collectAsStateWithLifecycle()
@@ -30,7 +31,8 @@ fun SettingsScreen(
         uiState = uiState,
         onNavigateBack = onNavigateBack,
         onClickName = { showNameDialog = true },
-        onClickEmail = { showEmailDialog = true }
+        onClickEmail = { showEmailDialog = true },
+        onOpenDevSettings = onOpenDevSettings
     )
     
     // Name edit dialog
@@ -64,8 +66,12 @@ fun SettingsScreen(
     uiState: SettingsUIState,
     onNavigateBack: () -> Unit,
     onClickName: () -> Unit,
-    onClickEmail: () -> Unit
+    onClickEmail: () -> Unit,
+    onOpenDevSettings: () -> Unit = {}
 ) {
+    // Triple-click counter for dev settings
+    var clickCount by remember { mutableStateOf(0) }
+    var lastClickTime by remember { mutableStateOf(0L) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -166,6 +172,104 @@ fun SettingsScreen(
                 subtitle = "Network usage, auto-download",
                 onClick = { /* TODO */ },
                 enabled = false
+            )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // Version (triple-click for dev settings)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val now = System.currentTimeMillis()
+                        if (now - lastClickTime < 500) {
+                            // Quick tap
+                            clickCount++
+                            if (clickCount >= 3) {
+                                // Triple-click detected!
+                                onOpenDevSettings()
+                                clickCount = 0
+                            }
+                        } else {
+                            // Reset counter if too slow
+                            clickCount = 1
+                        }
+                        lastClickTime = now
+                    }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(24.dp)
+                )
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Version",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "1.0.0",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Public version with trailing content (used by DevSettingsScreen)
+@Composable
+fun SettingsItem(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit = {},
+    isSelected: Boolean = false,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Spacer(modifier = Modifier.width(56.dp))  // Space for icon (to align with other items)
+        
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                }
+            )
+        }
+        
+        if (trailing != null) {
+            Spacer(modifier = Modifier.width(16.dp))
+            trailing()
+        } else if (isSelected) {
+            Spacer(modifier = Modifier.width(16.dp))
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
             )
         }
     }

@@ -42,7 +42,8 @@ class ConversationViewModel @Inject constructor(
     private val typingRepo: TypingRepository,
     private val aiRepo: AIRepository,
     private val auth: FirebaseAuth,
-    private val networkMonitor: NetworkConnectivityMonitor
+    private val networkMonitor: NetworkConnectivityMonitor,
+    private val devPreferences: com.synapse.data.local.DevPreferences
 ) : ViewModel() {
     private val conversationId: String = savedStateHandle.get<String>("conversationId") ?: ""
     
@@ -68,6 +69,10 @@ class ConversationViewModel @Inject constructor(
     fun clearSummaryError() {
         _summaryError.value = null
     }
+    
+    // Dev settings - show batch message buttons
+    val showBatchButtons: StateFlow<Boolean> = devPreferences.showBatchButtons
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     
     override fun onCleared() {
         super.onCleared()

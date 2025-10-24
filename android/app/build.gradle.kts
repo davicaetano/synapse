@@ -84,6 +84,9 @@ dependencies {
     implementation(libs.androidx.room.paging)
     kapt(libs.androidx.room.compiler)
     
+    // DataStore - Preferences storage for settings
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    
     // Paging3 - Efficient pagination
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)

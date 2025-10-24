@@ -1,11 +1,15 @@
 package com.synapse.di
 
+import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
+import com.synapse.data.local.DevPreferences
 import com.synapse.data.remote.SynapseAIApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.tasks.await
 import okhttp3.Interceptor
@@ -23,12 +27,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    
-    // TODO: Change to production URL when deploying
-    // For Emulator: use 10.0.2.2
-    // For Physical Device: use your machine's IP (check with: ipconfig getifaddr en0)
-    private const val BASE_URL = "http://192.168.1.156:8000/api/"  // Your Mac's IP
-    // private const val BASE_URL = "https://synapse-ai.onrender.com/api/"  // Production
     
     /**
      * Provides Firebase Auth interceptor
@@ -104,12 +102,24 @@ object NetworkModule {
     
     /**
      * Provides Retrofit instance
+     * Reads base URL from DevPreferences (requires app restart to change)
      */
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+    fun provideRetrofit(
+        okHttpClient: OkHttpClient,
+        @ApplicationContext context: Context
+    ): Retrofit {
+        // Read base URL from dev preferences
+        val devPreferences = DevPreferences(context)
+        val baseUrl = runBlocking {
+            devPreferences.baseUrl.first()
+        }
+        
+        android.util.Log.d("NetworkModule", "🌐 Using API Base URL: $baseUrl")
+        
         return Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -127,7 +127,20 @@
     <fragment
         android:id="@+id/settingsFragment"
         android:name="com.synapse.ui.settings.SettingsFragment"
-        android:label="Settings" />
+        android:label="Settings">
+        <action
+            android:id="@+id/action_settings_to_devSettings"
+            app:destination="@id/devSettingsFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/devSettingsFragment"
+        android:name="com.synapse.ui.devsettings.DevSettingsFragment"
+        android:label="Developer Settings" />
     
     <fragment
         android:id="@+id/groupSettingsFragment"

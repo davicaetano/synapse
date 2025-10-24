@@ -89,6 +89,9 @@ fun ConversationScreen(
     val isGeneratingSummary by vm.isGeneratingSummary.collectAsStateWithLifecycle()
     val summaryError by vm.summaryError.collectAsStateWithLifecycle()
     
+    // Dev settings
+    val showBatchButtons by vm.showBatchButtons.collectAsStateWithLifecycle()
+    
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
@@ -145,6 +148,7 @@ fun ConversationScreen(
         pagedMessages = pagedMessages,
         selectedMessageId = selectedMessageId,
         isGeneratingSummary = isGeneratingSummary,
+        showBatchButtons = showBatchButtons,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
@@ -174,6 +178,7 @@ fun ConversationScreen(
     pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
     selectedMessageId: String?,
     isGeneratingSummary: Boolean = false,
+    showBatchButtons: Boolean = false,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
@@ -216,6 +221,7 @@ fun ConversationScreen(
                 typingText = ui.typingText,
                 hasSelection = selectedMessageId != null,
                 isGeneratingSummary = isGeneratingSummary,
+                showBatchButtons = showBatchButtons,
                 onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
                 onOpenMessageDetail = onOpenMessageDetail,
@@ -393,6 +399,7 @@ private fun ConversationTopAppBar(
     typingText: String?,
     hasSelection: Boolean,
     isGeneratingSummary: Boolean,
+    showBatchButtons: Boolean,
     onBackClick: () -> Unit,
     onOpenGroupSettings: () -> Unit,
     onOpenMessageDetail: () -> Unit,
@@ -529,27 +536,30 @@ private fun ConversationTopAppBar(
                         HorizontalDivider()
                     }
                     
-                    DropdownMenuItem(
-                        text = { Text("Send 20 messages (test)") },
-                        onClick = {
-                            showMenu = false
-                            onSend20Messages()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Send 100 messages (test)") },
-                        onClick = {
-                            showMenu = false
-                            onSend100Messages()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Send 500 messages (test)") },
-                        onClick = {
-                            showMenu = false
-                            onSend500Messages()
-                        }
-                    )
+                    // Debug: Batch message buttons (only shown if enabled in Dev Settings)
+                    if (showBatchButtons) {
+                        DropdownMenuItem(
+                            text = { Text("Send 20 messages (test)") },
+                            onClick = {
+                                showMenu = false
+                                onSend20Messages()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Send 100 messages (test)") },
+                            onClick = {
+                                showMenu = false
+                                onSend100Messages()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Send 500 messages (test)") },
+                            onClick = {
+                                showMenu = false
+                                onSend500Messages()
+                            }
+                        )
+                    }
                 }
                 }  // Close Box
             }  // Close else

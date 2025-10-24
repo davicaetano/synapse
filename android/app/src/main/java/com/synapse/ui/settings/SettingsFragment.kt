@@ -24,6 +24,11 @@ class SettingsFragment : Fragment() {
                     SettingsScreen(
                         onNavigateBack = {
                             findNavController().popBackStack()
+                        },
+                        onOpenDevSettings = {
+                            findNavController().navigate(
+                                com.synapse.R.id.action_settings_to_devSettings
+                            )
                         }
                     )
                 }
