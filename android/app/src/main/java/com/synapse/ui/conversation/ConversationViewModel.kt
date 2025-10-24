@@ -8,13 +8,12 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import androidx.paging.map
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.BuildConfig
 import com.synapse.data.mapper.toDomain
 import com.synapse.data.network.NetworkConnectivityMonitor
+import com.synapse.data.repository.AIRepository
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.data.source.firestore.entity.ConversationEntity
-import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
@@ -34,7 +33,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -42,6 +40,7 @@ class ConversationViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val convRepo: ConversationRepository,
     private val typingRepo: TypingRepository,
+    private val aiRepo: AIRepository,
     private val auth: FirebaseAuth,
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
@@ -58,6 +57,10 @@ class ConversationViewModel @Inject constructor(
     
     // Global message counter for batch testing (increments with each batch sent)
     private var globalMessageCounter = 0
+    
+    // AI Summary generation state
+    private val _isGeneratingSummary = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val isGeneratingSummary: StateFlow<Boolean> = _isGeneratingSummary
     
     override fun onCleared() {
         super.onCleared()
@@ -510,6 +513,71 @@ class ConversationViewModel @Inject constructor(
                 Log.d(TAG, "✅ Message deleted: $messageId")
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Failed to delete message: $messageId", e)
+            }
+        }
+    }
+    
+    /**
+     * Generate AI thread summary
+     * Backend creates an AI_SUMMARY message in Firestore
+     * Message will appear automatically via listener
+     * 
+     * @param customInstructions Optional custom instructions for focused summary
+     * @return Result with success/failure
+     */
+    fun generateSummary(customInstructions: String? = null) {
+        viewModelScope.launch {
+            try {
+                _isGeneratingSummary.value = true
+                Log.d(TAG, "📊 Generating thread summary...")
+                
+                val result = aiRepo.summarizeThread(
+                    conversationId = conversationId,
+                    customInstructions = customInstructions
+                )
+                
+                if (result.isSuccess) {
+                    val response = result.getOrNull()
+                    Log.d(TAG, "✅ Summary generated: ${response?.message_id?.takeLast(6)}")
+                    Log.d(TAG, "📈 Processed ${response?.message_count} messages in ${response?.processing_time_ms}ms")
+                } else {
+                    Log.e(TAG, "❌ Failed to generate summary", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Exception generating summary", e)
+            } finally {
+                _isGeneratingSummary.value = false
+            }
+        }
+    }
+    
+    /**
+     * Refine existing AI summary
+     * Creates a new refined AI_SUMMARY message
+     * 
+     * @param previousSummaryId Message ID of the previous summary
+     * @param refinementInstructions User's refinement instructions
+     * @return Result with success/failure
+     */
+    fun refineSummary(previousSummaryId: String, refinementInstructions: String) {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "🔧 Refining summary: ${previousSummaryId.takeLast(6)}")
+                
+                val result = aiRepo.refineSummary(
+                    conversationId = conversationId,
+                    previousSummaryId = previousSummaryId,
+                    refinementInstructions = refinementInstructions
+                )
+                
+                if (result.isSuccess) {
+                    val response = result.getOrNull()
+                    Log.d(TAG, "✅ Refined summary created: ${response?.message_id?.takeLast(6)}")
+                } else {
+                    Log.e(TAG, "❌ Failed to refine summary", result.exceptionOrNull())
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Exception refining summary", e)
             }
         }
     }

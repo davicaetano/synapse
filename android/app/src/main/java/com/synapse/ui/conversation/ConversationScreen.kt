@@ -18,18 +18,17 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +83,9 @@ fun ConversationScreen(
     
     // Use paged messages (Room + Paging3)
     val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
+    
+    // AI generation state
+    val isGeneratingSummary by vm.isGeneratingSummary.collectAsStateWithLifecycle()
     
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
@@ -141,6 +143,9 @@ fun ConversationScreen(
         },
         onDeleteMessage = {
             showDeleteDialog = true  // Show confirmation dialog instead of deleting directly
+        },
+        onGenerateSummary = {
+            vm.generateSummary()  // Call AI summarization
         }
     )
 }
@@ -162,7 +167,8 @@ fun ConversationScreen(
     onMessageClick: (String) -> Unit = {},
     onClearSelection: () -> Unit = {},
     onOpenMessageDetail: () -> Unit = {},
-    onDeleteMessage: () -> Unit = {}
+    onDeleteMessage: () -> Unit = {},
+    onGenerateSummary: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -190,10 +196,12 @@ fun ConversationScreen(
                 isUserAdmin = ui.isUserAdmin,
                 typingText = ui.typingText,
                 hasSelection = selectedMessageId != null,
+                isGeneratingSummary = isGeneratingSummary,
                 onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
                 onOpenMessageDetail = onOpenMessageDetail,
                 onDeleteMessage = onDeleteMessage,
+                onGenerateSummary = onGenerateSummary,
                 onSend20Messages = onSend20Messages,
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
@@ -251,28 +259,51 @@ fun ConversationScreen(
                     // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->
-                        // For group messages, find sender info from members list
-                        val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
-                            ui.members.find { it.id == m.senderId }
-                        } else null
-                        
-                        // Show name/avatar only if different from previous message sender
-                        val previousMessage = if (index < pagedMessages.itemCount - 1) {
-                            pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
-                        } else null
-                        val showSenderInfo = previousMessage?.senderId != m.senderId
-                        
-                        MessageBubble(
-                            text = m.text,
-                            displayTime = formatTime(m.createdAtMs),
-                            isMine = m.isMine,
-                            isReadByEveryone = m.isReadByEveryone,
-                            senderName = if (showSenderInfo) sender?.displayName else null,
-                            senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
-                            status = m.status,
-                            isSelected = m.id == selectedMessageId,
-                            onClick = { onMessageClick(m.id) }
-                        )
+                        // Render different UI based on message type
+                        when (m.type) {
+                            "AI_SUMMARY" -> {
+                                // AI Summary Card
+                                AISummaryCard(
+                                    messageId = m.id,
+                                    text = m.text,
+                                    timestamp = formatTime(m.createdAtMs),
+                                    onDelete = {
+                                        // TODO: Show delete confirmation
+                                        onMessageClick(m.id)
+                                        onDeleteMessage()
+                                    },
+                                    onRefine = {
+                                        // TODO: Open refine screen
+                                        // onOpenRefineScreen(m.id)
+                                    }
+                                )
+                            }
+                            else -> {
+                                // Regular message bubble
+                                // For group messages, find sender info from members list
+                                val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
+                                    ui.members.find { it.id == m.senderId }
+                                } else null
+                                
+                                // Show name/avatar only if different from previous message sender
+                                val previousMessage = if (index < pagedMessages.itemCount - 1) {
+                                    pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
+                                } else null
+                                val showSenderInfo = previousMessage?.senderId != m.senderId
+                                
+                                MessageBubble(
+                                    text = m.text,
+                                    displayTime = formatTime(m.createdAtMs),
+                                    isMine = m.isMine,
+                                    isReadByEveryone = m.isReadByEveryone,
+                                    senderName = if (showSenderInfo) sender?.displayName else null,
+                                    senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
+                                    status = m.status,
+                                    isSelected = m.id == selectedMessageId,
+                                    onClick = { onMessageClick(m.id) }
+                                )
+                            }
+                        }
                     }
                 }
                 }  // Close LazyColumn
@@ -342,10 +373,12 @@ private fun ConversationTopAppBar(
     isUserAdmin: Boolean,
     typingText: String?,
     hasSelection: Boolean,
+    isGeneratingSummary: Boolean,
     onBackClick: () -> Unit,
     onOpenGroupSettings: () -> Unit,
     onOpenMessageDetail: () -> Unit,
     onDeleteMessage: () -> Unit,
+    onGenerateSummary: () -> Unit,
     onSend20Messages: () -> Unit,
     onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
@@ -433,6 +466,26 @@ private fun ConversationTopAppBar(
                     )
                 }
             } else {
+                // AI Summarize button (highlighted with color)
+                IconButton(
+                    onClick = onGenerateSummary,
+                    enabled = !isGeneratingSummary
+                ) {
+                    if (isGeneratingSummary) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "Generate AI Summary",
+                            tint = MaterialTheme.colorScheme.primary  // Highlight in primary color
+                        )
+                    }
+                }
+                
                 // Menu button with dropdown
                 Box {
                 IconButton(onClick = { showMenu = true }) {
