@@ -1,0 +1,12 @@
+{
+  "name": "synapse-scripts",
+  "version": "1.0.0",
+  "description": "Admin scripts for Synapse",
+  "scripts": {
+    "create-users": "node create-test-users.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}
+

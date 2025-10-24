@@ -1,6 +1,7 @@
 package com.synapse.ui.conversation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,12 +76,16 @@ private fun formatTime(ms: Long): String {
 fun ConversationScreen(
     vm: ConversationViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
-    onOpenGroupSettings: () -> Unit = {}
+    onOpenGroupSettings: () -> Unit = {},
+    onOpenMessageDetail: (String) -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages (Room + Paging3)
     val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
+    
+    // Message selection state
+    var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
     // Log Paging3 usage
     LaunchedEffect(pagedMessages.itemCount) {
@@ -90,13 +95,19 @@ fun ConversationScreen(
     ConversationScreen(
         ui = ui,
         pagedMessages = pagedMessages,
+        selectedMessageId = selectedMessageId,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
         onSend100Messages = { vm.send100Messages() },
         onSend500Messages = { vm.send500Messages() },
         onBackClick = onNavigateBack,
-        onOpenGroupSettings = onOpenGroupSettings
+        onOpenGroupSettings = onOpenGroupSettings,
+        onMessageClick = { messageId -> selectedMessageId = messageId },
+        onClearSelection = { selectedMessageId = null },
+        onOpenMessageDetail = { 
+            selectedMessageId?.let { onOpenMessageDetail(it) }
+        }
     )
 }
 
@@ -105,6 +116,7 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
+    selectedMessageId: String?,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
@@ -112,7 +124,10 @@ fun ConversationScreen(
     onSend100Messages: () -> Unit = {},
     onSend500Messages: () -> Unit = {},
     onBackClick: () -> Unit = {},
-    onOpenGroupSettings: () -> Unit = {}
+    onOpenGroupSettings: () -> Unit = {},
+    onMessageClick: (String) -> Unit = {},
+    onClearSelection: () -> Unit = {},
+    onOpenMessageDetail: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -139,8 +154,10 @@ fun ConversationScreen(
                 otherUserOnline = ui.otherUserOnline,
                 isUserAdmin = ui.isUserAdmin,
                 typingText = ui.typingText,
-                onBackClick = onBackClick,
+                hasSelection = selectedMessageId != null,
+                onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
+                onOpenMessageDetail = onOpenMessageDetail,
                 onSend20Messages = onSend20Messages,
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
@@ -216,7 +233,9 @@ fun ConversationScreen(
                             isReadByEveryone = m.isReadByEveryone,
                             senderName = if (showSenderInfo) sender?.displayName else null,
                             senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
-                            status = m.status
+                            status = m.status,
+                            isSelected = m.id == selectedMessageId,
+                            onClick = { onMessageClick(m.id) }
                         )
                     }
                 }
@@ -286,8 +305,10 @@ private fun ConversationTopAppBar(
     otherUserOnline: Boolean?,
     isUserAdmin: Boolean,
     typingText: String?,
+    hasSelection: Boolean,
     onBackClick: () -> Unit,
     onOpenGroupSettings: () -> Unit,
+    onOpenMessageDetail: () -> Unit,
     onSend20Messages: () -> Unit,
     onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
@@ -360,8 +381,17 @@ private fun ConversationTopAppBar(
             }
         },
         actions = {
-            // Menu button with dropdown
-            Box {
+            // Show Info button when message is selected
+            if (hasSelection) {
+                IconButton(onClick = onOpenMessageDetail) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = "Message info"
+                    )
+                }
+            } else {
+                // Menu button with dropdown
+                Box {
                 IconButton(onClick = { showMenu = true }) {
                     Icon(
                         imageVector = Icons.Filled.MoreVert,
@@ -406,7 +436,8 @@ private fun ConversationTopAppBar(
                         }
                     )
                 }
-            }
+                }  // Close Box
+            }  // Close else
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -427,18 +458,20 @@ private fun MessageBubble(
     isReadByEveryone: Boolean = false,
     senderName: String? = null,
     senderPhotoUrl: String? = null,
-    status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED
+    status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {}
 ) {
     // Material You colors - adapts to theme
-    val bg = if (isMine) {
-        MaterialTheme.colorScheme.primaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
+    val bg = when {
+        isSelected -> MaterialTheme.colorScheme.tertiaryContainer  // Highlight when selected
+        isMine -> MaterialTheme.colorScheme.primaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
-    val fg = if (isMine) {
-        MaterialTheme.colorScheme.onPrimaryContainer
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = when {
+        isSelected -> MaterialTheme.colorScheme.onTertiaryContainer
+        isMine -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     // Rounded corners with pointer
@@ -492,6 +525,7 @@ private fun MessageBubble(
                 .widthIn(min = 80.dp, max = 280.dp)  // Dynamic width with limits
                 .clip(shape)
                 .background(bg)
+                .clickable(onClick = onClick)
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             // Message text

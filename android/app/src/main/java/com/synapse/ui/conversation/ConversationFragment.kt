@@ -41,6 +41,16 @@ class ConversationFragment : Fragment() {
                                 com.synapse.R.id.action_conversation_to_groupSettings,
                                 bundleOf("conversationId" to conversationId)
                             )
+                        },
+                        onOpenMessageDetail = { messageId ->
+                            val conversationId = arguments?.getString("conversationId") ?: ""
+                            findNavController().navigate(
+                                com.synapse.R.id.action_conversation_to_messageDetail,
+                                bundleOf(
+                                    "conversationId" to conversationId,
+                                    "messageId" to messageId
+                                )
+                            )
                         }
                     )
                 }

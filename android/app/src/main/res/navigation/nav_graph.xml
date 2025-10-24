@@ -68,6 +68,14 @@
             app:exitAnim="@anim/slide_out_left"
             app:popEnterAnim="@anim/slide_in_left"
             app:popExitAnim="@anim/slide_out_right" />
+        
+        <action
+            android:id="@+id/action_conversation_to_messageDetail"
+            app:destination="@id/messageDetailFragment"
+            app:enterAnim="@anim/slide_in_right"
+            app:exitAnim="@anim/slide_out_left"
+            app:popEnterAnim="@anim/slide_in_left"
+            app:popExitAnim="@anim/slide_out_right" />
     </fragment>
 
     <fragment
@@ -153,6 +161,18 @@
         android:label="Remove Members">
         <argument
             android:name="conversationId"
+            app:argType="string" />
+    </fragment>
+    
+    <fragment
+        android:id="@+id/messageDetailFragment"
+        android:name="com.synapse.ui.conversation.messagedetail.MessageDetailFragment"
+        android:label="Message Info">
+        <argument
+            android:name="conversationId"
+            app:argType="string" />
+        <argument
+            android:name="messageId"
             app:argType="string" />
     </fragment>
 
