@@ -620,7 +620,8 @@ private fun MessageBubble(
         verticalAlignment = Alignment.Top
     ) {
         // Avatar for group messages (large, aligned to top-left)
-        if (!isMine) {
+        // Only show avatar/space when senderName != null (i.e., in groups)
+        if (!isMine && senderName != null) {
             if (senderPhotoUrl != null) {
                 UserAvatar(
                     photoUrl = senderPhotoUrl,

@@ -12,6 +12,7 @@ import com.synapse.data.repository.TypingRepository
 import com.synapse.domain.conversation.ConversationType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +36,9 @@ class InboxViewModel @Inject constructor(
 
     // Guard to prevent duplicate lastReceivedAt updates while Firestore processes
     private val lastReceivedUpdatePending = mutableSetOf<String>()
+    
+    // Flag to track if we've loaded data at least once (prevents showing empty state during initial load)
+    private val hasLoadedOnce = MutableStateFlow(false)
 
     // StateFlow created ONCE when ViewModel is created
     val uiState: StateFlow<InboxUIState> = run {
@@ -165,6 +169,8 @@ class InboxViewModel @Inject constructor(
             presenceFlow,
             typingAndCountsFlow
         ) { conversations, users, presence, (typing, unreadCounts, isConnected) ->
+            // Mark that we've loaded at least once (after first emission)
+            hasLoadedOnce.value = true
             buildInboxUIState(userId, conversations, users, presence, typing, unreadCounts, isConnected)
         }.stateIn(
             viewModelScope,
@@ -186,6 +192,11 @@ class InboxViewModel @Inject constructor(
         unreadCounts: Map<String, Int>,
         isConnected: Boolean
     ): InboxUIState {
+        // If we haven't loaded at least once yet, keep showing loading
+        if (!hasLoadedOnce.value) {
+            return InboxUIState(items = emptyList(), isLoading = true, isConnected = isConnected)
+        }
+        
         if (conversations.isEmpty()) {
             return InboxUIState(items = emptyList(), isLoading = false, isConnected = isConnected)
         }

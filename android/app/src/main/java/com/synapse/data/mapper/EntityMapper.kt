@@ -54,7 +54,8 @@ fun UserEntity.toDomain(
         photoUrl = this.photoUrl,
         isMyself = isMyself,
         isOnline = isOnline,
-        lastSeenMs = presence?.lastSeenMs
+        lastSeenMs = presence?.lastSeenMs,
+        isSystemBot = this.isSystemBot
     )
 }
 

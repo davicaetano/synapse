@@ -11,6 +11,7 @@ data class UserEntity(
     val id: String,
     val displayName: String?,
     val email: String?,
-    val photoUrl: String?
+    val photoUrl: String?,
+    val isSystemBot: Boolean = false  // True for system bots (e.g. Synapse Bot)
 )
 

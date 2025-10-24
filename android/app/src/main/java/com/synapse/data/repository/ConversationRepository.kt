@@ -38,6 +38,21 @@ class ConversationRepository @Inject constructor(
     private val presenceDataSource: RealtimePresenceDataSource,
     private val auth: FirebaseAuth
 ) {
+    
+    companion object {
+        /**
+         * System bot that sends welcome messages to new conversations.
+         * Created via firebase/scripts/create-synapse-bot.js
+         */
+        private const val SYNAPSE_BOT_ID = "synapse-bot-system"
+        
+        // Cannot use trimIndent() in const, so using regular val
+        private val WELCOME_MESSAGE = """👋 Welcome to Synapse!
+
+This is the beginning of your conversation. All messages are end-to-end encrypted and synced across all your devices.
+
+Feel free to start chatting!"""
+    }
 
     // ============================================================
     // READ OPERATIONS (simple flows, NO complex transformations)
@@ -126,6 +141,31 @@ class ConversationRepository @Inject constructor(
     // ============================================================
 
     /**
+     * Send a welcome message from Synapse Bot to a new conversation.
+     * Called automatically when creating any conversation.
+     * 
+     * @param conversationId The conversation ID
+     * @param memberIds List of all member IDs in the conversation
+     */
+    private suspend fun sendWelcomeMessage(conversationId: String, memberIds: List<String>) {
+        // Send welcome message as the Synapse Bot
+        firestoreMessageDataSource.sendMessageAs(
+            conversationId = conversationId,
+            text = WELCOME_MESSAGE,
+            memberIds = memberIds,
+            senderId = SYNAPSE_BOT_ID
+        )
+        
+        // Update conversation metadata
+        val timestamp = System.currentTimeMillis()
+        conversationDataSource.updateConversationMetadata(
+            conversationId = conversationId,
+            lastMessageText = WELCOME_MESSAGE,
+            timestamp = timestamp
+        )
+    }
+    
+    /**
      * Send a message to a conversation.
      * Coordinates: create message + update conversation metadata.
      * 
@@ -156,7 +196,14 @@ class ConversationRepository @Inject constructor(
         val myId = auth.currentUser?.uid ?: return null
         val userIds = listOf(myId, otherUserId).sorted()
 
-        return conversationDataSource.createDirectConversation(userIds)
+        val conversationId = conversationDataSource.createDirectConversation(userIds)
+        
+        // Send welcome message to new conversation
+        if (conversationId != null) {
+            sendWelcomeMessage(conversationId, userIds + SYNAPSE_BOT_ID)
+        }
+        
+        return conversationId
     }
 
     /**
@@ -164,7 +211,14 @@ class ConversationRepository @Inject constructor(
      */
     suspend fun createSelfConversation(): String? {
         val userId = auth.currentUser?.uid ?: return null
-        return conversationDataSource.createSelfConversation(userId)
+        val conversationId = conversationDataSource.createSelfConversation(userId)
+        
+        // Send welcome message to new conversation
+        if (conversationId != null) {
+            sendWelcomeMessage(conversationId, listOf(userId, SYNAPSE_BOT_ID))
+        }
+        
+        return conversationId
     }
 
     /**
@@ -180,11 +234,18 @@ class ConversationRepository @Inject constructor(
         // Always include current user in the group
         val allMemberIds = (memberIds + currentUserId).distinct()
 
-        return conversationDataSource.createGroupConversation(
+        val conversationId = conversationDataSource.createGroupConversation(
             memberIds = allMemberIds,
             groupName = groupName,
             createdBy = currentUserId  // Current user is the admin
         )
+        
+        // Send welcome message to new conversation
+        if (conversationId != null) {
+            sendWelcomeMessage(conversationId, allMemberIds + SYNAPSE_BOT_ID)
+        }
+        
+        return conversationId
     }
 
     /**

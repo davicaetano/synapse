@@ -6,7 +6,8 @@ data class User(
     val photoUrl: String? = null,
     val isMyself: Boolean = false,
     val isOnline: Boolean = false,
-    val lastSeenMs: Long? = null
+    val lastSeenMs: Long? = null,
+    val isSystemBot: Boolean = false  // True for system bots (e.g. Synapse Bot)
 )
 
 

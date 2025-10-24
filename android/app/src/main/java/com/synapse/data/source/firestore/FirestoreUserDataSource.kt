@@ -53,7 +53,8 @@ class FirestoreUserDataSource @Inject constructor(
                         id = doc.id,
                         displayName = doc.getString("displayName"),
                         email = doc.getString("email"),
-                        photoUrl = doc.getString("photoUrl")
+                        photoUrl = doc.getString("photoUrl"),
+                        isSystemBot = doc.getBoolean("isSystemBot") ?: false
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "Error parsing user ${doc.id}", e)
@@ -87,7 +88,8 @@ class FirestoreUserDataSource @Inject constructor(
                             id = doc.id,
                             displayName = doc.getString("displayName"),
                             email = doc.getString("email"),
-                            photoUrl = doc.getString("photoUrl")
+                            photoUrl = doc.getString("photoUrl"),
+                            isSystemBot = doc.getBoolean("isSystemBot") ?: false
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing user ${doc.id}", e)
@@ -140,7 +142,8 @@ class FirestoreUserDataSource @Inject constructor(
                             id = doc.id,
                             displayName = doc.getString("displayName"),
                             email = doc.getString("email"),
-                            photoUrl = doc.getString("photoUrl")
+                            photoUrl = doc.getString("photoUrl"),
+                            isSystemBot = doc.getBoolean("isSystemBot") ?: false
                         )
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing user ${doc.id}", e)

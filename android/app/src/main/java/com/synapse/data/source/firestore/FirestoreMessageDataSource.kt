@@ -162,6 +162,49 @@ class FirestoreMessageDataSource @Inject constructor(
     // ============================================================
     
     /**
+     * Send a message as a specific user (e.g. bot).
+     * Used for system messages like welcome messages.
+     * 
+     * @param conversationId The conversation ID
+     * @param text The message text
+     * @param memberIds List of all member IDs in the conversation
+     * @param senderId The ID of the user sending the message (e.g. bot ID)
+     */
+    suspend fun sendMessageAs(
+        conversationId: String,
+        text: String,
+        memberIds: List<String>,
+        senderId: String
+    ): String? {
+        val startTime = System.currentTimeMillis()
+        
+        val messageData = hashMapOf(
+            "text" to text,
+            "senderId" to senderId,  // Use provided sender ID
+            "createdAtMs" to System.currentTimeMillis(),
+            "memberIdsAtCreation" to memberIds,
+            "serverTimestamp" to FieldValue.serverTimestamp()
+        )
+        
+        return try {
+            val docRef = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .add(messageData)
+                .await()
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "⏱️ sendMessageAs($senderId): ${elapsed}ms")
+            
+            docRef.id
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "⏱️ sendMessageAs FAILED: ${elapsed}ms", e)
+            null
+        }
+    }
+    
+    /**
      * Send a message to a conversation.
      * Returns the new message ID if successful.
      * 

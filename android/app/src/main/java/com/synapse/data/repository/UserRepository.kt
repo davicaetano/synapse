@@ -55,13 +55,16 @@ class UserRepository @Inject constructor(
         
         return userDataSource.listenAllUsers()
             .flatMapLatest { userEntities ->
-                if (userEntities.isEmpty()) {
+                // Filter out system bots (e.g. Synapse Bot)
+                val realUsers = userEntities.filter { !it.isSystemBot }
+                
+                if (realUsers.isEmpty()) {
                     flowOf(emptyList())
                 } else {
-                    val userIds = userEntities.map { it.id }
+                    val userIds = realUsers.map { it.id }
                     
                     combine(
-                        flowOf(userEntities),
+                        flowOf(realUsers),
                         presenceDataSource.listenMultiplePresence(userIds)
                     ) { users, presenceMap ->
                         users.map { userEntity ->
