@@ -80,6 +80,30 @@ async def summarize_thread(
         }
     
     except Exception as e:
+        # Write error message to Firestore (visible to all users)
+        try:
+            participants = await firebase_service.get_conversation_participants(request.conversation_id)
+            member_ids = [p['id'] for p in participants]
+            
+            error_text = f"""❌ **AI Error**
+
+The AI processing failed with the following error:
+
+`{str(e)}`
+
+Please try again or contact support if the issue persists."""
+            
+            # Create error message in Firestore (sent by Synapse Bot)
+            await firebase_service.create_error_message(
+                conversation_id=request.conversation_id,
+                error_text=error_text,
+                member_ids=member_ids
+            )
+        except Exception as firestore_error:
+            # If Firestore write fails, just log it
+            print(f"Failed to write error message to Firestore: {firestore_error}")
+        
+        # Still return HTTP error for Android to log
         raise HTTPException(status_code=500, detail=f"Error generating summary: {str(e)}")
 
 

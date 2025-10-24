@@ -1,87 +1,119 @@
 package com.synapse.data.repository
 
 import android.util.Log
-import com.synapse.data.remote.RefineResponse
 import com.synapse.data.remote.SummarizeRequest
-import com.synapse.data.remote.SummarizeResponse
 import com.synapse.data.remote.SynapseAIApi
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Repository for AI features (Thread Summarization, Action Items, etc.)
  * 
- * Communicates with Python backend API via Retrofit.
- * Backend creates AI messages directly in Firestore, which are then
- * picked up by the message listeners for real-time updates.
+ * **Architecture:**
+ * - Jobs run in ApplicationScope (survive Activity/ViewModel destruction)
+ * - Multiple jobs can run per conversation simultaneously
+ * - Real-time job count observable per conversation
+ * - Backend creates AI messages directly in Firestore (success or error)
+ * - Android receives results via Firestore listener (reliable, always works)
  */
 @Singleton
 class AIRepository @Inject constructor(
     private val api: SynapseAIApi
 ) {
+    // Application-level scope (survives Activity/ViewModel destruction)
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    // Flow: Map of conversationId -> job count (for real-time UI updates)
+    private val _jobCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
     
     /**
-     * Generate thread summary
-     * Backend will create an AI_SUMMARY message in Firestore
+     * Observe active job count for a specific conversation
+     * UI can use this to show loading spinners
      * 
-     * @param conversationId Firestore conversation ID
-     * @param customInstructions Optional custom instructions for focused summary
-     * @return Response with created message ID
+     * @param conversationId Conversation to monitor
+     * @return Flow<Int> emitting current job count (0, 1, 2, ...)
      */
-    suspend fun summarizeThread(
-        conversationId: String,
-        customInstructions: String? = null
-    ): Result<SummarizeResponse> {
-        return try {
-            val request = SummarizeRequest(
-                conversation_id = conversationId,
-                custom_instructions = customInstructions
-            )
-            
-            Log.d(TAG, "📊 Requesting thread summary for conversation: ${conversationId.takeLast(6)}")
-            val response = api.summarizeThread(request)
-            
-            Log.d(TAG, "✅ Summary created: messageId=${response.message_id.takeLast(6)}, " +
-                    "messageCount=${response.message_count}, " +
-                    "processingTime=${response.processing_time_ms}ms")
-            
-            Result.success(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to generate summary", e)
-            Result.failure(e)
-        }
+    fun observeActiveJobCount(conversationId: String): Flow<Int> {
+        return _jobCounts
+            .map { it[conversationId] ?: 0 }
+            .distinctUntilChanged()
     }
     
     /**
-     * Refine existing summary
-     * Backend will create a new refined AI_SUMMARY message
+     * Generate thread summary (Fire-and-forget)
+     * 
+     * Job runs in ApplicationScope and survives Activity/ViewModel destruction.
+     * Multiple summaries can be requested simultaneously for the same conversation.
+     * 
+     * **Flow:**
+     * 1. Android calls Backend API (this method)
+     * 2. Backend processes with OpenAI
+     * 3. Backend writes to Firestore (success message OR error message)
+     * 4. Android receives via Firestore listener (reliable, always works)
      * 
      * @param conversationId Firestore conversation ID
-     * @param previousSummaryId Message ID of the previous summary
-     * @param refinementInstructions User's refinement instructions
-     * @return Response with new refined message ID
+     * @param customInstructions Optional custom instructions for focused summary
      */
-    suspend fun refineSummary(
+    fun summarizeThreadAsync(
         conversationId: String,
-        previousSummaryId: String,
-        refinementInstructions: String
-    ): Result<RefineResponse> {
-        return try {
-            Log.d(TAG, "🔧 Refining summary: ${previousSummaryId.takeLast(6)}")
+        customInstructions: String? = null
+    ) {
+        applicationScope.launch {
+            val jobId = "summary_${conversationId.takeLast(6)}_${System.currentTimeMillis()}"
             
-            val response = api.refineSummary(
-                conversationId = conversationId,
-                previousSummaryId = previousSummaryId,
-                refinementInstructions = refinementInstructions
-            )
-            
-            Log.d(TAG, "✅ Refined summary created: messageId=${response.message_id.takeLast(6)}")
-            
-            Result.success(response)
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Failed to refine summary", e)
-            Result.failure(e)
+            try {
+                incrementJobCount(conversationId)
+                Log.d(TAG, "🚀 [$jobId] Starting AI job (active: ${getJobCount(conversationId)})")
+                
+                // Call backend API (auth token is added automatically by interceptor)
+                val request = SummarizeRequest(
+                    conversation_id = conversationId,
+                    custom_instructions = customInstructions
+                )
+                
+                val response = api.summarizeThread(request)
+                
+                Log.d(TAG, "✅ [$jobId] AI job completed: messageId=${response.message_id.takeLast(6)}, " +
+                        "messageCount=${response.message_count}, time=${response.processing_time_ms}ms")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ [$jobId] AI job failed: ${e.message}", e)
+                // Backend will handle error posting to Firestore
+                
+            } finally {
+                decrementJobCount(conversationId)
+                Log.d(TAG, "🏁 [$jobId] Job finished (remaining: ${getJobCount(conversationId)})")
+            }
         }
+    }
+    
+    // ========== Job Management ==========
+    
+    private fun incrementJobCount(conversationId: String) {
+        val current = _jobCounts.value.toMutableMap()
+        current[conversationId] = (current[conversationId] ?: 0) + 1
+        _jobCounts.value = current
+    }
+    
+    private fun decrementJobCount(conversationId: String) {
+        val current = _jobCounts.value.toMutableMap()
+        val newCount = (current[conversationId] ?: 1) - 1
+        if (newCount <= 0) {
+            current.remove(conversationId)
+        } else {
+            current[conversationId] = newCount
+        }
+        _jobCounts.value = current
+    }
+    
+    private fun getJobCount(conversationId: String): Int {
+        return _jobCounts.value[conversationId] ?: 0
     }
     
     companion object {

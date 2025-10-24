@@ -162,16 +162,17 @@ async def create_ai_summary_message(
         message_data = {
             'id': message_ref.id,
             'text': summary_text,
-            'senderId': 'SYSTEM_AI',
+            'senderId': 'synapse-bot-system',  # Use bot ID so it appears as normal message from bot
             'createdAtMs': timestamp_ms,
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
-            'type': 'AI_SUMMARY',
+            'type': 'text',  # Regular text message (will show bot name and avatar)
             'isDeleted': False,
             'metadata': {
                 'generatedBy': generated_by_user_id,
                 'messageCount': message_count,
-                'customInstructions': custom_instructions or ''
+                'customInstructions': custom_instructions or '',
+                'aiGenerated': True  # Mark as AI-generated for future features
             }
         }
         
@@ -189,5 +190,55 @@ async def create_ai_summary_message(
     
     except Exception as e:
         print(f"❌ Error creating AI summary message: {e}")
+        raise
+
+async def create_error_message(
+    conversation_id: str,
+    error_text: str,
+    member_ids: List[str]
+) -> str:
+    """
+    Create an error message in Firestore (sent by Synapse Bot)
+    Returns the created message ID
+    """
+    try:
+        import time
+        from google.cloud.firestore import SERVER_TIMESTAMP
+        
+        SYNAPSE_BOT_ID = "synapse-bot-system"
+        
+        # Create message document
+        messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
+        message_ref = messages_ref.document()  # Auto-generate ID
+        
+        timestamp_ms = int(time.time() * 1000)
+        
+        message_data = {
+            'id': message_ref.id,
+            'text': error_text,
+            'senderId': SYNAPSE_BOT_ID,
+            'createdAtMs': timestamp_ms,
+            'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
+            'serverTimestamp': SERVER_TIMESTAMP,
+            'type': 'text',  # Regular text message
+            'isDeleted': False
+        }
+        
+        message_ref.set(message_data)
+        
+        # Update conversation metadata
+        conv_ref = db.collection('conversations').document(conversation_id)
+        conv_ref.update({
+            'lastMessageText': '❌ AI Error',
+            'lastMessageSenderId': SYNAPSE_BOT_ID,
+            'lastMessageTimestamp': SERVER_TIMESTAMP,
+            'updatedAt': SERVER_TIMESTAMP
+        })
+        
+        print(f"✅ Created error message: {message_ref.id}")
+        return message_ref.id
+    
+    except Exception as e:
+        print(f"❌ Error creating error message: {e}")
         raise
 

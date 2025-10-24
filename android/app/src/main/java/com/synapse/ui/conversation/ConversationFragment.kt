@@ -61,6 +61,13 @@ class ConversationFragment : Fragment() {
                                     "previousSummaryId" to previousSummaryId
                                 )
                             )
+                        },
+                        onOpenSummarizeInput = {
+                            val conversationId = arguments?.getString("conversationId") ?: ""
+                            findNavController().navigate(
+                                com.synapse.R.id.action_conversation_to_summarizeInput,
+                                bundleOf("conversationId" to conversationId)
+                            )
                         }
                     )
                 }

@@ -80,16 +80,16 @@ fun ConversationScreen(
     onNavigateBack: () -> Unit = {},
     onOpenGroupSettings: () -> Unit = {},
     onOpenMessageDetail: (String) -> Unit = {},
-    onOpenRefineSummary: (String) -> Unit = {}
+    onOpenRefineSummary: (String) -> Unit = {},
+    onOpenSummarizeInput: () -> Unit = {}
 ) {
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages (Room + Paging3)
     val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
     
-    // AI generation state
-    val isGeneratingSummary by vm.isGeneratingSummary.collectAsStateWithLifecycle()
-    val summaryError by vm.summaryError.collectAsStateWithLifecycle()
+    // AI active job count (for spinner on AI button)
+    val activeAIJobCount by vm.activeAIJobCount.collectAsStateWithLifecycle()
     
     // Dev settings
     val showBatchButtons by vm.showBatchButtons.collectAsStateWithLifecycle()
@@ -99,19 +99,6 @@ fun ConversationScreen(
     
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
-    
-    // Show Toast for AI summary errors
-    val context = androidx.compose.ui.platform.LocalContext.current
-    LaunchedEffect(summaryError) {
-        summaryError?.let { error ->
-            android.widget.Toast.makeText(
-                context,
-                "Failed to generate summary: $error",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
-            vm.clearSummaryError()  // Clear error after showing
-        }
-    }
     
     // Log Paging3 usage
     LaunchedEffect(pagedMessages.itemCount) {
@@ -149,7 +136,7 @@ fun ConversationScreen(
         ui = ui,
         pagedMessages = pagedMessages,
         selectedMessageId = selectedMessageId,
-        isGeneratingSummary = isGeneratingSummary,
+        activeAIJobCount = activeAIJobCount,
         showBatchButtons = showBatchButtons,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
@@ -166,9 +153,7 @@ fun ConversationScreen(
         onDeleteMessage = {
             showDeleteDialog = true  // Show confirmation dialog instead of deleting directly
         },
-        onGenerateSummary = {
-            vm.generateSummary()  // Call AI summarization
-        },
+        onGenerateSummary = onOpenSummarizeInput,  // Navigate to summarize input screen
         onOpenRefineSummary = onOpenRefineSummary
     )
 }
@@ -179,7 +164,7 @@ fun ConversationScreen(
     ui: ConversationUIState,
     pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
     selectedMessageId: String?,
-    isGeneratingSummary: Boolean = false,
+    activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
@@ -194,7 +179,8 @@ fun ConversationScreen(
     onOpenMessageDetail: () -> Unit = {},
     onDeleteMessage: () -> Unit = {},
     onGenerateSummary: () -> Unit = {},
-    onOpenRefineSummary: (String) -> Unit = {}
+    onOpenRefineSummary: (String) -> Unit = {},
+    onOpenSummarizeInput: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -222,7 +208,7 @@ fun ConversationScreen(
                 isUserAdmin = ui.isUserAdmin,
                 typingText = ui.typingText,
                 hasSelection = selectedMessageId != null,
-                isGeneratingSummary = isGeneratingSummary,
+                activeAIJobCount = activeAIJobCount,
                 showBatchButtons = showBatchButtons,
                 onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
@@ -275,51 +261,29 @@ fun ConversationScreen(
                     // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->
-                        // Render different UI based on message type
-                        when (m.type) {
-                            "AI_SUMMARY" -> {
-                                // AI Summary Card
-                                AISummaryCard(
-                                    messageId = m.id,
-                                    text = m.text,
-                                    timestamp = formatTime(m.createdAtMs),
-                                    onDelete = {
-                                        // Show delete confirmation for AI summary
-                                        onMessageClick(m.id)
-                                        onDeleteMessage()
-                                    },
-                                    onRefine = {
-                                        // Navigate to refine screen
-                                        onOpenRefineSummary(m.id)
-                                    }
-                                )
-                            }
-                            else -> {
-                                // Regular message bubble
-                                // For group messages, find sender info from members list
-                                val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
-                                    ui.members.find { it.id == m.senderId }
-                                } else null
-                                
-                                // Show name/avatar only if different from previous message sender
-                                val previousMessage = if (index < pagedMessages.itemCount - 1) {
-                                    pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
-                                } else null
-                                val showSenderInfo = previousMessage?.senderId != m.senderId
-                                
-                                MessageBubble(
-                                    text = m.text,
-                                    displayTime = formatTime(m.createdAtMs),
-                                    isMine = m.isMine,
-                                    isReadByEveryone = m.isReadByEveryone,
-                                    senderName = if (showSenderInfo) sender?.displayName else null,
-                                    senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
-                                    status = m.status,
-                                    isSelected = m.id == selectedMessageId,
-                                    onClick = { onMessageClick(m.id) }
-                                )
-                            }
-                        }
+                        // All messages rendered as MessageBubble (including AI summaries from bot)
+                        // For group messages, find sender info from members list
+                        val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
+                            ui.members.find { it.id == m.senderId }
+                        } else null
+                        
+                        // Show name/avatar only if different from previous message sender
+                        val previousMessage = if (index < pagedMessages.itemCount - 1) {
+                            pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
+                        } else null
+                        val showSenderInfo = previousMessage?.senderId != m.senderId
+                        
+                        MessageBubble(
+                            text = m.text,
+                            displayTime = formatTime(m.createdAtMs),
+                            isMine = m.isMine,
+                            isReadByEveryone = m.isReadByEveryone,
+                            senderName = if (showSenderInfo) sender?.displayName else null,
+                            senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
+                            status = m.status,
+                            isSelected = m.id == selectedMessageId,
+                            onClick = { onMessageClick(m.id) }
+                        )
                     }
                 }
                 }  // Close LazyColumn
@@ -389,7 +353,7 @@ private fun ConversationTopAppBar(
     isUserAdmin: Boolean,
     typingText: String?,
     hasSelection: Boolean,
-    isGeneratingSummary: Boolean,
+    activeAIJobCount: Int,
     showBatchButtons: Boolean,
     onBackClick: () -> Unit,
     onOpenGroupSettings: () -> Unit,
@@ -483,23 +447,28 @@ private fun ConversationTopAppBar(
                     )
                 }
             } else {
-                // AI Summarize button (highlighted with color)
+                // AI Summarize button (always enabled, can request multiple summaries)
                 IconButton(
                     onClick = onGenerateSummary,
-                    enabled = !isGeneratingSummary
+                    enabled = true  // Always enabled
                 ) {
-                    if (isGeneratingSummary) {
-                        androidx.compose.material3.CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
+                    Box {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = "Generate AI Summary",
-                            tint = MaterialTheme.colorScheme.primary  // Highlight in primary color
+                            tint = MaterialTheme.colorScheme.primary
                         )
+                        
+                        // Show spinner overlay when AI jobs are running
+                        if (activeAIJobCount > 0) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .align(Alignment.Center),
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        }
                     }
                 }
                 

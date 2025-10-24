@@ -59,16 +59,10 @@ class ConversationViewModel @Inject constructor(
     // Global message counter for batch testing (increments with each batch sent)
     private var globalMessageCounter = 0
     
-    // AI Summary generation state
-    private val _isGeneratingSummary = kotlinx.coroutines.flow.MutableStateFlow(false)
-    val isGeneratingSummary: StateFlow<Boolean> = _isGeneratingSummary
-    
-    private val _summaryError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    val summaryError: StateFlow<String?> = _summaryError
-    
-    fun clearSummaryError() {
-        _summaryError.value = null
-    }
+    // AI active job count (for showing spinner on AI button)
+    // Observes jobs running in ApplicationScope (survive ViewModel destruction)
+    val activeAIJobCount: StateFlow<Int> = aiRepo.observeActiveJobCount(conversationId)
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
     
     // Dev settings - show batch message buttons
     val showBatchButtons: StateFlow<Boolean> = devPreferences.showBatchButtons
@@ -215,38 +209,9 @@ class ConversationViewModel @Inject constructor(
                 }
         }.cachedIn(viewModelScope)
     }
-    
+
     // Background side effects
     init {
-//        // Update lastSeenAt when entering conversation (with guard to prevent unnecessary writes)
-//        val userId = auth.currentUser?.uid ?: ""
-//        viewModelScope.launch {
-//            // Wait for first conversation emission to check if update is needed
-//            convRepo.observeConversation(userId, conversationId)
-//                .take(1)
-//                .collect { conversation ->
-//                    if (conversation != null) {
-//                        val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
-//
-//                        // Get all other members (exclude myself)
-//                        val otherMembers = conversation.memberIds.filter { it != userId }
-//
-//                        // Find the most recent lastMessageSentAt from OTHER members
-//                        val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
-//                            conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
-//                        }.maxOrNull()
-//                        android.util.Log.d("InboxVM", "🔵 Loop check - 3: convId=${conversation.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastSeenAt")
-//                        // Only update if someone ELSE sent a message AFTER I last saw
-//                        if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt) {
-//                            Log.d(TAG, "📖 Updating lastSeenAt (has unread messages)")
-//                            convRepo.updateMemberLastSeenAtNow(conversationId)
-//                        } else {
-//                            Log.d(TAG, "📖 Skip lastSeenAt update (no new messages)")
-//                        }
-//                    }
-//                }
-//        }
-        
         // Start Firebase → Room sync AFTER first UI state emission (avoid blocking avatar/UI)
         uiState
             .onEach { state ->
@@ -537,71 +502,24 @@ class ConversationViewModel @Inject constructor(
      * @param customInstructions Optional custom instructions for focused summary
      * @return Result with success/failure
      */
-    fun generateSummary(customInstructions: String? = null) {
-        viewModelScope.launch {
-            try {
-                _isGeneratingSummary.value = true
-                _summaryError.value = null  // Clear previous errors
-                Log.d(TAG, "📊 Generating thread summary...")
-                
-                val result = aiRepo.summarizeThread(
-                    conversationId = conversationId,
-                    customInstructions = customInstructions
-                )
-                
-                if (result.isSuccess) {
-                    val response = result.getOrNull()
-                    Log.d(TAG, "✅ Summary generated: ${response?.message_id?.takeLast(6)}")
-                    Log.d(TAG, "📈 Processed ${response?.message_count} messages in ${response?.processing_time_ms}ms")
-                } else {
-                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                    Log.e(TAG, "❌ Failed to generate summary: $errorMsg")
-                    _summaryError.value = errorMsg
-                }
-            } catch (e: Exception) {
-                val errorMsg = e.message ?: "Network error"
-                Log.e(TAG, "❌ Exception generating summary: $errorMsg", e)
-                _summaryError.value = errorMsg
-            } finally {
-                _isGeneratingSummary.value = false
-            }
-        }
-    }
-    
     /**
-     * Refine existing AI summary
-     * Creates a new refined AI_SUMMARY message
+     * Generate AI summary (Fire-and-forget)
      * 
-     * @param previousSummaryId Message ID of the previous summary
-     * @param refinementInstructions User's refinement instructions
-     * @return Result with success/failure
+     * Job runs in ApplicationScope (survives ViewModel destruction).
+     * User can navigate away and job continues in background.
+     * Result (success or error) will appear as message in Firestore.
+     * 
+     * @param customInstructions Optional custom instructions for AI
      */
-    fun refineSummary(previousSummaryId: String, refinementInstructions: String) {
-        viewModelScope.launch {
-            try {
-                _summaryError.value = null  // Clear previous errors
-                Log.d(TAG, "🔧 Refining summary: ${previousSummaryId.takeLast(6)}")
-                
-                val result = aiRepo.refineSummary(
-                    conversationId = conversationId,
-                    previousSummaryId = previousSummaryId,
-                    refinementInstructions = refinementInstructions
-                )
-                
-                if (result.isSuccess) {
-                    val response = result.getOrNull()
-                    Log.d(TAG, "✅ Refined summary created: ${response?.message_id?.takeLast(6)}")
-                } else {
-                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                    Log.e(TAG, "❌ Failed to refine summary: $errorMsg")
-                    _summaryError.value = errorMsg
-                }
-            } catch (e: Exception) {
-                val errorMsg = e.message ?: "Network error"
-                Log.e(TAG, "❌ Exception refining summary: $errorMsg", e)
-                _summaryError.value = errorMsg
-            }
-        }
+    fun generateSummary(customInstructions: String? = null) {
+        Log.d(TAG, "📊 Launching AI summary job (custom=${customInstructions != null})")
+        
+        // Fire and forget - job survives ViewModel destruction
+        // activeAIJobCount will update automatically for UI spinner
+        aiRepo.summarizeThreadAsync(
+            conversationId = conversationId,
+            customInstructions = customInstructions
+        )
     }
     
     companion object {
