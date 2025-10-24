@@ -169,19 +169,21 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param text The message text
      * @param memberIds List of all member IDs in the conversation
      * @param senderId The ID of the user sending the message (e.g. bot ID)
+     * @param createdAtMs Optional custom timestamp (default: current time, use 0 for welcome messages to appear first)
      */
     suspend fun sendMessageAs(
         conversationId: String,
         text: String,
         memberIds: List<String>,
-        senderId: String
+        senderId: String,
+        createdAtMs: Long = System.currentTimeMillis()
     ): String? {
         val startTime = System.currentTimeMillis()
         
         val messageData = hashMapOf(
             "text" to text,
             "senderId" to senderId,  // Use provided sender ID
-            "createdAtMs" to System.currentTimeMillis(),
+            "createdAtMs" to createdAtMs,  // Use provided timestamp (0 for welcome messages)
             "memberIdsAtCreation" to memberIds,
             "serverTimestamp" to FieldValue.serverTimestamp()
         )

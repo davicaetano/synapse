@@ -148,15 +148,16 @@ Feel free to start chatting!"""
      * @param memberIds List of all member IDs in the conversation
      */
     private suspend fun sendWelcomeMessage(conversationId: String, memberIds: List<String>) {
-        // Send welcome message as the Synapse Bot
+        // Send welcome message as the Synapse Bot with timestamp 0 to ensure it appears first
         firestoreMessageDataSource.sendMessageAs(
             conversationId = conversationId,
             text = WELCOME_MESSAGE,
             memberIds = memberIds,
-            senderId = SYNAPSE_BOT_ID
+            senderId = SYNAPSE_BOT_ID,
+            createdAtMs = 0L  // Timestamp 0 ensures this message always appears first
         )
         
-        // Update conversation metadata
+        // Update conversation metadata (use actual timestamp for conversation ordering)
         val timestamp = System.currentTimeMillis()
         conversationDataSource.updateConversationMetadata(
             conversationId = conversationId,
