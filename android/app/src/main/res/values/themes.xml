@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
-    <style name="Theme.Synapse" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Base theme that adapts to system dark/light mode -->
+    <style name="Theme.Synapse" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- Splash/window background adapts to theme -->
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
 </resources>

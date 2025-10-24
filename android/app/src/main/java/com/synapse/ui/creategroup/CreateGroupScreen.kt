@@ -62,7 +62,9 @@ fun CreateGroupScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors()
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
         },
         floatingActionButton = {

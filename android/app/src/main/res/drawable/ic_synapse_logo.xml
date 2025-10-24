@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="80dp"
+    android:height="80dp"
+    android:viewportWidth="80"
+    android:viewportHeight="80">
+  
+  <!-- Top neuron/bubble -->
+  <path
+      android:fillColor="#6750A4"
+      android:pathData="M30,20 A10,10 0 1,1 50,20 A10,10 0 1,1 30,20 Z" />
+  
+  <!-- Synapse connection line -->
+  <path
+      android:strokeColor="#D0BCFF"
+      android:strokeWidth="3"
+      android:strokeLineCap="round"
+      android:pathData="M40,30 L40,50" />
+  
+  <!-- Connection nodes -->
+  <path
+      android:fillColor="#D0BCFF"
+      android:pathData="M40,30 A3,3 0 1,1 40,30.01 Z" />
+  <path
+      android:fillColor="#D0BCFF"
+      android:pathData="M40,50 A3,3 0 1,1 40,50.01 Z" />
+  
+  <!-- Bottom neuron/bubble -->
+  <path
+      android:fillColor="#6750A4"
+      android:pathData="M30,60 A10,10 0 1,1 50,60 A10,10 0 1,1 30,60 Z" />
+  
+  <!-- AI sparkle accent -->
+  <path
+      android:strokeColor="#D0BCFF"
+      android:strokeWidth="2"
+      android:strokeLineCap="round"
+      android:pathData="M60,30 L60,22 M56,26 L64,26" />
+</vector>
+

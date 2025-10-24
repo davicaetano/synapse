@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material3.Button
+import androidx.compose.ui.res.painterResource
+import com.synapse.R
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -32,7 +34,10 @@ fun AuthScreen(
     onSignIn: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Scaffold(modifier = modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -41,9 +46,9 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // App icon/logo
+            // App icon/logo - Synapse custom icon
             Icon(
-                imageVector = Icons.Filled.ChatBubble,
+                painter = painterResource(id = R.drawable.ic_synapse_logo),
                 contentDescription = "Synapse logo",
                 modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.primary

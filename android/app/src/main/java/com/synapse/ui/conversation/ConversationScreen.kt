@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
@@ -152,37 +151,78 @@ fun ConversationScreen(
                 .consumeWindowInsets(padding)
                 .systemBarsPadding()
         ) {
-            LazyColumn(
-                reverseLayout = true,
-                state = listState,
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    top = 8.dp,
-                    bottom = 8.dp
-                )
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)  // Subtle texture difference
             ) {
-                // Paging3 - loads 50 at a time
-                items(count = pagedMessages.itemCount) { index ->
+                // Empty state when no messages
+                if (pagedMessages.itemCount == 0) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "No messages yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Start the conversation!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+                
+                LazyColumn(
+                    reverseLayout = true,
+                    state = listState,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        top = 8.dp,
+                        bottom = 8.dp
+                    )
+                ) {
+                    // Paging3 - loads 50 at a time
+                    items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->
+                        // For group messages, find sender info from members list
+                        val sender = if (ui.convType == ConversationType.GROUP && !m.isMine) {
+                            ui.members.find { it.id == m.senderId }
+                        } else null
+                        
+                        // Show name/avatar only if different from previous message sender
+                        val previousMessage = if (index < pagedMessages.itemCount - 1) {
+                            pagedMessages[index + 1]  // reverseLayout = true, so next index is previous message
+                        } else null
+                        val showSenderInfo = previousMessage?.senderId != m.senderId
+                        
                         MessageBubble(
                             text = m.text,
                             displayTime = formatTime(m.createdAtMs),
                             isMine = m.isMine,
                             isReadByEveryone = m.isReadByEveryone,
-                            senderName = null,
+                            senderName = if (showSenderInfo) sender?.displayName else null,
+                            senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
                             status = m.status
                         )
                     }
                 }
-            }
+                }  // Close LazyColumn
+            }  // Close Box
 
-            // Input row
+            // Input row with elevated background
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -361,7 +401,10 @@ private fun ConversationTopAppBar(
                 }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors()
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        )
     )
 }
 
@@ -376,6 +419,7 @@ private fun MessageBubble(
     isMine: Boolean,
     isReadByEveryone: Boolean = false,
     senderName: String? = null,
+    senderPhotoUrl: String? = null,
     status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED
 ) {
     // Material You colors - adapts to theme
@@ -391,28 +435,49 @@ private fun MessageBubble(
     }
 
     // Rounded corners with pointer
+    // RoundedCornerShape(topLeft, topRight, bottomRight, bottomLeft)
     val shape = if (isMine)
-        RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
+        RoundedCornerShape(18.dp, 4.dp, 18.dp, 18.dp)  // Top-right pointed
     else
-        RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
+        RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)  // Top-left pointed
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),  // Don't stick to edges
-        horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
+        verticalAlignment = Alignment.Top
     ) {
-        // Show sender name for group messages (only for others' messages)
-        if (!isMine && senderName != null) {
-            Text(
-                text = senderName,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 12.dp, bottom = 2.dp),
-                fontSize = 11.sp
-            )
+        // Avatar for group messages (large, aligned to top-left)
+        if (!isMine) {
+            if (senderPhotoUrl != null) {
+                UserAvatar(
+                    photoUrl = senderPhotoUrl,
+                    displayName = senderName,
+                    size = 32.dp,
+                    showPresence = false,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+            } else {
+                // Empty space to maintain alignment when no avatar shown
+                Spacer(modifier = Modifier.width(40.dp))  // 32dp avatar + 8dp padding
+            }
         }
+        
+        Column(
+            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start
+        ) {
+            // Show sender name for group messages
+            if (!isMine && senderName != null) {
+                Text(
+                    text = senderName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 12.dp, bottom = 2.dp),
+                    fontSize = 11.sp
+                )
+            }
 
         // Message bubble
         Column(
@@ -516,7 +581,8 @@ private fun MessageBubble(
                     }
                 }
             }
-        }
-    }
+        }  // Close Column (message bubble)
+        }  // Close Column (sender name + bubble)
+    }  // Close Row (avatar + content)
 }
 

@@ -60,6 +60,7 @@ fun InboxScreen(
     var showMenu by remember { mutableStateOf(false) }
     
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         topBar = {
             TopAppBar(
                 title = {
@@ -140,7 +141,9 @@ fun InboxScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors()
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
         },
         floatingActionButton = {

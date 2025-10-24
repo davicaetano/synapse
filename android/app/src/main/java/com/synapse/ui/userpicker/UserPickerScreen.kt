@@ -50,7 +50,9 @@ fun UserPickerScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Select Contact") },
-                colors = TopAppBarDefaults.topAppBarColors(),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")

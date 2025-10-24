@@ -199,19 +199,8 @@ class FirestoreConversationDataSource @Inject constructor(
         
         val sortedIds = memberIds.sorted()
         
-        // Check if already exists (by memberIds + convType)
-        val existing = firestore.collection("conversations")
-            .whereEqualTo("memberIds", sortedIds)
-            .whereEqualTo("convType", ConversationType.GROUP.name)
-            .limit(1)
-            .get()
-            .await()
-        
-        if (!existing.isEmpty) {
-            return existing.documents.first().id
-        }
-        
-        // Create new group
+        // Always create new group (allow multiple groups with same members)
+        // Each group is unique by ID - useful for different topics/projects
         val data = mutableMapOf<String, Any>(
             "memberIds" to sortedIds,
             "convType" to ConversationType.GROUP.name,
