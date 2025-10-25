@@ -10,6 +10,9 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
@@ -161,9 +164,13 @@ class FirestoreUserDataSource @Inject constructor(
         }
         
         // Collect from StateFlow and emit to the callbackFlow
-        usersState.collect { usersMap ->
-            trySend(usersMap.values.toList())
-        }
+        usersState
+            .drop(1)
+            .map { it.values.toList() }
+            .distinctUntilChanged()
+            .collect { users ->
+                trySend(users)
+            }
         
         awaitClose {
             registrations.forEach { it.remove() }

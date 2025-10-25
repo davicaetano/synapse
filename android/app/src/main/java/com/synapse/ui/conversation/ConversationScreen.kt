@@ -71,15 +71,6 @@ import com.synapse.domain.conversation.MessageStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return ""
-    val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
-    return fmt.format(Date(ms))
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -607,7 +598,7 @@ private fun ConversationTopAppBar(
                         
                         // Show spinner overlay when AI jobs are running
                         if (activeAIJobCount > 0) {
-                            androidx.compose.material3.CircularProgressIndicator(
+                            CircularProgressIndicator(
                                 modifier = Modifier
                                     .size(20.dp)
                                     .align(Alignment.Center),

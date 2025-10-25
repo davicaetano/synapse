@@ -90,14 +90,14 @@ class FirestoreConversationDataSource @Inject constructor(
             .document(conversationId)
             .addSnapshotListener { snapshot, error ->
                 val isFromCache = snapshot!!.metadata.isFromCache
-                if (!includesCacheChanges and isFromCache) return@addSnapshotListener
+                if (!includesCacheChanges && isFromCache) return@addSnapshotListener
 
                 if (error != null) {
                     trySend(null)
                     return@addSnapshotListener
                 }
                 
-                val conversation = snapshot?.let { doc ->
+                val conversation = snapshot.let { doc ->
                     try {
                         parseConversationEntity(doc)
                     } catch (e: Exception) {
