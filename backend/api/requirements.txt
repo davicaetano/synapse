@@ -14,7 +14,9 @@ langchain-core==0.3.18
 langgraph==0.2.45
 langsmith==0.1.142
 
-# Vector store for RAG (optional - can be removed if not using RAG yet)
+# Vector store for RAG + clustering
 chromadb==0.5.20
 sentence-transformers==3.3.0
+scikit-learn==1.5.2
+numpy==1.26.4
 

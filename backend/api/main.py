@@ -11,6 +11,7 @@ import os
 from dotenv import load_dotenv
 
 from routers import summarization, action_items, search, priority, decisions, agent
+from version import API_VERSION
 
 # Load environment variables
 load_dotenv()
@@ -28,7 +29,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Synapse AI API",
     description="AI-powered features for Remote Team Professionals",
-    version="1.0.0",
+    version=API_VERSION,
     lifespan=lifespan
 )
 
@@ -60,7 +61,8 @@ async def verify_firebase_token(authorization: str = Header(None)):
 async def root():
     return {
         "message": "Synapse AI API is running",
-        "version": "1.0.0",
+        "version": API_VERSION,
+        "model": "gpt-3.5-turbo",
         "features": [
             "Thread Summarization",
             "Action Items Extraction",

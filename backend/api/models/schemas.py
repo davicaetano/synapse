@@ -16,7 +16,7 @@ class SummarizeRequest(BaseModel):
     end_date: Optional[str] = Field(None, description="ISO format end date")
     max_messages: int = Field(1000, description="Max messages to analyze")
     custom_instructions: Optional[str] = Field(None, description="Custom instructions for focused summary")
-    include_processing_time: bool = Field(False, description="Include processing time in AI message (Dev mode)")
+    dev_summary: bool = Field(False, description="Include dev info (processing time, model version)")
 
 class SummaryResponse(BaseModel):
     conversation_id: str

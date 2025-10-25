@@ -4,7 +4,8 @@ Thread Summarization API
 
 from fastapi import APIRouter, Depends, HTTPException
 from models.schemas import SummarizeRequest, SummaryResponse
-from services import firebase_service, openai_service
+from services import firebase_service, openai_service, rag_service
+from version import API_VERSION
 from datetime import datetime
 import time
 
@@ -47,6 +48,20 @@ async def summarize_thread(
         if not messages:
             raise HTTPException(status_code=404, detail="No messages found")
         
+        initial_count = len(messages)
+        
+        # Apply RAG filtering if we have many messages (removes redundancy)
+        # Only apply if >30 messages to make it worthwhile
+        if len(messages) > 30:
+            print(f"🔥 [SUMMARIZATION] Applying RAG filter to {len(messages)} messages...")
+            messages = await rag_service.filter_redundant_messages(
+                messages,
+                target_count=25  # Target ~25 unique messages
+            )
+            print(f"🔥 [SUMMARIZATION] RAG filter: {initial_count} → {len(messages)} messages")
+        else:
+            print(f"ℹ️  [SUMMARIZATION] Skipping RAG ({len(messages)} ≤ 30 messages)")
+        
         # Get participants
         participants = await firebase_service.get_conversation_participants(request.conversation_id)
         member_ids = [p['id'] for p in participants]
@@ -65,9 +80,9 @@ async def summarize_thread(
         for i, point in enumerate(summary_data['key_points'], 1):
             summary_text += f"{i}. {point}\n"
         
-        # Add message count and optionally processing time
-        if request.include_processing_time:
-            summary_text += f"\n_({len(messages)} messages analyzed • Generated in {processing_time}ms)_"
+        # Add message count and optionally dev info (processing time + API version)
+        if request.dev_summary:
+            summary_text += f"\n_({len(messages)} messages analyzed • {processing_time}ms • API v{API_VERSION})_"
         else:
             summary_text += f"\n_({len(messages)} messages analyzed)_"
         

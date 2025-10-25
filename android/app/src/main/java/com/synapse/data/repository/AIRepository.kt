@@ -85,14 +85,14 @@ class AIRepository @Inject constructor(
                 incrementJobCount(conversationId)
                 Log.d(TAG, "🚀 [$jobId] Starting AI job (active: ${getJobCount(conversationId)})")
                 
-                // Read dev preference for processing time
-                val includeProcessingTime = devPreferences.showAIProcessingTime.first()
+                // Read dev preference for dev summary (includes processing time + API version)
+                val devSummary = devPreferences.showAIProcessingTime.first()
                 
                 // Call backend API (auth token is added automatically by interceptor)
                 val request = SummarizeRequest(
                     conversation_id = conversationId,
                     custom_instructions = customInstructions,
-                    include_processing_time = includeProcessingTime
+                    dev_summary = devSummary
                 )
                 
                 val response = api.summarizeThread(request)
