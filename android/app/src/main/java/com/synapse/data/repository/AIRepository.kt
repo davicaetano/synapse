@@ -205,6 +205,26 @@ class AIRepository @Inject constructor(
         return _jobCounts.value[conversationId] ?: 0
     }
     
+    /**
+     * Semantic search in conversation (synchronous)
+     * Returns message IDs for WhatsApp-style navigation
+     * 
+     * @param conversationId Conversation ID to search
+     * @param query Natural language search query
+     * @return SearchResponse with message_ids array
+     */
+    suspend fun searchMessages(conversationId: String, query: String): com.synapse.data.remote.SearchResponse {
+        Log.d(TAG, "🔍 Searching: '$query' in conversation ${conversationId.takeLast(6)}")
+        
+        val request = com.synapse.data.remote.SearchRequest(
+            conversation_id = conversationId,
+            query = query,
+            max_results = 20
+        )
+        
+        return api.searchMessages(request)
+    }
+    
     companion object {
         private const val TAG = "AIRepository"
     }

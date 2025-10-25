@@ -28,10 +28,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
@@ -98,6 +104,11 @@ fun ConversationScreen(
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
+    // Smart Search state
+    val searchState by vm.searchState.collectAsStateWithLifecycle()
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
     
@@ -139,6 +150,9 @@ fun ConversationScreen(
         selectedMessageId = selectedMessageId,
         activeAIJobCount = activeAIJobCount,
         showBatchButtons = showBatchButtons,
+        searchState = searchState,
+        showSearchDialog = showSearchDialog,
+        searchQuery = searchQuery,
         onSendClick = { text: String -> vm.send(text) },
         onTextChanged = { text: String -> vm.onTextChanged(text) },
         onSend20Messages = { vm.send20Messages() },
@@ -155,7 +169,17 @@ fun ConversationScreen(
             showDeleteDialog = true  // Show confirmation dialog instead of deleting directly
         },
         onGenerateSummary = onOpenSummarizeInput,  // Navigate to summarize input screen
-        onOpenRefineSummary = onOpenRefineSummary
+        onOpenRefineSummary = onOpenRefineSummary,
+        onOpenSearch = { showSearchDialog = true },
+        onSearchQueryChange = { searchQuery = it },
+        onSearchSubmit = { query ->
+            vm.performSearch(query)
+            showSearchDialog = false
+        },
+        onSearchDialogDismiss = { showSearchDialog = false },
+        onSearchClose = { vm.closeSearch() },
+        onSearchNextResult = { vm.navigateToNextResult() },
+        onSearchPreviousResult = { vm.navigateToPreviousResult() }
     )
 }
 
@@ -167,6 +191,9 @@ fun ConversationScreen(
     selectedMessageId: String?,
     activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
+    searchState: SearchState = SearchState(),
+    showSearchDialog: Boolean = false,
+    searchQuery: String = "",
     onSendClick: (text: String) -> Unit,
     modifier: Modifier = Modifier,
     onTextChanged: (text: String) -> Unit = {},
@@ -181,7 +208,14 @@ fun ConversationScreen(
     onDeleteMessage: () -> Unit = {},
     onGenerateSummary: () -> Unit = {},
     onOpenRefineSummary: (String) -> Unit = {},
-    onOpenSummarizeInput: () -> Unit = {}
+    onOpenSummarizeInput: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onSearchQueryChange: (String) -> Unit = {},
+    onSearchSubmit: (String) -> Unit = {},
+    onSearchDialogDismiss: () -> Unit = {},
+    onSearchClose: () -> Unit = {},
+    onSearchNextResult: () -> Unit = {},
+    onSearchPreviousResult: () -> Unit = {}
 ) {
     var input by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -197,20 +231,91 @@ fun ConversationScreen(
             }
         }
     }
+    
+    // Auto-scroll to highlighted search result (WhatsApp-style)
+    LaunchedEffect(searchState.currentIndex, searchState.results.size) {
+        if (searchState.results.isNotEmpty() && searchState.currentIndex >= 0) {
+            val highlightedMessageId = searchState.results[searchState.currentIndex]
+            
+            // Find the index of the highlighted message in paged list
+            val messageIndex = (0 until pagedMessages.itemCount).firstOrNull { index ->
+                pagedMessages[index]?.id == highlightedMessageId
+            }
+            
+            messageIndex?.let {
+                scope.launch {
+                    listState.animateScrollToItem(it)
+                }
+            }
+        }
+    }
+
+    // Search Dialog (WhatsApp-style)
+    if (showSearchDialog) {
+        AlertDialog(
+            onDismissRequest = onSearchDialogDismiss,
+            title = { Text("Smart Search") },
+            text = {
+                Column {
+                    Text(
+                        text = "Ask a natural language question about this conversation:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        label = { Text("Search query") },
+                        placeholder = { Text("What did we decide about the deadline?") },
+                        singleLine = false,
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onSearchSubmit(searchQuery) },
+                    enabled = searchQuery.isNotBlank()
+                ) {
+                    Text("Search")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onSearchDialogDismiss) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
-            ConversationTopAppBar(
-                title = ui.title,
-                subtitle = ui.subtitle,
-                convType = ui.convType,
-                otherUserPhotoUrl = ui.otherUserPhotoUrl,
-                otherUserOnline = ui.otherUserOnline,
-                isUserAdmin = ui.isUserAdmin,
-                typingText = ui.typingText,
-                hasSelection = selectedMessageId != null,
-                activeAIJobCount = activeAIJobCount,
-                showBatchButtons = showBatchButtons,
+            // Switch TopAppBar based on search state (WhatsApp-style)
+            if (searchState.isActive) {
+                SearchTopAppBar(
+                    query = searchState.query,
+                    currentIndex = searchState.currentIndex,
+                    totalResults = searchState.results.size,
+                    isSearching = searchState.isSearching,
+                    onClose = onSearchClose,
+                    onNext = onSearchNextResult,
+                    onPrevious = onSearchPreviousResult
+                )
+            } else {
+                ConversationTopAppBar(
+                    title = ui.title,
+                    subtitle = ui.subtitle,
+                    convType = ui.convType,
+                    otherUserPhotoUrl = ui.otherUserPhotoUrl,
+                    otherUserOnline = ui.otherUserOnline,
+                    isUserAdmin = ui.isUserAdmin,
+                    typingText = ui.typingText,
+                    hasSelection = selectedMessageId != null,
+                    activeAIJobCount = activeAIJobCount,
+                    showBatchButtons = showBatchButtons,
+                    onOpenSearch = onOpenSearch,
                 onBackClick = if (selectedMessageId != null) onClearSelection else onBackClick,
                 onOpenGroupSettings = onOpenGroupSettings,
                 onOpenMessageDetail = onOpenMessageDetail,
@@ -220,7 +325,8 @@ fun ConversationScreen(
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
                 currentUserIsConnected = ui.isConnected
-            )
+                )
+            }
         },
         modifier = Modifier.imePadding(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
@@ -267,6 +373,8 @@ fun ConversationScreen(
                             "ai_summary", "ai_error", "ai_action_items" -> {
                                 // AI messages: special full-width layout with bot avatar and name
                                 // ALWAYS show name and avatar for AI messages (even if consecutive)
+                                val isHighlighted = searchState.results.isNotEmpty() && 
+                                                    searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 MessageBubble(
                                     text = m.text,
                                     displayTime = formatTime(m.createdAtMs),
@@ -277,7 +385,8 @@ fun ConversationScreen(
                                     status = m.status,
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
-                                    isAIMessage = true  // Special flag for full-width layout
+                                    isAIMessage = true,  // Special flag for full-width layout
+                                    isHighlighted = isHighlighted
                                 )
                             }
                             else -> {
@@ -294,6 +403,10 @@ fun ConversationScreen(
                                 } else null
                                 val showSenderInfo = previousMessage?.senderId != m.senderId
                                 
+                                // Check if this message is highlighted by search
+                                val isHighlighted = searchState.results.isNotEmpty() && 
+                                                    searchState.results.getOrNull(searchState.currentIndex) == m.id
+                                
                                 MessageBubble(
                                     text = m.text,
                                     displayTime = formatTime(m.createdAtMs),
@@ -304,7 +417,8 @@ fun ConversationScreen(
                                     status = m.status,
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
-                                    needsAvatarSpace = isGroupChat && !m.isMine  // Reserve space for avatar in groups
+                                    needsAvatarSpace = isGroupChat && !m.isMine,  // Reserve space for avatar in groups
+                                    isHighlighted = isHighlighted
                                 )
                             }
                         }
@@ -313,14 +427,15 @@ fun ConversationScreen(
                 }  // Close LazyColumn
             }  // Close Box
 
-            // Input row with elevated background
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            // Input row with elevated background (hidden during search)
+            if (!searchState.isActive) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = {
@@ -358,6 +473,7 @@ fun ConversationScreen(
                     )
                 }
             }
+            }  // Close if (!searchState.isActive)
         }
     }
 }
@@ -384,6 +500,7 @@ private fun ConversationTopAppBar(
     onOpenMessageDetail: () -> Unit,
     onDeleteMessage: () -> Unit,
     onGenerateSummary: () -> Unit,
+    onOpenSearch: () -> Unit,
     onSend20Messages: () -> Unit,
     onSend100Messages: () -> Unit,
     onSend500Messages: () -> Unit,
@@ -496,6 +613,14 @@ private fun ConversationTopAppBar(
                     }
                 }
                 
+                // Smart Search button (WhatsApp-style semantic search)
+                IconButton(onClick = onOpenSearch) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Smart Search"
+                    )
+                }
+                
                 // Menu button with dropdown
                 Box {
                 IconButton(onClick = { showMenu = true }) {
@@ -571,6 +696,7 @@ private fun MessageBubble(
     isSelected: Boolean = false,
     onClick: () -> Unit = {},
     isAIMessage: Boolean = false,  // Special flag for AI messages (full-width layout)
+    isHighlighted: Boolean = false,  // WhatsApp-style search highlight
     needsAvatarSpace: Boolean = false  // Reserve space for avatar even when not shown
 ) {
     // Message bubble colors
@@ -597,8 +723,11 @@ private fun MessageBubble(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                else Color.Transparent
+                when {
+                    isHighlighted -> Color(0xFFFFEB3B).copy(alpha = 0.4f)  // Yellow highlight for search
+                    isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    else -> Color.Transparent
+                }
             )
             .clickable(onClick = onClick)  // Instant selection on click
             .padding(horizontal = 8.dp, vertical = 2.dp),

@@ -522,6 +522,85 @@ class ConversationViewModel @Inject constructor(
         )
     }
     
+    // ============================================================
+    // SMART SEARCH (WhatsApp-style)
+    // ============================================================
+    
+    private val _searchState = kotlinx.coroutines.flow.MutableStateFlow(SearchState())
+    val searchState: StateFlow<SearchState> = _searchState
+    
+    /**
+     * Perform semantic search in conversation
+     * 
+     * @param query Natural language search query
+     */
+    fun performSearch(query: String) {
+        if (query.isBlank()) return
+        
+        Log.d(TAG, "🔍 Performing search: '$query'")
+        _searchState.value = _searchState.value.copy(
+            isActive = true,
+            isSearching = true,
+            query = query
+        )
+        
+        viewModelScope.launch {
+            try {
+                val response = aiRepo.searchMessages(conversationId, query)
+                Log.d(TAG, "✅ Search complete: ${response.message_ids.size} results in ${response.processing_time_ms}ms")
+                
+                _searchState.value = _searchState.value.copy(
+                    isSearching = false,
+                    results = response.message_ids,
+                    currentIndex = if (response.message_ids.isNotEmpty()) 0 else -1
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Search failed: ${e.message}", e)
+                _searchState.value = _searchState.value.copy(
+                    isSearching = false,
+                    results = emptyList(),
+                    currentIndex = -1
+                )
+            }
+        }
+    }
+    
+    /**
+     * Navigate to next search result
+     */
+    fun navigateToNextResult() {
+        val state = _searchState.value
+        if (state.results.isEmpty()) return
+        
+        val nextIndex = (state.currentIndex + 1) % state.results.size
+        _searchState.value = state.copy(currentIndex = nextIndex)
+        Log.d(TAG, "🔍 Next result: ${nextIndex + 1}/${state.results.size}")
+    }
+    
+    /**
+     * Navigate to previous search result
+     */
+    fun navigateToPreviousResult() {
+        val state = _searchState.value
+        if (state.results.isEmpty()) return
+        
+        val prevIndex = if (state.currentIndex == 0) {
+            state.results.size - 1
+        } else {
+            state.currentIndex - 1
+        }
+        _searchState.value = state.copy(currentIndex = prevIndex)
+        Log.d(TAG, "🔍 Previous result: ${prevIndex + 1}/${state.results.size}")
+    }
+    
+    /**
+     * Close search and clear results
+     */
+    fun closeSearch() {
+        Log.d(TAG, "🔍 Closing search")
+        _searchState.value = SearchState()
+    }
+    
     companion object {
         private const val TAG = "ConversationVM"
     }

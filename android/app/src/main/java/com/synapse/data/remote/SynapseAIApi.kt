@@ -35,6 +35,18 @@ interface SynapseAIApi {
     suspend fun extractActionItems(
         @Body request: ActionItemsRequest
     ): ActionItemsResponse
+    
+    /**
+     * Semantic search in conversation (WhatsApp-style)
+     * Returns message IDs for in-conversation navigation
+     * 
+     * @param request Search request with conversation_id and query
+     * @return Response with message_ids array
+     */
+    @POST("search")
+    suspend fun searchMessages(
+        @Body request: SearchRequest
+    ): SearchResponse
 }
 
 /**
@@ -80,6 +92,27 @@ data class ActionItemsResponse(
     val conversation_id: String,
     val action_items_count: Int,
     val message_count: Int,
+    val processing_time_ms: Int
+)
+
+/**
+ * Request body for semantic search
+ */
+data class SearchRequest(
+    val conversation_id: String,
+    val query: String,
+    val max_results: Int = 20
+)
+
+/**
+ * Response from /api/search endpoint
+ */
+data class SearchResponse(
+    val success: Boolean,
+    val conversation_id: String,
+    val query: String,
+    val message_ids: List<String>,
+    val total_count: Int,
     val processing_time_ms: Int
 )
 

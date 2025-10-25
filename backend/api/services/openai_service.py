@@ -153,10 +153,10 @@ async def semantic_search(query: str, messages: List[Message], max_results: int 
     Perform semantic search using RAG pipeline with LangChain + ChromaDB
     """
     # Use RAG service for true semantic search with embeddings
-    from services.rag_service import hybrid_search
+    from services.rag_service import semantic_search_with_rag
     
-    # Perform hybrid search (semantic + LLM reranking)
-    results = await hybrid_search(query, messages, max_results)
+    # Perform semantic search (skip LLM reranking for speed)
+    results = await semantic_search_with_rag(query, messages, max_results)
     
     return results
 

@@ -15,6 +15,17 @@ data class ConversationUIMessage(
     val status: MessageStatus = MessageStatus.DELIVERED  // Message delivery status
 )
 
+/**
+ * Search state for WhatsApp-style in-conversation search
+ */
+data class SearchState(
+    val isActive: Boolean = false,           // Is search mode active?
+    val isSearching: Boolean = false,        // Is API call in progress?
+    val query: String = "",                  // Current search query
+    val results: List<String> = emptyList(), // Message IDs of search results
+    val currentIndex: Int = 0                // Current result index (0-based)
+)
+
 data class ConversationUIState(
     val conversationId: String,
     val title: String,
@@ -27,5 +38,6 @@ data class ConversationUIState(
     val otherUserPhotoUrl: String? = null, // For DIRECT - other user's photo
     val typingText: String? = null,       // "John is typing..." or null
     val isConnected: Boolean = true,      // Network connectivity status
-    val lastMessageId: String? = null     // ID of the most recent message (for auto-scroll detection)
+    val lastMessageId: String? = null,    // ID of the most recent message (for auto-scroll detection)
+    val searchState: SearchState = SearchState() // WhatsApp-style search state
 )
