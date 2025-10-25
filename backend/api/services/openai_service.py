@@ -20,6 +20,7 @@ load_dotenv()
 llm = ChatOpenAI(
     model="gpt-3.5-turbo",
     temperature=0.3,
+    max_tokens=300,  # Limit output tokens for faster responses (~200 tokens = 1-2s)
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
@@ -30,7 +31,7 @@ llm = ChatOpenAI(
 async def summarize_thread(messages: List[Message], custom_instructions: str = None) -> Dict[str, Any]:
     """
     Generate a comprehensive summary of conversation thread using LangChain
-    Supports custom instructions for focused summaries
+    Supports custom instructions for focused summaries or answering specific questions
     """
     # Build conversation context
     conversation_text = "\n".join([
@@ -38,28 +39,44 @@ async def summarize_thread(messages: List[Message], custom_instructions: str = N
         for msg in messages
     ])
     
-    # Build user prompt with optional custom instructions
-    user_prompt = """Analyze this conversation and provide:
-1. A concise overall summary (2-3 sentences)
-2. Key points discussed (bullet points)"""
-    
+    # If custom instructions provided, treat it as a question/request
     if custom_instructions:
-        user_prompt += f"\n\n**Special Instructions:** {custom_instructions}"
-    
-    user_prompt += """
+        user_prompt = f"""Based on this conversation, please answer the following question or request:
+
+**Question/Request:** {custom_instructions}
+
+Conversation:
+{{conversation}}
+
+Provide a clear, direct answer based only on the information in the conversation. If the answer isn't in the conversation, say so.
+
+Respond in JSON format:
+{{{{
+    "summary": "your answer here",
+    "key_points": ["supporting detail 1", "supporting detail 2", ...]
+}}}}"""
+    else:
+        # Default summary format (optimized for speed)
+        user_prompt = """Analyze this conversation and provide a concise summary.
 
 Conversation:
 {conversation}
 
-Respond in JSON format:
+Respond in JSON format with:
+1. A brief summary (1-2 sentences max)
+2. Top 3-5 key points only (short phrases, not full sentences)
+
 {{
-    "summary": "overall summary here",
-    "key_points": ["point 1", "point 2", ...]
-}}"""
+    "summary": "brief summary here",
+    "key_points": ["key point 1", "key point 2", "key point 3"]
+}}
+
+Keep it SHORT and FAST."""
     
     # Create prompt template
+    system_message = "You are an expert at analyzing team conversations for remote professionals. You provide clear, concise answers based on conversation context."
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert at summarizing team conversations for remote professionals."),
+        ("system", system_message),
         ("user", user_prompt)
     ])
     
@@ -79,52 +96,36 @@ async def extract_action_items(messages: List[Message]) -> List[ActionItem]:
     """
     Extract action items, tasks, and todos from conversation using LangChain
     """
+    # Simplified format (removed MSG_ID for speed - saves ~1000 input tokens!)
     conversation_text = "\n".join([
-        f"[MSG_ID:{msg.id}] [{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
+        f"[{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
         for msg in messages
     ])
     
-    # Create prompt template
+    # Create prompt template (ultra-simplified for speed)
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert at identifying action items and tasks in team conversations."),
-        ("user", """Extract ALL action items, tasks, todos, and commitments from this conversation.
+        ("system", "You extract action items from conversations. Be concise."),
+        ("user", """Find action items in this conversation.
 
-Look for:
-- Direct assignments ("John, can you...", "@Sarah please...")
-- Commitments ("I'll do X by Friday")
-- Todos ("We need to...", "Someone should...")
-- Deadlines and due dates
-
-Conversation:
 {conversation}
 
-For each action item, extract:
-- task: clear description
-- assigned_to: person's name (or null if unclear)
-- deadline: any mentioned date/time (or null)
-- priority: low/medium/high based on urgency
-- message_id: the MSG_ID where it was mentioned
-- context: relevant surrounding text
+Extract only:
+- task (short description)
+- assigned_to (name or null)
 
-Respond in JSON format:
+JSON format:
 {{
     "action_items": [
-        {{
-            "task": "task description",
-            "assigned_to": "person name or null",
-            "deadline": "deadline or null",
-            "priority": "medium",
-            "message_id": "MSG_ID",
-            "context": "surrounding text"
-        }}
+        {{"task": "...", "assigned_to": "..."}}
     ]
-}}""")
+}}
+
+Keep it SHORT.""")
     ])
     
-    # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
+    # Create chain (reuse main LLM with max_tokens=300 for speed)
     parser = JsonOutputParser()
-    chain = prompt | llm_low_temp | parser
+    chain = prompt | llm | parser  # Uses global llm with max_tokens=300
     
     # Invoke chain
     result = await chain.ainvoke({"conversation": conversation_text})
@@ -135,10 +136,10 @@ Respond in JSON format:
         action_items.append(ActionItem(
             task=item["task"],
             assigned_to=item.get("assigned_to"),
-            deadline=item.get("deadline"),
-            priority=item.get("priority", "medium"),
-            mentioned_in_message_id=item["message_id"],
-            context=item["context"]
+            deadline=None,  # Removed for speed
+            priority=None,  # Removed for speed
+            mentioned_in_message_id=None,  # Removed for speed
+            context=None  # Removed for speed
         ))
     
     return action_items

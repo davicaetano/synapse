@@ -67,19 +67,10 @@ async def extract_action_items(
             action_items_text = f"📝 **Action Items**\n\nFound {len(action_items)} action item(s):\n\n"
             
             for i, item in enumerate(action_items, 1):
-                # Priority emoji
-                priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(item.priority, "⚪")
-                
-                action_items_text += f"{i}. {priority_emoji} **{item.task}**\n"
+                action_items_text += f"{i}. **{item.task}**\n"
                 
                 if item.assigned_to:
-                    action_items_text += f"   👤 Assigned: {item.assigned_to}\n"
-                
-                if item.deadline:
-                    action_items_text += f"   📅 Deadline: {item.deadline}\n"
-                
-                if item.context:
-                    action_items_text += f"   💬 Context: _{item.context[:100]}..._\n"
+                    action_items_text += f"   👤 {item.assigned_to}\n"
                 
                 action_items_text += "\n"
         

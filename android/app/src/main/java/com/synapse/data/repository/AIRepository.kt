@@ -96,6 +96,13 @@ class AIRepository @Inject constructor(
                     dev_summary = devSummary
                 )
                 
+                // Debug log
+                if (customInstructions != null) {
+                    Log.d(TAG, "📝 [$jobId] Custom instructions: '${customInstructions.take(100)}...'")
+                } else {
+                    Log.d(TAG, "📝 [$jobId] No custom instructions (default summary)")
+                }
+                
                 val response = api.summarizeThread(request)
                 
                 Log.d(TAG, "✅ [$jobId] AI job completed: messageId=${response.message_id.takeLast(6)}, " +

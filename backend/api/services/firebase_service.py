@@ -34,12 +34,13 @@ async def get_conversation_messages(
         # Reference to messages subcollection
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         
-        # Build query
-        # Note: Not filtering by isDeleted here because old messages don't have this field
-        # Android already filters deleted messages locally
+        # Build query (fetch 100 messages, filter in Python, return 50 text messages)
+        # NOTE: Can't use server-side .where() filters because old messages don't have type/isDeleted fields
+        # Firestore .where() on missing fields returns 0 results!
+        fetch_limit = 100  # Always fetch 100 to ensure we get 50+ text messages after filtering
         query = (messages_ref
                  .order_by('createdAtMs', direction=firestore.Query.DESCENDING)
-                 .limit(max_messages))
+                 .limit(fetch_limit))
         
         # Apply date filters if provided
         if start_date:
@@ -50,10 +51,12 @@ async def get_conversation_messages(
         # Execute query
         docs = query.stream()
         
-        messages = []
+        # Collect ALL messages first, then filter
+        all_messages = []
         for doc in docs:
             data = doc.to_dict()
             
+            # Filter in Python (handles missing fields gracefully)
             # Skip deleted messages
             if data.get('isDeleted', False):
                 continue
@@ -63,7 +66,7 @@ async def get_conversation_messages(
             if message_type != 'text':
                 continue
             
-            messages.append(Message(
+            all_messages.append(Message(
                 id=doc.id,
                 text=data.get('text', ''),
                 sender_id=data.get('senderId', ''),
@@ -72,8 +75,13 @@ async def get_conversation_messages(
                 conversation_id=conversation_id
             ))
         
+        # Take only max_messages (50) text messages
+        messages = all_messages[:max_messages]
+        
         # Reverse to get chronological order
         messages.reverse()
+        
+        print(f"📊 [FIREBASE] Fetched {len(messages)} text messages (Python-filtered from {fetch_limit} queried, {len(all_messages)} valid)")
         
         return messages
     

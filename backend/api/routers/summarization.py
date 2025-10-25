@@ -28,6 +28,12 @@ async def summarize_thread(
     start_time = time.time()
     
     try:
+        # Log request details for debugging
+        if request.custom_instructions:
+            print(f"📝 [SUMMARIZATION] Custom instructions received: '{request.custom_instructions[:100]}...'")
+        else:
+            print(f"📝 [SUMMARIZATION] No custom instructions (default summary)")
+        
         # DEV: Force error for testing (triggered by Dev Settings toggle)
         if request.custom_instructions == "FORCE_ERROR":
             raise Exception("🧪 Forced error for testing! This was triggered by the 'Force Error' dev setting.")

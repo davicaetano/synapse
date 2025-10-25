@@ -41,10 +41,10 @@ class ActionItemsRequest(BaseModel):
 class ActionItem(BaseModel):
     task: str
     assigned_to: Optional[str] = None
-    deadline: Optional[str] = None
-    priority: str = "medium"  # low, medium, high
-    mentioned_in_message_id: str
-    context: str  # Surrounding text
+    deadline: Optional[str] = None  # Not extracted anymore (speed optimization)
+    priority: Optional[str] = None  # Not extracted anymore (speed optimization)
+    mentioned_in_message_id: Optional[str] = None  # Not extracted anymore (speed optimization)
+    context: Optional[str] = None  # Not extracted anymore (speed optimization)
 
 class ActionItemsResponse(BaseModel):
     conversation_id: str
