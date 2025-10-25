@@ -85,6 +85,26 @@ Feel free to start chatting!"""
     }
     
     /**
+     * Observe messages from Room with Paging3 + RemoteMediator for lazy history loading.
+     * 
+     * DIFFERENCE FROM observeMessagesPaged():
+     * - observeMessagesPaged: Only loads from Room (incremental sync handles new messages)
+     * - THIS METHOD: Loads from Room + automatically fetches older messages from Firebase when user scrolls
+     * 
+     * HOW IT WORKS:
+     * - Initial load: 50 messages from Room (instant)
+     * - User scrolls to top: RemoteMediator fetches 200 older messages from Firebase
+     * - Inserts into Room, Paging3 renders automatically
+     * - Repeats as user keeps scrolling (infinite scroll)
+     * 
+     * USE THIS when you want lazy loading of message history (recommended).
+     * USE observeMessagesPaged() if you only want Room cache (testing/debugging).
+     */
+    fun observeMessagesPagedWithRemoteMediator(conversationId: String): Flow<PagingData<MessageEntity>> {
+        return roomMessageDataSource.observeMessagesPagedWithRemoteMediator(conversationId)
+    }
+    
+    /**
      * Listen to messages from Firestore.
      * Returns Flow of message updates from remote.
      * 

@@ -203,16 +203,23 @@ class ConversationViewModel @Inject constructor(
     }
     
     /**
-     * Paged messages flow using Room + Paging3.
-     * Provides efficient pagination for large message lists.
+     * Paged messages with lazy history loading (RemoteMediator).
      * 
-     * Created ONCE - never recreated for optimal performance.
-     * Checkmarks calculated in UI using memberStatusFlow (real-time updates).
+     * FEATURES:
+     * - Initial load: 50 messages from Room (instant)
+     * - Incremental sync: New messages automatically synced via startIncrementalSync()
+     * - Lazy history: When user scrolls to top, RemoteMediator fetches 200 older msgs from Firebase
+     * - Infinite scroll: Keeps fetching as user scrolls (200 msgs at a time)
+     * 
+     * PERFORMANCE:
+     * - Room reads: instant (~5ms)
+     * - Firebase fetches: only when needed (user scrolls to history)
+     * - No blocking: RemoteMediator fetches in background
      */
     val messagesPaged: Flow<PagingData<Message>> = run {
         val userId = auth.currentUser?.uid
         
-        convRepo.observeMessagesPaged(conversationId)
+        convRepo.observeMessagesPagedWithRemoteMediator(conversationId)
             .map { pagingData ->
                 pagingData.map { messageEntity ->
                     messageEntity.toDomain(

@@ -1,5 +1,6 @@
 package com.synapse.ui.conversation
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -86,7 +87,7 @@ fun ConversationScreen(
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages (Room + Paging3)
-    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
+    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems()
     
     // Member status for real-time checkmark updates
     val memberStatus by vm.memberStatusFlow.collectAsStateWithLifecycle()
@@ -108,9 +109,9 @@ fun ConversationScreen(
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
     
-    // Log Paging3 usage
-    LaunchedEffect(pagedMessages.itemCount) {
-        android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
+    // Log Paging3 usage (only once, not on every itemCount change to avoid recompositions)
+    LaunchedEffect(Unit) {
+        android.util.Log.d("ConversationScreen", "🔥 Using PAGING3")
     }
 
     // Delete confirmation dialog
@@ -184,7 +185,7 @@ fun ConversationScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationScreen(
     ui: ConversationUIState,
@@ -365,10 +366,15 @@ fun ConversationScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         top = 8.dp,
                         bottom = 8.dp
-                    )
+                    ),
+
                 ) {
                     // Paging3 - loads 50 at a time
-                    items(count = pagedMessages.itemCount) { index ->
+                    items(
+                        count = pagedMessages.itemCount,
+                        key = { index -> pagedMessages.peek(index)?.id ?: index },
+                        contentType = { "message" }  // Helps Compose optimize recompositions
+                    ) { index ->
                     pagedMessages[index]?.let { m ->
                         // Determine message type and rendering
                         when (m.type) {
@@ -392,7 +398,8 @@ fun ConversationScreen(
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
                                     isAIMessage = true,  // Special flag for full-width layout
-                                    isHighlighted = isHighlighted
+                                    isHighlighted = isHighlighted,
+                                    modifier = Modifier.animateItemPlacement()  // Smooth item insertions, prevents scroll jumps
                                 )
                             }
                             else -> {
@@ -427,7 +434,8 @@ fun ConversationScreen(
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
                                     needsAvatarSpace = isGroupChat && !m.isMine,  // Reserve space for avatar in groups
-                                    isHighlighted = isHighlighted
+                                    isHighlighted = isHighlighted,
+                                    modifier = Modifier.animateItemPlacement()  // Smooth item insertions, prevents scroll jumps
                                 )
                             }
                         }
@@ -706,7 +714,8 @@ private fun MessageBubble(
     onClick: () -> Unit = {},
     isAIMessage: Boolean = false,  // Special flag for AI messages (full-width layout)
     isHighlighted: Boolean = false,  // WhatsApp-style search highlight
-    needsAvatarSpace: Boolean = false  // Reserve space for avatar even when not shown
+    needsAvatarSpace: Boolean = false,  // Reserve space for avatar even when not shown
+    modifier: Modifier = Modifier
 ) {
     // Message bubble colors
     val bubbleBg = if (isMine) {
@@ -729,7 +738,7 @@ private fun MessageBubble(
 
     // Full-width selectable background (WhatsApp-style)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(
                 when {

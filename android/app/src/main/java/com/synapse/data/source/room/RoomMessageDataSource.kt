@@ -1,10 +1,12 @@
 package com.synapse.data.source.room
 
 import android.util.Log
+import androidx.paging.ExperimentalPagingApi
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.map
+import com.google.firebase.firestore.FirebaseFirestore
 import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.room.dao.MessageDao
 import com.synapse.data.source.room.entity.MessageRoomEntity
@@ -26,7 +28,8 @@ import javax.inject.Singleton
  */
 @Singleton
 class RoomMessageDataSource @Inject constructor(
-    private val messageDao: MessageDao
+    private val messageDao: MessageDao,
+    private val firestore: FirebaseFirestore
 ) {
     
     /**
@@ -46,8 +49,45 @@ class RoomMessageDataSource @Inject constructor(
             config = PagingConfig(
                 pageSize = 50,
                 prefetchDistance = 15,
-                enablePlaceholders = false,
+                enablePlaceholders = true,
                 initialLoadSize = 50
+            ),
+            pagingSourceFactory = { messageDao.observeMessagesPaged(conversationId) }
+        ).flow.map { pagingData ->
+            pagingData.map { roomEntity -> roomEntity.toEntity() }
+        }
+    }
+    
+    /**
+     * Observe messages with Paging3 + RemoteMediator for lazy history loading.
+     * 
+     * HOW IT WORKS:
+     * - Loads from Room cache (instant, 50 msgs at a time)
+     * - When user scrolls to top (oldest msgs), RemoteMediator fetches 200 older msgs from Firebase
+     * - Inserts into Room and Paging3 automatically renders
+     * - Repeats as user keeps scrolling (infinite scroll)
+     * 
+     * BENEFITS:
+     * - Lazy loading (fetch only when needed)
+     * - Infinite scroll (keeps fetching as user scrolls)
+     * - Room as cache (instant local reads)
+     * - Offline support (Room persists data)
+     */
+    @OptIn(ExperimentalPagingApi::class)
+    fun observeMessagesPagedWithRemoteMediator(conversationId: String): Flow<PagingData<MessageEntity>> {
+        Log.d(TAG, "📄 [ROOM] observeMessagesPagedWithRemoteMediator START: $conversationId")
+        
+        return Pager(
+            config = PagingConfig(
+                pageSize = 50,
+                prefetchDistance = 30,  // Increased from 15 to fetch earlier, reducing scroll jumps
+                enablePlaceholders = true,
+                initialLoadSize = 50
+            ),
+            remoteMediator = MessageRemoteMediator(
+                conversationId = conversationId,
+                firestore = firestore,
+                messageDao = messageDao
             ),
             pagingSourceFactory = { messageDao.observeMessagesPaged(conversationId) }
         ).flow.map { pagingData ->

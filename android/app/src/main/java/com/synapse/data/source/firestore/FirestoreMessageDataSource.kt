@@ -52,6 +52,8 @@ class FirestoreMessageDataSource @Inject constructor(
         if (afterTimestamp != null) {
             query = query.whereGreaterThan("createdAtMs", afterTimestamp)
             Log.d(TAG, "   🔄 Incremental sync: fetching messages after $afterTimestamp")
+        } else {
+            query = query.limit(200)
         }
         
         val ref = query
