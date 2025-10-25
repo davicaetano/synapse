@@ -35,7 +35,7 @@ enum class AIAgentMode {
 @Composable
 fun SummarizeInputScreen(
     onBack: () -> Unit,
-    onGenerate: (customInstructions: String?) -> Unit,
+    onGenerate: (mode: String, customInstructions: String?) -> Unit,
     forceAIErrorEnabled: Boolean = false,  // Dev setting
     modifier: Modifier = Modifier
 ) {
@@ -236,13 +236,14 @@ fun SummarizeInputScreen(
             // Generate button (fixed at bottom, outside scroll)
             Button(
                 onClick = {
+                    val mode = selectedMode.name  // "THREAD_SUMMARIZATION", "ACTION_ITEMS", etc.
                     val instructions = when (selectedMode) {
                         AIAgentMode.THREAD_SUMMARIZATION -> null  // Default summary
-                        AIAgentMode.ACTION_ITEMS -> "Extract all action items from this conversation. For each action item, identify: the task, who is responsible, deadline (if mentioned), and priority level."
+                        AIAgentMode.ACTION_ITEMS -> null  // Default action items extraction
                         AIAgentMode.CUSTOM -> customText.trim().takeIf { it.isNotEmpty() }
                         AIAgentMode.FORCE_ERROR -> "FORCE_ERROR"  // Special trigger for backend error testing
                     }
-                    onGenerate(instructions)
+                    onGenerate(mode, instructions)
                 },
                 modifier = Modifier
                     .fillMaxWidth()

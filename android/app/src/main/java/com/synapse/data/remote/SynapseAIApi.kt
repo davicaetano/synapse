@@ -25,20 +25,16 @@ interface SynapseAIApi {
     ): SummarizeResponse
     
     /**
-     * Refine existing summary
-     * Creates a new refined AI summary message
+     * Extract action items from conversation
+     * Creates an AI message with formatted action items
      * 
-     * @param conversationId Firestore conversation ID
-     * @param previousSummaryId Message ID of the previous summary
-     * @param refinementInstructions User's refinement instructions
-     * @return Response with new message_id and metadata
+     * @param request Action items request with conversation_id and optional custom_instructions
+     * @return Response with message_id and metadata
      */
-    @POST("summarize/refine")
-    suspend fun refineSummary(
-        @Query("conversation_id") conversationId: String,
-        @Query("previous_summary_id") previousSummaryId: String,
-        @Query("refinement_instructions") refinementInstructions: String
-    ): RefineResponse
+    @POST("action-items")
+    suspend fun extractActionItems(
+        @Body request: ActionItemsRequest
+    ): ActionItemsResponse
 }
 
 /**
@@ -65,13 +61,24 @@ data class SummarizeResponse(
 )
 
 /**
- * Response from /api/summarize/refine endpoint
+ * Request body for action items extraction
  */
-data class RefineResponse(
+data class ActionItemsRequest(
+    val conversation_id: String,
+    val custom_instructions: String? = null,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val dev_summary: Boolean = false
+)
+
+/**
+ * Response from /api/action-items endpoint
+ */
+data class ActionItemsResponse(
     val success: Boolean,
     val message_id: String,
     val conversation_id: String,
-    val previous_summary_id: String,
+    val action_items_count: Int,
     val message_count: Int,
     val processing_time_ms: Int
 )

@@ -2,6 +2,7 @@ package com.synapse.data.repository
 
 import android.util.Log
 import com.synapse.data.local.DevPreferences
+import com.synapse.data.remote.ActionItemsRequest
 import com.synapse.data.remote.SummarizeRequest
 import com.synapse.data.remote.SynapseAIApi
 import kotlinx.coroutines.*
@@ -113,6 +114,59 @@ class AIRepository @Inject constructor(
                 _errorMessages.value = errorMsg
                 
                 // Backend will handle error posting to Firestore
+                
+            } finally {
+                decrementJobCount(conversationId)
+                Log.d(TAG, "🏁 [$jobId] Job finished (remaining: ${getJobCount(conversationId)})")
+            }
+        }
+    }
+    
+    /**
+     * Extract action items (Fire-and-forget)
+     * 
+     * Job runs in ApplicationScope and survives Activity/ViewModel destruction.
+     * 
+     * @param conversationId Firestore conversation ID
+     * @param customInstructions Optional custom instructions for focused extraction
+     */
+    fun extractActionItemsAsync(
+        conversationId: String,
+        customInstructions: String? = null
+    ) {
+        applicationScope.launch {
+            val jobId = "action_items_${conversationId.takeLast(6)}_${System.currentTimeMillis()}"
+            
+            try {
+                incrementJobCount(conversationId)
+                Log.d(TAG, "📝 [$jobId] Starting Action Items extraction (active: ${getJobCount(conversationId)})")
+                
+                // Read dev preference
+                val devSummary = devPreferences.showAIProcessingTime.first()
+                
+                // Call backend API
+                val request = ActionItemsRequest(
+                    conversation_id = conversationId,
+                    custom_instructions = customInstructions,
+                    dev_summary = devSummary
+                )
+                
+                val response = api.extractActionItems(request)
+                
+                Log.d(TAG, "✅ [$jobId] Action Items extracted: messageId=${response.message_id.takeLast(6)}, " +
+                        "itemsCount=${response.action_items_count}, time=${response.processing_time_ms}ms")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ [$jobId] Action Items extraction failed: ${e.message}", e)
+                
+                // Emit error message for MainActivity to show Toast
+                val errorMsg = when {
+                    e.message?.contains("502") == true -> "AI service is starting up. Please try again in a moment."
+                    e.message?.contains("timeout") == true -> "Request timeout. Please check your connection."
+                    e.message?.contains("401") == true -> "Authentication error. Please sign in again."
+                    else -> "Action items extraction failed: ${e.message}"
+                }
+                _errorMessages.value = errorMsg
                 
             } finally {
                 decrementJobCount(conversationId)

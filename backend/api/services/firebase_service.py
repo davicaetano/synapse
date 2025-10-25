@@ -195,6 +195,56 @@ async def create_ai_summary_message(
         print(f"❌ Error creating AI summary message: {e}")
         raise
 
+async def create_ai_message(
+    conversation_id: str,
+    text: str,
+    message_type: str,
+    generated_by_user_id: str,
+    member_ids: List[str],
+    metadata: dict = None
+) -> str:
+    """
+    Generic method to create any type of AI message in Firestore
+    Supports: ai_summary, ai_action_items, ai_decisions, ai_priority, etc.
+    Returns the created message ID
+    """
+    try:
+        import time
+        from google.cloud.firestore import SERVER_TIMESTAMP
+        
+        messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
+        message_ref = messages_ref.document()
+        
+        timestamp_ms = int(time.time() * 1000)
+        
+        message_data = {
+            'id': message_ref.id,
+            'text': text,
+            'senderId': 'synapse-bot-system',
+            'createdAtMs': timestamp_ms,
+            'memberIdsAtCreation': member_ids,
+            'serverTimestamp': SERVER_TIMESTAMP,
+            'type': message_type,
+            'isDeleted': False,
+            'metadata': metadata or {}
+        }
+        
+        message_ref.set(message_data)
+        
+        # Update conversation's lastMessageText
+        conv_ref = db.collection('conversations').document(conversation_id)
+        conv_ref.update({
+            'lastMessageText': text[:100],
+            'updatedAtMs': timestamp_ms
+        })
+        
+        print(f"✅ Created AI message: type={message_type}, id={message_ref.id}")
+        return message_ref.id
+    
+    except Exception as e:
+        print(f"❌ Error creating AI message: {e}")
+        raise
+
 async def create_error_message(
     conversation_id: str,
     error_text: str,

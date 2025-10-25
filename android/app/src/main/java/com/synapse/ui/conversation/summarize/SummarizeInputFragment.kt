@@ -38,9 +38,9 @@ class SummarizeInputFragment : Fragment() {
                     
                     SummarizeInputScreen(
                         onBack = { findNavController().navigateUp() },
-                        onGenerate = { customInstructions ->
-                            // Start generation (sets isGeneratingSummary = true in ViewModel)
-                            viewModel.generateSummary(customInstructions)
+                        onGenerate = { mode, customInstructions ->
+                            // Start AI analysis based on selected mode
+                            viewModel.generateAIAnalysis(mode, customInstructions)
                             
                             // Navigate back immediately - user will see spinner in ConversationScreen
                             findNavController().navigateUp()

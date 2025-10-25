@@ -35,6 +35,8 @@ class ActionItemsRequest(BaseModel):
     conversation_id: str = Field(..., description="Firestore conversation ID")
     start_date: Optional[str] = Field(None, description="ISO format start date")
     end_date: Optional[str] = Field(None, description="ISO format end date")
+    custom_instructions: Optional[str] = Field(None, description="Custom instructions")
+    dev_summary: bool = Field(False, description="Include dev info (processing time, model version)")
 
 class ActionItem(BaseModel):
     task: str

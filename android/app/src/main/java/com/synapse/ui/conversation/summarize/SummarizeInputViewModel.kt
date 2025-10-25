@@ -32,11 +32,18 @@ class SummarizeInputViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
     
     /**
-     * Generate AI summary (fire-and-forget)
+     * Generate AI analysis (summary or action items) based on mode
      * Job runs in ApplicationScope and survives Activity destruction
+     * 
+     * @param mode "THREAD_SUMMARIZATION" or "ACTION_ITEMS"
+     * @param customInstructions Optional custom instructions
      */
-    fun generateSummary(customInstructions: String? = null) {
-        aiRepo.summarizeThreadAsync(conversationId, customInstructions)
+    fun generateAIAnalysis(mode: String, customInstructions: String? = null) {
+        when (mode) {
+            "THREAD_SUMMARIZATION" -> aiRepo.summarizeThreadAsync(conversationId, customInstructions)
+            "ACTION_ITEMS" -> aiRepo.extractActionItemsAsync(conversationId, customInstructions)
+            else -> aiRepo.summarizeThreadAsync(conversationId, customInstructions) // Default to summary
+        }
     }
 }
 

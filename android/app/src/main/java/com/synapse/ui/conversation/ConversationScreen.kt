@@ -264,7 +264,7 @@ fun ConversationScreen(
                     pagedMessages[index]?.let { m ->
                         // Determine message type and rendering
                         when (m.type) {
-                            "ai_summary", "ai_error" -> {
+                            "ai_summary", "ai_error", "ai_action_items" -> {
                                 // AI messages: special full-width layout with bot avatar and name
                                 // ALWAYS show name and avatar for AI messages (even if consecutive)
                                 MessageBubble(
