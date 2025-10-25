@@ -14,6 +14,7 @@ import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.AIRepository
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
+import com.synapse.data.source.firestore.entity.MemberStatus
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -83,7 +84,13 @@ class ConversationViewModel @Inject constructor(
             .distinctUntilChanged { convA, convB ->
                 val otherMembersConvA = convA?.memberIds?.filter { it != userId }
                 val otherMembersConvB = convB?.memberIds?.filter { it != userId }
-                otherMembersConvA != otherMembersConvB
+                val mostRecentOtherSentAtA = otherMembersConvA?.mapNotNull { memberId ->
+                    convA.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                }?.maxOrNull()
+                val mostRecentOtherSentAtB = otherMembersConvB?.mapNotNull { memberId ->
+                    convB.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                }?.maxOrNull()
+                mostRecentOtherSentAtA == mostRecentOtherSentAtB
             }
             .onEach { conversation ->
                 // Update lastSeenAt if there are new messages (guard prevents loop)
@@ -205,71 +212,34 @@ class ConversationViewModel @Inject constructor(
      * Paged messages flow using Room + Paging3.
      * Provides efficient pagination for large message lists.
      * 
-     * Combines with conversationFlow to get memberStatus for status calculation.
+     * Created ONCE - never recreated for optimal performance.
+     * Checkmarks calculated in UI using memberStatusFlow (real-time updates).
      */
     val messagesPaged: Flow<PagingData<Message>> = run {
         val userId = auth.currentUser?.uid
-
-        // Flow 1: PagingData (cria UMA VEZ, nunca recria)
-        val pagingFlow = convRepo.observeMessagesPaged(conversationId)
-
-        // Flow 2: Conversation (memberStatus atualizado)
-        val conversationFlow = convRepo.observeConversation(conversationId)
-            .distinctUntilChanged { old, new ->
-                areConversationsEqual(old, new)
+        
+        convRepo.observeMessagesPaged(conversationId)
+            .map { pagingData ->
+                pagingData.map { messageEntity ->
+                    messageEntity.toDomain(
+                        currentUserId = userId,
+                        memberCount = messageEntity.memberIdsAtCreation.size,
+                        memberStatus = emptyMap()  // Status calculated in UI with memberStatusFlow
+                    )
+                }
             }
-
-        // COMBINE: Atualiza memberStatus SEM recriar PagingData
-        combine(pagingFlow, conversationFlow) { pagingData, conversation ->
-            pagingData.map { messageEntity ->
-                messageEntity.toDomain(
-                    currentUserId = userId,
-                    memberCount = messageEntity.memberIdsAtCreation.size,
-                    memberStatus = conversation?.memberStatus ?: emptyMap()
-                )
-            }
-        }.cachedIn(viewModelScope)
+            .cachedIn(viewModelScope)
     }
-//    val messagesPaged: Flow<PagingData<Message>> = run {
-//        val userId = auth.currentUser?.uid
-//        val conversationFlow = convRepo.observeConversation(conversationId, true)
-//
-//        // Use flatMapLatest to switch to new PagingData when conversation changes
-//        conversationFlow.flatMapLatest { conversation ->
-//            convRepo.observeMessagesPaged(conversationId)
-//                .map { pagingData ->
-//                    pagingData.map { messageEntity ->
-//                        messageEntity.toDomain(
-//                            currentUserId = userId,
-//                            memberCount = messageEntity.memberIdsAtCreation.size,
-//                            memberStatus = conversation?.memberStatus ?: emptyMap()  // Pass memberStatus for status calculation
-//                        )
-//                    }
-//                }
-//        }.cachedIn(viewModelScope)
-//    }
-//
-//    // Background side effects
-//    init {
-//        // Start Firebase → Room sync AFTER first UI state emission (avoid blocking avatar/UI)
-//        uiState
-//            .onEach { state ->
-//                if (messageSyncJob == null && state.title.isNotBlank() && state.title != "Loading...") {
-//                    Log.d(TAG, "🚀 Starting message sync AFTER UI ready")
-//
-//                    // Start sync job (tied to viewModelScope - cancels when ViewModel dies)
-//                    messageSyncJob = viewModelScope.launch {
-//                        convRepo.listenMessagesFromFirestore(conversationId)
-//                            .collect { firestoreMessages ->
-//                            // Sync Firestore → Room
-//                            convRepo.upsertMessagesToRoom(firestoreMessages, conversationId)
-//                            Log.d(TAG, "✅ Synced ${firestoreMessages.size} messages from Firestore to Room")
-//                        }
-//                    }
-//                }
-//            }
-//            .launchIn(viewModelScope)
-//    }
+    
+    /**
+     * MemberStatus flow for real-time checkmark updates.
+     * Updates independently from messagesPaged for optimal performance.
+     * UI recalculates status when this changes (Compose recomposes only affected items).
+     */
+    val memberStatusFlow: StateFlow<Map<String, MemberStatus>> =
+        convRepo.observeConversation(conversationId)
+            .map { it?.memberStatus ?: emptyMap() }
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
 
     /**
      * Called when user types text in the input field.

@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.MessageStatus
+import com.synapse.domain.conversation.recalculateStatus
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
 import kotlinx.coroutines.launch
@@ -86,6 +87,9 @@ fun ConversationScreen(
     
     // Use paged messages (Room + Paging3)
     val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
+    
+    // Member status for real-time checkmark updates
+    val memberStatus by vm.memberStatusFlow.collectAsStateWithLifecycle()
     
     // AI active job count (for spinner on AI button)
     val activeAIJobCount by vm.activeAIJobCount.collectAsStateWithLifecycle()
@@ -139,6 +143,7 @@ fun ConversationScreen(
     ConversationScreen(
         ui = ui,
         pagedMessages = pagedMessages,
+        memberStatus = memberStatus,
         selectedMessageId = selectedMessageId,
         activeAIJobCount = activeAIJobCount,
         showBatchButtons = showBatchButtons,
@@ -184,6 +189,7 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
+    memberStatus: Map<String, com.synapse.data.source.firestore.entity.MemberStatus>,
     selectedMessageId: String?,
     activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
@@ -371,6 +377,10 @@ fun ConversationScreen(
                                 // ALWAYS show name and avatar for AI messages (even if consecutive)
                                 val isHighlighted = searchState.results.isNotEmpty() && 
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
+                                
+                                // Recalculate status with current memberStatus for real-time checkmarks
+                                val currentStatus = m.recalculateStatus(memberStatus)
+                                
                                 MessageBubble(
                                     text = m.text,
                                     displayTime = formatTime(m.createdAtMs),
@@ -378,7 +388,7 @@ fun ConversationScreen(
                                     isReadByEveryone = false,
                                     senderName = "Synapse AI Agent",  // Always show name for AI
                                     senderPhotoUrl = null,  // Bot avatar (will show default avatar with "S")
-                                    status = m.status,
+                                    status = currentStatus,
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
                                     isAIMessage = true,  // Special flag for full-width layout
@@ -403,6 +413,9 @@ fun ConversationScreen(
                                 val isHighlighted = searchState.results.isNotEmpty() && 
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 
+                                // Recalculate status with current memberStatus for real-time checkmarks
+                                val currentStatus = m.recalculateStatus(memberStatus)
+                                
                                 MessageBubble(
                                     text = m.text,
                                     displayTime = formatTime(m.createdAtMs),
@@ -410,7 +423,7 @@ fun ConversationScreen(
                                     isReadByEveryone = m.isReadByEveryone,
                                     senderName = if (showSenderInfo) sender?.displayName else null,
                                     senderPhotoUrl = if (showSenderInfo) sender?.photoUrl else null,
-                                    status = m.status,
+                                    status = currentStatus,
                                     isSelected = m.id == selectedMessageId,
                                     onClick = { onMessageClick(m.id) },
                                     needsAvatarSpace = isGroupChat && !m.isMine,  // Reserve space for avatar in groups

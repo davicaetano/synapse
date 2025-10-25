@@ -121,7 +121,9 @@ fun MessageEntity.toDomain(
         readBy = emptyList(),  // Not used anymore
         isReadByEveryone = status == MessageStatus.READ,
         status = status,
-        type = this.type
+        type = this.type,
+        memberIdsAtCreation = this.memberIdsAtCreation,
+        serverTimestamp = this.serverTimestamp  // Already Long?, no need to convert
     )
 }
 
