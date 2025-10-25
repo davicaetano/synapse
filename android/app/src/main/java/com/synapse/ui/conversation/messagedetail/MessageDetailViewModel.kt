@@ -25,7 +25,7 @@ class MessageDetailViewModel @Inject constructor(
         val userId = auth.currentUser?.uid ?: ""
         
         // Combine conversation + message + users to calculate individual member statuses
-        convRepo.observeConversation(userId, conversationId)
+        convRepo.observeConversation(conversationId)
             .flatMapLatest { conversation ->
                 if (conversation == null) {
                     flowOf(MessageDetailUIState(isLoading = true))

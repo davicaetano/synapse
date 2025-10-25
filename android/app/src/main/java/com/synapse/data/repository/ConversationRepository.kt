@@ -135,8 +135,11 @@ Feel free to start chatting!"""
      * Get a single conversation entity by ID.
      * Uses direct document listener (much faster than filtering all conversations).
      */
-    fun observeConversation(userId: String, conversationId: String): Flow<ConversationEntity?> {
-        return conversationDataSource.listenConversation(conversationId)
+    fun observeConversation(
+        conversationId: String,
+        includesCacheChanges: Boolean = true
+    ): Flow<ConversationEntity?> {
+        return conversationDataSource.listenConversation(conversationId, includesCacheChanges)
     }
 
     // ============================================================

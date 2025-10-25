@@ -61,8 +61,7 @@ class InboxViewModel @Inject constructor(
                         }
                     }
                 }
-            }
-            .onStart { emit(emptyList()) }
+            }.onStart { emit(emptyList()) }
 
         // STEP 1: Get raw conversations + update lastReceivedAt (with guard to prevent loop)
         val conversationsFlow = conversationsRepo.observeConversations(userId, true)

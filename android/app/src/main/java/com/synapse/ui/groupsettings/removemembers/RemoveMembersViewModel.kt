@@ -25,7 +25,7 @@ class RemoveMembersViewModel @Inject constructor(
     private val _selectedUserIds = MutableStateFlow<Set<String>>(emptySet())
     
     val uiState: StateFlow<RemoveMembersUIState> = combine(
-        convRepo.observeConversation(currentUserId, conversationId),
+        convRepo.observeConversation(conversationId),
         _selectedUserIds
     ) { conversation, selected ->
         if (conversation == null) {
@@ -44,7 +44,7 @@ class RemoveMembersViewModel @Inject constructor(
     
     // Observe members separately
     val members: StateFlow<List<com.synapse.domain.user.User>> = run {
-        convRepo.observeConversation(currentUserId, conversationId)
+        convRepo.observeConversation(conversationId)
             .flatMapLatest { conversation ->
                 if (conversation == null || conversation.memberIds.isEmpty()) {
                     flowOf(emptyList())

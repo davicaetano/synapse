@@ -24,7 +24,7 @@ class GroupSettingsViewModel @Inject constructor(
     val uiState: StateFlow<GroupSettingsUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
         
-        convRepo.observeConversation(userId, conversationId)
+        convRepo.observeConversation(conversationId)
             .map { conversation ->
                 if (conversation == null) {
                     GroupSettingsUIState(isLoading = true)
@@ -53,7 +53,7 @@ class GroupSettingsViewModel @Inject constructor(
     val members: StateFlow<List<com.synapse.domain.user.User>> = run {
         val userId = auth.currentUser?.uid ?: ""
         
-        convRepo.observeConversation(userId, conversationId)
+        convRepo.observeConversation(conversationId)
             .flatMapLatest { conversation ->
                 if (conversation == null || conversation.memberIds.isEmpty()) {
                     flowOf(emptyList())

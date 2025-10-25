@@ -40,7 +40,10 @@ class FirestoreConversationDataSource @Inject constructor(
      * Listen to all conversations where the user is a member.
      * Returns raw Firestore data without user details or presence.
      */
-    fun listenConversations(userId: String, includesCacheChanges: Boolean = true): Flow<List<ConversationEntity>> = callbackFlow {
+    fun listenConversations(
+        userId: String,
+        includesCacheChanges: Boolean = true
+    ): Flow<List<ConversationEntity>> = callbackFlow {
         
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", userId)
@@ -79,10 +82,16 @@ class FirestoreConversationDataSource @Inject constructor(
      * Listen to a single conversation by ID.
      * More efficient than listening to all conversations and filtering.
      */
-    fun listenConversation(conversationId: String): Flow<ConversationEntity?> = callbackFlow {
+    fun listenConversation(
+        conversationId: String,
+        includesCacheChanges: Boolean = true
+    ): Flow<ConversationEntity?> = callbackFlow {
         val registration = firestore.collection("conversations")
             .document(conversationId)
             .addSnapshotListener { snapshot, error ->
+                val isFromCache = snapshot!!.metadata.isFromCache
+                if (!includesCacheChanges and isFromCache) return@addSnapshotListener
+
                 if (error != null) {
                     trySend(null)
                     return@addSnapshotListener

@@ -26,7 +26,7 @@ class AddMembersViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     
     val uiState: StateFlow<AddMembersUIState> = combine(
-        convRepo.observeConversation(auth.currentUser?.uid ?: "", conversationId),
+        convRepo.observeConversation(conversationId),
         userRepo.observeUsersWithPresence(),
         _selectedUserIds,
         _searchQuery
