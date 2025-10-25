@@ -149,12 +149,14 @@ Feel free to start chatting!"""
      */
     private suspend fun sendWelcomeMessage(conversationId: String, memberIds: List<String>) {
         // Send welcome message as the Synapse Bot with timestamp 0 to ensure it appears first
+        // sendNotification = false to avoid spamming users with welcome message notifications
         firestoreMessageDataSource.sendMessageAs(
             conversationId = conversationId,
             text = WELCOME_MESSAGE,
             memberIds = memberIds,
             senderId = SYNAPSE_BOT_ID,
-            createdAtMs = 0L  // Timestamp 0 ensures this message always appears first
+            createdAtMs = 0L,  // Timestamp 0 ensures this message always appears first
+            sendNotification = false  // Don't send push notification for welcome messages
         )
         
         // Update conversation metadata (use actual timestamp for conversation ordering)

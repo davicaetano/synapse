@@ -23,22 +23,48 @@ embeddings = OpenAIEmbeddings(
 async def semantic_search_with_rag(
     query: str,
     messages: List[Message],
-    max_results: int = 10
+    max_results: int = 10,
+    min_similarity_threshold: float = 0.7
 ) -> List[Dict[str, Any]]:
     """
-    Perform semantic search using RAG pipeline
+    Perform semantic search using RAG pipeline with cosine similarity
     
     Steps:
     1. Convert messages to documents
-    2. Create embeddings
-    3. Store in vector database (ChromaDB)
+    2. Create embeddings (OpenAI text-embedding-3-small)
+    3. Store in vector database (ChromaDB with cosine distance)
     4. Query with semantic similarity
-    5. Return top results with scores
+    5. Filter by similarity threshold
+    6. Return only relevant results with scores
+    
+    Args:
+        query: Search query
+        messages: List of messages to search
+        max_results: Maximum number of results to return
+        min_similarity_threshold: Minimum similarity score (0.0-1.0) to include result
+                                   Default 0.7 = only return results with >70% similarity (high precision)
+                                   Set lower (0.5-0.6) for broader results, higher (0.8+) for exact matches
+    
+    Returns:
+        List of relevant results with scores >= threshold
+        Empty list if no relevant results found
+        
+    Note: Uses cosine similarity (0=opposite, 1=identical)
     """
     
-    # Step 1: Convert messages to LangChain documents
+    # Step 1: Convert messages to LangChain documents (with deduplication)
     documents = []
+    seen_ids = set()  # Track message IDs to prevent duplicates
+    duplicates_skipped = 0
+    
     for msg in messages:
+        # Skip duplicate messages (same ID)
+        if msg.id in seen_ids:
+            duplicates_skipped += 1
+            continue
+        
+        seen_ids.add(msg.id)
+        
         doc = Document(
             page_content=msg.text,
             metadata={
@@ -51,28 +77,91 @@ async def semantic_search_with_rag(
         )
         documents.append(doc)
     
+    if duplicates_skipped > 0:
+        print(f"⚠️  [RAG] Skipped {duplicates_skipped} duplicate messages before indexing")
+    
     # Step 2 & 3: Create vector store with embeddings
     # Using in-memory Chroma for fast queries (no persistence needed)
+    # CRITICAL: Use cosine distance for semantic similarity (0-2 range)
     vectorstore = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
-        collection_name="messages_temp"
+        collection_name="messages_temp",
+        collection_metadata={"hnsw:space": "cosine"}  # Use cosine similarity
     )
     
-    # Step 4: Perform similarity search
+    # Step 4: Perform similarity search (fetch more than needed for filtering)
     results = vectorstore.similarity_search_with_score(
         query=query,
-        k=max_results
+        k=max_results * 2  # Fetch 2x to ensure enough results after filtering
     )
     
-    # Step 5: Format results
-    formatted_results = []
-    for doc, score in results:
-        formatted_results.append({
+    # Step 5: Format and filter results by similarity threshold
+    print(f"\n🔍 [RAG] Query: '{query}' | Analyzing {len(results)} candidates")
+    print(f"📊 [RAG] Threshold: {min_similarity_threshold} (min similarity to include)")
+    print(f"\n{'='*80}")
+    print(f"ALL SIMILARITY SCORES (sorted by relevance):")
+    print(f"{'='*80}")
+    
+    # First pass: collect all scores for logging
+    all_scores = []
+    for i, (doc, distance_score) in enumerate(results):
+        # Convert cosine distance (0-2) to similarity (0-1)
+        # Cosine distance: 0 = identical, 2 = opposite
+        # Similarity: 1 = identical, 0 = opposite
+        similarity_score = float(1 - (distance_score / 2))
+        message_preview = doc.page_content[:80] + "..." if len(doc.page_content) > 80 else doc.page_content
+        all_scores.append({
+            "rank": i + 1,
+            "similarity": similarity_score,
+            "distance": distance_score,
             "message_id": doc.metadata["message_id"],
-            "relevance_score": float(1 - score),  # Convert distance to similarity (0-1)
-            "explanation": f"Semantic similarity match"
+            "preview": message_preview,
+            "passes_threshold": similarity_score >= min_similarity_threshold
         })
+    
+    # Log all scores
+    for item in all_scores:
+        status = "✅ PASS" if item["passes_threshold"] else "❌ FAIL"
+        print(f"{status} #{item['rank']:2d} | Score: {item['similarity']:.4f} | {item['preview']}")
+    
+    print(f"{'='*80}\n")
+    
+    # Second pass: filter by threshold AND remove duplicates
+    formatted_results = []
+    seen_message_ids = set()  # Track unique message IDs
+    duplicates_removed = 0
+    below_threshold = 0
+    
+    for doc, distance_score in results:
+        # Convert cosine distance (0-2) to similarity (0-1)
+        similarity_score = float(1 - (distance_score / 2))
+        message_id = doc.metadata["message_id"]
+        
+        # Skip if already seen (deduplication)
+        if message_id in seen_message_ids:
+            duplicates_removed += 1
+            continue
+        
+        # Only include results above threshold
+        if similarity_score >= min_similarity_threshold:
+            formatted_results.append({
+                "message_id": message_id,
+                "relevance_score": similarity_score,
+                "explanation": f"Semantic similarity: {similarity_score:.2f}"
+            })
+            seen_message_ids.add(message_id)
+        else:
+            below_threshold += 1
+    
+    # Limit to max_results after filtering
+    formatted_results = formatted_results[:max_results]
+    
+    print(f"📈 [RAG] FILTERING SUMMARY:")
+    print(f"   ✅ Passed threshold (>={min_similarity_threshold}): {len(formatted_results)}")
+    print(f"   ❌ Below threshold: {below_threshold}")
+    print(f"   🔄 Duplicates removed: {duplicates_removed}")
+    print(f"🎯 [RAG] Returning {len(formatted_results)} unique results (max: {max_results})\n")
     
     return formatted_results
 

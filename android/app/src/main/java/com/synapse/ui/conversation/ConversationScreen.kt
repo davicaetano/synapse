@@ -52,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,7 +108,7 @@ fun ConversationScreen(
     // Smart Search state
     val searchState by vm.searchState.collectAsStateWithLifecycle()
     var showSearchDialog by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -175,8 +176,12 @@ fun ConversationScreen(
         onSearchSubmit = { query ->
             vm.performSearch(query)
             showSearchDialog = false
+            searchQuery = ""  // Clear search field for next search
         },
-        onSearchDialogDismiss = { showSearchDialog = false },
+        onSearchDialogDismiss = { 
+            showSearchDialog = false
+            searchQuery = ""  // Clear search field when canceling
+        },
         onSearchClose = { vm.closeSearch() },
         onSearchNextResult = { vm.navigateToNextResult() },
         onSearchPreviousResult = { vm.navigateToPreviousResult() }
@@ -217,7 +222,7 @@ fun ConversationScreen(
     onSearchNextResult: () -> Unit = {},
     onSearchPreviousResult: () -> Unit = {}
 ) {
-    var input by remember { mutableStateOf("") }
+    var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 

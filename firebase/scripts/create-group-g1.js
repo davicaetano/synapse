@@ -1,5 +1,5 @@
 /**
- * Script to create group "g1" with 3 members for testing
+ * Script to create group "CryptoProject" with 3 members for testing
  * Run: node create-group-g1.js
  */
 
@@ -43,12 +43,12 @@ async function createGroup() {
       console.log(`   ${String.fromCharCode(65 + i)}) ${name} (${memberIds[i]})`);
     });
 
-    console.log('\n📝 Creating group "g1"...');
+    console.log('\n📝 Creating group "CryptoProject"...');
 
     // Create group conversation
     const groupData = {
       convType: 'GROUP',  // ✅ FIXED: Was 'type: group'
-      groupName: 'g1',
+      groupName: 'CryptoProject',
       memberIds: memberIds,
       createdBy: memberIds[0], // First user is the creator
       createdAtMs: Date.now(),
@@ -67,7 +67,7 @@ async function createGroup() {
 
     const groupRef = await db.collection('conversations').add(groupData);
 
-    console.log('✅ Group "g1" created successfully!');
+    console.log('✅ Group "CryptoProject" created successfully!');
     console.log('📋 Group ID:', groupRef.id);
     console.log('👥 Members:', memberIds.length);
     console.log('\n🎉 Ready to insert conversation messages!');

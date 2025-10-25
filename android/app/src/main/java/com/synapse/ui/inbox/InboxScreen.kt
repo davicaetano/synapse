@@ -413,23 +413,16 @@ private fun formatLastSeenShort(lastSeenMs: Long): String {
 @Composable
 private fun UnreadBadge(count: Int) {
     if (count > 0) {
+        // Simple dot indicator (no number) since we don't calculate exact unread count anymore
         Box(
             modifier = Modifier
                 .padding(start = 8.dp)
-                .size(22.dp)
+                .size(10.dp)
                 .background(
                     color = MaterialTheme.colorScheme.primary,
                     shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = if (count >= 10) "10+" else count.toString(),
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 11.sp
-            )
-        }
+                )
+        )
     }
 }
 

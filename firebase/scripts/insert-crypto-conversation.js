@@ -1,5 +1,5 @@
 /**
- * Script to insert a realistic crypto project conversation into group "g1"
+ * Script to insert a realistic crypto project conversation into group "CryptoProject"
  * 52 messages between 3 participants discussing crypto trading feature
  * 
  * Run: node insert-crypto-conversation.js
@@ -75,11 +75,11 @@ const messages = [
 
 async function insertConversation() {
   try {
-    console.log('🔍 Finding group "g1"...\n');
+    console.log('🔍 Finding group "CryptoProject"...\n');
 
-    // Find group "g1"
+    // Find group "CryptoProject"
     const conversationsSnapshot = await db.collection('conversations')
-      .where('groupName', '==', 'g1')
+      .where('groupName', '==', 'CryptoProject')
       .get();
 
     let groupId = null;
@@ -92,12 +92,12 @@ async function insertConversation() {
     }
 
     if (!groupId) {
-      console.error('❌ Group "g1" not found!');
-      console.log('Please create a group named "g1" first.');
+      console.error('❌ Group "CryptoProject" not found!');
+      console.log('Please create a group named "CryptoProject" first.');
       process.exit(1);
     }
 
-    console.log('✅ Found group "g1":', groupId);
+    console.log('✅ Found group "CryptoProject":', groupId);
     console.log('📋 Members:', groupData.memberIds);
     console.log('👥 Member count:', groupData.memberIds.length);
 
@@ -155,9 +155,9 @@ async function insertConversation() {
       updatedAtMs: timestamp
     });
 
-    console.log('\n🎉 Successfully inserted 52 messages into group "g1"!');
+    console.log('\n🎉 Successfully inserted 52 messages into group "CryptoProject"!');
     console.log('📊 Conversation spans approximately 2 hours');
-    console.log('\n✨ You can now test AI Summarization on this conversation!');
+    console.log('\n✨ You can now test AI Summarization and Smart Search on this conversation!');
 
     process.exit(0);
   } catch (error) {

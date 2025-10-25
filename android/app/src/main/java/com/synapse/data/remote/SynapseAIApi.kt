@@ -113,6 +113,7 @@ data class SearchResponse(
     val query: String,
     val message_ids: List<String>,
     val total_count: Int,
-    val processing_time_ms: Int
+    val processing_time_ms: Int,
+    val api_version: String? = null
 )
 

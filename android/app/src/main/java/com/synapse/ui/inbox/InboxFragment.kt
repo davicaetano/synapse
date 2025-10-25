@@ -11,11 +11,16 @@ import androidx.fragment.app.viewModels
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.fragment.findNavController
 import com.synapse.MainActivityViewModel
+import com.synapse.data.presence.PresenceManager
 import com.synapse.ui.theme.SynapseTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class InboxFragment : Fragment() {
+    
+    @Inject
+    lateinit var presenceManager: PresenceManager
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -55,6 +60,12 @@ class InboxFragment : Fragment() {
                 }
             }
         }
+    }
+    
+    override fun onStart() {
+        super.onStart()
+        // Mark user as online when entering inbox (after login)
+        presenceManager.markOnline()
     }
 }
 

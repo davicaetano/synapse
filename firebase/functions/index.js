@@ -17,6 +17,15 @@ exports.sendNotificationOnNewMessage = functions.firestore
       
       console.log(`New message ${messageId} in conversation ${conversationId}`);
       
+      // Check if notification should be sent (default: true)
+      // Welcome messages have sendNotification = false
+      const shouldSendNotification = message.sendNotification !== false;
+      
+      if (!shouldSendNotification) {
+        console.log('Skipping notification (sendNotification = false)');
+        return null;
+      }
+      
       // Get conversation document
       const convDoc = await admin.firestore()
         .collection('conversations')

@@ -4,7 +4,7 @@ Increment this version number before each deployment to track changes
 """
 
 # Semantic versioning: MAJOR.MINOR.PATCH
-API_VERSION = "1.3.0"
+API_VERSION = "1.3.5"
 
 # Version history:
 # 1.0.0 - Initial release with GPT-4
@@ -15,4 +15,9 @@ API_VERSION = "1.3.0"
 # 1.2.3 - Speed optimization: Custom Q&A support + shorter summaries (1-2s response time)
 # 1.2.4 - Major performance fixes: Firebase query fix, Action Items 82% faster (2.1s), all features < 2.2s
 # 1.3.0 - Smart Search implementation: RAG-powered semantic search with OpenAI embeddings + ChromaDB
+# 1.3.1 - Smart Search quality improvement: Similarity threshold filter (0.4 min), returns only relevant results
+# 1.3.2 - CRITICAL FIX: Cosine similarity + detailed logging. Fixed negative scores, lowered threshold to 0.3
+# 1.3.3 - High precision search: Threshold increased to 0.7 (70% similarity) for more relevant results only
+# 1.3.4 - Deduplication fix: Filter duplicate message IDs in results, return only unique message_ids
+# 1.3.5 - Enhanced deduplication: Pre-filter duplicate messages BEFORE vectorstore indexing (double protection)
 

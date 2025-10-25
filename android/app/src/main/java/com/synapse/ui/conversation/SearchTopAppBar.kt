@@ -2,6 +2,7 @@ package com.synapse.ui.conversation
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -73,23 +74,24 @@ fun SearchTopAppBar(
         },
         actions = {
             // Navigation arrows (only show when there are results)
+            // NOTE: Inverted because LazyColumn has reverseLayout = true
             if (totalResults > 0) {
                 IconButton(
-                    onClick = onPrevious,
+                    onClick = onNext,  // Arrow UP = Next result (scroll down visually)
                     enabled = totalResults > 1
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowUp,
-                        contentDescription = "Previous result"
+                        contentDescription = "Next result"
                     )
                 }
                 IconButton(
-                    onClick = onNext,
+                    onClick = onPrevious,  // Arrow DOWN = Previous result (scroll up visually)
                     enabled = totalResults > 1
                 ) {
                     Icon(
                         imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Next result"
+                        contentDescription = "Previous result"
                     )
                 }
             }

@@ -170,13 +170,15 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param memberIds List of all member IDs in the conversation
      * @param senderId The ID of the user sending the message (e.g. bot ID)
      * @param createdAtMs Optional custom timestamp (default: current time, use 0 for welcome messages to appear first)
+     * @param sendNotification Whether to send push notifications (default: true, set false for welcome messages to avoid spam)
      */
     suspend fun sendMessageAs(
         conversationId: String,
         text: String,
         memberIds: List<String>,
         senderId: String,
-        createdAtMs: Long = System.currentTimeMillis()
+        createdAtMs: Long = System.currentTimeMillis(),
+        sendNotification: Boolean = true  // Default: send notifications
     ): String? {
         val startTime = System.currentTimeMillis()
         
@@ -186,7 +188,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "createdAtMs" to createdAtMs,  // Use provided timestamp (0 for welcome messages)
             "memberIdsAtCreation" to memberIds,
             "serverTimestamp" to FieldValue.serverTimestamp(),
-            "type" to "bot"  // Message type (bot welcome message)
+            "type" to "bot",  // Message type (bot welcome message)
+            "sendNotification" to sendNotification  // Control notification sending
         )
         
         return try {
