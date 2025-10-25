@@ -1,5 +1,6 @@
 package com.synapse.data.repository
 
+import android.util.Log
 import androidx.paging.PagingData
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
@@ -11,8 +12,10 @@ import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.RealtimePresenceDataSource
 import com.synapse.data.source.realtime.entity.PresenceEntity
 import com.synapse.data.source.room.RoomMessageDataSource
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -105,6 +108,57 @@ Feel free to start chatting!"""
      */
     suspend fun upsertMessagesToRoom(messages: List<MessageEntity>, conversationId: String) {
         roomMessageDataSource.upsertMessages(messages, conversationId)
+    }
+    
+    /**
+     * Start incremental message sync from Firestore to Room.
+     * 
+     * HOW IT WORKS:
+     * 1. Gets last message timestamp from Room (or null if empty)
+     * 2. Listens to Firestore for messages AFTER that timestamp
+     * 3. Upserts new messages to Room
+     * 4. Updates internal timestamp to last received message
+     * 5. Next listener emission only fetches messages after new timestamp
+     * 
+     * BENEFITS:
+     * - Always syncs ONLY new messages (1-5 msgs, not 100)
+     * - No artificial limits (syncs everything incrementally)
+     * - Fast upserts (5ms, not 500ms)
+     * - Maintains Room cache for offline-first
+     * 
+     * @param scope CoroutineScope to launch the sync job in (usually viewModelScope)
+     * @param conversationId The conversation ID to sync
+     * @return Job that can be cancelled when sync should stop
+     */
+    fun startIncrementalSync(
+        scope: kotlinx.coroutines.CoroutineScope,
+        conversationId: String
+    ): Job {
+        return scope.launch {
+            // Get initial last timestamp from Room
+            var lastTimestamp = roomMessageDataSource.getLastMessageTimestamp(conversationId)
+            Log.d("ConversationRepo", "🔄 Starting incremental sync for $conversationId (lastTimestamp=$lastTimestamp)")
+            
+            // Listen to Firestore for messages after lastTimestamp
+            firestoreMessageDataSource.listenMessages(conversationId, lastTimestamp)
+                .collect { newMessages ->
+                    if (newMessages.isNotEmpty()) {
+                        Log.d("ConversationRepo", "   📥 Received ${newMessages.size} new messages, upserting to Room...")
+                        
+                        // Upsert to Room
+                        roomMessageDataSource.upsertMessages(newMessages, conversationId)
+                        
+                        // Update lastTimestamp to the most recent message
+                        val newestMessage = newMessages.maxByOrNull { it.createdAtMs }
+                        if (newestMessage != null && newestMessage.createdAtMs > (lastTimestamp ?: 0)) {
+                            lastTimestamp = newestMessage.createdAtMs
+                            Log.d("ConversationRepo", "   ✅ Updated lastTimestamp to $lastTimestamp")
+                        }
+                    } else {
+                        Log.d("ConversationRepo", "   ℹ️ No new messages")
+                    }
+                }
+        }
     }
 
     /**

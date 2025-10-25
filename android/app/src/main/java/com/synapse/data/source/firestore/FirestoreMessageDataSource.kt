@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.synapse.data.source.firestore.entity.MessageEntity
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -34,15 +35,26 @@ class FirestoreMessageDataSource @Inject constructor(
     /**
      * Listen to all messages in a conversation, ordered by creation time.
      * Returns raw Firestore data.
+     * 
+     * @param conversationId The conversation ID to listen to
+     * @param afterTimestamp Optional timestamp to only fetch messages created after this time (incremental sync)
      */
-    fun listenMessages(conversationId: String): Flow<List<MessageEntity>> = callbackFlow {
+    fun listenMessages(conversationId: String, afterTimestamp: Long? = null): Flow<List<MessageEntity>> = callbackFlow {
         val startTime = System.currentTimeMillis()
-        Log.d(TAG, "⏱️ listenMessages START: $conversationId")
+        Log.d(TAG, "⏱️ listenMessages START: $conversationId (afterTimestamp=$afterTimestamp)")
         
-        val ref = firestore.collection("conversations")
+        var query = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
-            .orderBy("createdAtMs")
+            .orderBy("createdAtMs", Query.Direction.DESCENDING)
+        
+        // If afterTimestamp provided, only fetch new messages (incremental sync)
+        if (afterTimestamp != null) {
+            query = query.whereGreaterThan("createdAtMs", afterTimestamp)
+            Log.d(TAG, "   🔄 Incremental sync: fetching messages after $afterTimestamp")
+        }
+        
+        val ref = query
         
         var firstEmission = true
         val registration = ref.addSnapshotListener { snapshot, error ->

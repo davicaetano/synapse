@@ -182,17 +182,11 @@ class ConversationViewModel @Inject constructor(
 
 
             if (messageSyncJob == null && a.title != "Unknown") {
-                Log.d(TAG, "🚀 Starting message sync AFTER UI ready")
+                Log.d(TAG, "🚀 Starting INCREMENTAL message sync AFTER UI ready")
 
-                // Start sync job (tied to viewModelScope - cancels when ViewModel dies)
-                messageSyncJob = viewModelScope.launch {
-                    convRepo.listenMessagesFromFirestore(conversationId)
-                        .collect { firestoreMessages ->
-                            // Sync Firestore → Room
-                            convRepo.upsertMessagesToRoom(firestoreMessages, conversationId)
-                            Log.d(TAG, "✅ Synced ${firestoreMessages.size} messages from Firestore to Room")
-                        }
-                }
+                // Start incremental sync (tied to viewModelScope - cancels when ViewModel dies)
+                // This syncs ONLY new messages (after last Room timestamp), not all 100
+                messageSyncJob = convRepo.startIncrementalSync(viewModelScope, conversationId)
             }
             Log.v(TAG, "ConversationUIState: ${a}")
             a

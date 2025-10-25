@@ -80,6 +80,17 @@ class RoomMessageDataSource @Inject constructor(
     }
     
     /**
+     * Get the timestamp of the last message in Room cache for incremental sync.
+     * Returns null if no messages exist yet (first sync).
+     * Used by incremental sync to query Firestore for only NEW messages.
+     */
+    suspend fun getLastMessageTimestamp(conversationId: String): Long? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val timestamp = messageDao.getLastMessageTimestamp(conversationId)
+        Log.d(TAG, "📅 [ROOM] Last message timestamp for $conversationId: $timestamp")
+        return@withContext timestamp
+    }
+    
+    /**
      * Calculate unread counts for conversations based on memberStatus timestamps.
      * 
      * NEW APPROACH - Uses conversation-level lastSeenAt tracking:
