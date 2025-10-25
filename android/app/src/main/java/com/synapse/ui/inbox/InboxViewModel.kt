@@ -5,14 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.mapper.toDomain
 import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
-import com.synapse.domain.conversation.ConversationType
+import com.synapse.data.source.firestore.entity.ConversationEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,9 +18,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -34,47 +32,40 @@ class InboxViewModel @Inject constructor(
     private val networkMonitor: NetworkConnectivityMonitor
 ) : ViewModel() {
 
-    // Guard to prevent duplicate lastReceivedAt updates while Firestore processes
-    private val lastReceivedUpdatePending = mutableSetOf<String>()
-    
-    // Flag to track if we've loaded data at least once (prevents showing empty state during initial load)
-    private val hasLoadedOnce = MutableStateFlow(false)
-
     // StateFlow created ONCE when ViewModel is created
     val uiState: StateFlow<InboxUIState> = run {
         val userId = auth.currentUser?.uid ?: ""
 
-        // STEP 1: Get raw conversations + update lastReceivedAt (with guard to prevent loop)
-        val conversationsFlow = conversationsRepo.observeConversations(userId)
+        val updatedMemberState: Flow<List<ConversationEntity>> = conversationsRepo.observeConversations(userId, false)
             .distinctUntilChanged()
             .onEach { conversations ->
                 // Update lastReceivedAt when new messages arrive
                 conversations.forEach { conv ->
                     val myLastReceivedAt = conv.memberStatus[userId]?.lastReceivedAt?.toDate()?.time ?: 0L
-                    
+
                     // Get all other members (exclude myself)
                     val otherMembers = conv.memberIds.filter { it != userId }
-                    
+
                     // Find the most recent lastMessageSentAt from OTHER members
                     val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
                         conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
                     }.maxOrNull()
-                    
-                    Log.d("InboxVM", "🔵 Loop check - 2: convId=${conv.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastReceivedAt, pending=${conv.id in lastReceivedUpdatePending}")
-                    
-                    // Guard: only update if someone ELSE sent a message AFTER my lastReceivedAt AND not already pending
-                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastReceivedAt && conv.id !in lastReceivedUpdatePending) {
-                        lastReceivedUpdatePending.add(conv.id)
+
+                    Log.d("InboxVM", "🔵 Loop check - 2: convId=${conv.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastReceivedAt")
+
+                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastReceivedAt) {
                         Log.d("InboxVM", "🔴 UPDATING lastReceivedAt for ${conv.id.takeLast(6)}")
                         val ts = Timestamp(mostRecentOtherSentAt / 1000, ((mostRecentOtherSentAt % 1000) * 1000000).toInt())
                         viewModelScope.launch {
                             conversationsRepo.updateMemberLastReceivedAt(conv.id, ts)
-                            delay(1000)  // Wait for Firestore write to complete
-                            lastReceivedUpdatePending.remove(conv.id)
                         }
                     }
                 }
             }
+            .onStart { emit(emptyList()) }
+
+        // STEP 1: Get raw conversations + update lastReceivedAt (with guard to prevent loop)
+        val conversationsFlow = conversationsRepo.observeConversations(userId, true)
         
         // STEP 2: Extract member IDs (stable - only changes when conversations change)
         val memberIdsFlow = conversationsFlow
@@ -143,10 +134,10 @@ class InboxViewModel @Inject constructor(
                         countsByConv[conv.id] = 1
                     }
                     
-                    android.util.Log.d("InboxVM", "📊 Conv ${conv.id.takeLast(6)}: myLastSeenAt=$myLastSeenAtMs, hasUnread=$hasUnread")
+                    Log.d("InboxVM", "📊 Conv ${conv.id.takeLast(6)}: myLastSeenAt=$myLastSeenAtMs, hasUnread=$hasUnread")
                 }
-                
-                android.util.Log.d("InboxVM", "📊 Unread counts: $countsByConv")
+
+                Log.d("InboxVM", "📊 Unread counts: $countsByConv")
                 countsByConv
             }
         
@@ -167,10 +158,9 @@ class InboxViewModel @Inject constructor(
             conversationsFlow,
             usersFlow,
             presenceFlow,
-            typingAndCountsFlow
-        ) { conversations, users, presence, (typing, unreadCounts, isConnected) ->
-            // Mark that we've loaded at least once (after first emission)
-            hasLoadedOnce.value = true
+            typingAndCountsFlow,
+            updatedMemberState
+        ) { conversations, users, presence, (typing, unreadCounts, isConnected), updatedMemberState ->
             buildInboxUIState(userId, conversations, users, presence, typing, unreadCounts, isConnected)
         }.stateIn(
             viewModelScope,
@@ -178,130 +168,4 @@ class InboxViewModel @Inject constructor(
             InboxUIState(isLoading = true)
         )
     }
-    
-    /**
-     * Build InboxUIState from raw data.
-     * Separated for clarity and testability.
-     */
-    private fun buildInboxUIState(
-        userId: String,
-        conversations: List<com.synapse.data.source.firestore.entity.ConversationEntity>,
-        users: List<com.synapse.data.source.firestore.entity.UserEntity>,
-        presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
-        typing: Map<String, List<com.synapse.domain.user.User>>,
-        unreadCounts: Map<String, Int>,
-        isConnected: Boolean
-    ): InboxUIState {
-        // If we haven't loaded at least once yet, keep showing loading
-        if (!hasLoadedOnce.value) {
-            return InboxUIState(items = emptyList(), isLoading = true, isConnected = isConnected)
-        }
-        
-        if (conversations.isEmpty()) {
-            return InboxUIState(items = emptyList(), isLoading = false, isConnected = isConnected)
-        }
-        
-        // Build user map
-        val usersMap = users.associateBy { it.id }
-        
-        // Transform to UI items (unreadCounts comes from reactive Flow)
-        val items = conversations.mapNotNull { conv ->
-            buildInboxItem(userId, conv, usersMap, presence, typing, unreadCounts)
-        }.sortedByDescending { it.updatedAtMs }
-        
-        return InboxUIState(items = items, isLoading = false, isConnected = isConnected)
-    }
-    
-    /**
-     * Build a single InboxItem from raw data.
-     * Separated for clarity.
-     */
-    private fun buildInboxItem(
-        userId: String,
-        conv: com.synapse.data.source.firestore.entity.ConversationEntity,
-        usersMap: Map<String, com.synapse.data.source.firestore.entity.UserEntity>,
-        presence: Map<String, com.synapse.data.source.realtime.entity.PresenceEntity>,
-        typing: Map<String, List<com.synapse.domain.user.User>>,
-        unreadCounts: Map<String, Int>
-    ): InboxItem? {
-        val unreadCount = unreadCounts[conv.id] ?: 0
-        val typingUsers = typing[conv.id] ?: emptyList()
-        val typingText = when {
-            typingUsers.isEmpty() -> null
-            typingUsers.size == 1 -> "typing..."
-            else -> "${typingUsers.size} people are typing..."
-        }
-        
-        // Build members with presence
-        val members = conv.memberIds.mapNotNull { memberId ->
-            val userEntity = usersMap[memberId]
-            val presenceEntity = presence[memberId]
-            userEntity?.toDomain(
-                presence = presenceEntity,
-                isMyself = (memberId == userId)
-            )
-        }
-        
-        val title = when (conv.convType) {
-            ConversationType.SELF.name -> "AI Assistant"
-            ConversationType.DIRECT.name -> {
-                members.firstOrNull { it.id != userId }?.displayName ?: "Unknown User"
-            }
-            ConversationType.GROUP.name -> {
-                conv.groupName?.ifBlank { null } ?: "Group"
-            }
-            else -> "Unknown"
-        }
-        
-        return when (conv.convType) {
-            ConversationType.SELF.name -> InboxItem.SelfConversation(
-                id = conv.id,
-                title = title,
-                lastMessageText = conv.lastMessageText,
-                updatedAtMs = conv.updatedAtMs,
-                displayTime = formatTime(conv.updatedAtMs),
-                convType = ConversationType.SELF,
-                unreadCount = unreadCount,
-                typingText = typingText
-            )
-            ConversationType.DIRECT.name -> {
-                val otherUser = members.firstOrNull { it.id != userId }
-                if (otherUser != null) {
-                    InboxItem.OneOnOneConversation(
-                        id = conv.id,
-                        title = title,
-                        lastMessageText = conv.lastMessageText,
-                        updatedAtMs = conv.updatedAtMs,
-                        displayTime = formatTime(conv.updatedAtMs),
-                        convType = ConversationType.DIRECT,
-                        otherUser = otherUser,
-                        unreadCount = unreadCount,
-                        typingText = typingText
-                    )
-                } else {
-                    null // Skip if other user not found
-                }
-            }
-            ConversationType.GROUP.name -> InboxItem.GroupConversation(
-                id = conv.id,
-                title = title,
-                lastMessageText = conv.lastMessageText,
-                updatedAtMs = conv.updatedAtMs,
-                displayTime = formatTime(conv.updatedAtMs),
-                convType = ConversationType.GROUP,
-                members = members,
-                groupName = conv.groupName,
-                unreadCount = unreadCount,
-                typingText = typingText
-            )
-            else -> null
-        }
-    }
-}
-
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return ""
-    val date = java.util.Date(ms)
-    val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
-    return fmt.format(date)
 }

@@ -63,8 +63,11 @@ Feel free to start chatting!"""
      * Returns ConversationEntity without users or presence data.
      * ViewModel should combine this with users and presence.
      */
-    fun observeConversations(userId: String): Flow<List<ConversationEntity>> {
-        return conversationDataSource.listenConversations(userId)
+    fun observeConversations(
+        userId: String,
+        includesCacheChanges: Boolean = true,
+    ): Flow<List<ConversationEntity>> {
+        return conversationDataSource.listenConversations(userId, includesCacheChanges)
     }
 
     /**

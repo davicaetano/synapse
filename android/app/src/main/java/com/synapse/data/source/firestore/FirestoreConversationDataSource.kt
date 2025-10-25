@@ -3,8 +3,10 @@ package com.synapse.data.source.firestore
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
 import com.synapse.data.source.firestore.entity.MemberStatus
@@ -38,14 +40,16 @@ class FirestoreConversationDataSource @Inject constructor(
      * Listen to all conversations where the user is a member.
      * Returns raw Firestore data without user details or presence.
      */
-    fun listenConversations(userId: String): Flow<List<ConversationEntity>> = callbackFlow {
+    fun listenConversations(userId: String, includesCacheChanges: Boolean = true): Flow<List<ConversationEntity>> = callbackFlow {
         
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", userId)
+
         
         val registration = ref.addSnapshotListener { snapshot, error ->
-            val isFromCache = snapshot?.metadata?.isFromCache ?: false
-            val hasPendingWrites = snapshot?.metadata?.hasPendingWrites() ?: false
+            val isFromCache = snapshot!!.metadata.isFromCache
+
+            if (!includesCacheChanges and isFromCache) return@addSnapshotListener
             
             if (error != null) {
                 trySend(emptyList())
@@ -102,7 +106,7 @@ class FirestoreConversationDataSource @Inject constructor(
      * Parse ConversationEntity from Firestore document.
      * Handles memberStatus map parsing.
      */
-    private fun parseConversationEntity(doc: com.google.firebase.firestore.DocumentSnapshot): ConversationEntity {
+    private fun parseConversationEntity(doc: DocumentSnapshot): ConversationEntity {
         // Parse memberStatus map
         val memberStatusRaw = doc.get("memberStatus") as? Map<*, *>
         val memberStatus = memberStatusRaw?.mapNotNull { (key, value) ->
