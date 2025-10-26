@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -238,7 +239,11 @@ private fun SelfConversationRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+            verticalArrangement = Arrangement.Top
+        ) {
             Text(
                 text = item.displayTime,
                 style = MaterialTheme.typography.labelSmall
@@ -320,7 +325,11 @@ private fun OneOnOneConversationRow(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+            verticalArrangement = Arrangement.Top
+        ) {
             Text(
                 text = item.displayTime,
                 style = MaterialTheme.typography.labelSmall
@@ -376,7 +385,11 @@ private fun GroupConversationRow(
             )
         }
         
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+            verticalArrangement = Arrangement.Top
+        ) {
             Text(
                 text = item.displayTime,
                 style = MaterialTheme.typography.labelSmall
@@ -413,16 +426,27 @@ private fun formatLastSeenShort(lastSeenMs: Long): String {
 @Composable
 private fun UnreadBadge(count: Int) {
     if (count > 0) {
-        // Simple dot indicator (no number) since we don't calculate exact unread count anymore
+        // Show real unread count in a badge (WhatsApp style)
         Box(
             modifier = Modifier
                 .padding(start = 8.dp)
-                .size(10.dp)
+                .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
                 .background(
                     color = MaterialTheme.colorScheme.primary,
                     shape = CircleShape
                 )
-        )
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (count > 99) "99+" else count.toString(),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        }
     }
 }
 

@@ -213,6 +213,29 @@ Feel free to start chatting!"""
     ): Flow<ConversationEntity?> {
         return conversationDataSource.listenConversation(conversationId, includesCacheChanges)
     }
+    
+    /**
+     * Get unread message count for a conversation.
+     * Counts messages sent by OTHER users (not current user) that are:
+     * - Not deleted
+     * - Created after the user's lastSeenAt timestamp
+     * 
+     * @param conversationId The conversation ID
+     * @param userId The current user ID (to exclude their own messages)
+     * @param lastSeenAtMs The user's last seen timestamp (from memberStatus.lastSeenAt)
+     * @return Number of unread messages
+     */
+    suspend fun getUnreadCount(
+        conversationId: String,
+        userId: String,
+        lastSeenAtMs: Long
+    ): Int {
+        return firestoreMessageDataSource.getUnreadCount(
+            conversationId = conversationId,
+            userId = userId,
+            lastSeenAtMs = lastSeenAtMs
+        )
+    }
 
     // ============================================================
     // WRITE OPERATIONS (coordinating multiple DataSources)

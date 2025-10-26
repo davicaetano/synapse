@@ -184,6 +184,27 @@ class ConversationViewModel @Inject constructor(
             if (messageSyncJob == null && a.title != "Unknown") {
                 Log.d(TAG, "🚀 Starting INCREMENTAL message sync AFTER UI ready")
 
+                if (conversation != null) {
+                    val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
+
+                    // Get all other members (exclude myself)
+                    val otherMembers = conversation.memberIds.filter { it != userId }
+
+                    // Find the most recent lastMessageSentAt from OTHER members
+                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
+                        conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                    }.maxOrNull()
+
+                    Log.d(TAG, "🔵 Loop check - 1: mostRecentOtherSent=$mostRecentOtherSentAt, myLastSeenAt=$myLastSeenAt")
+
+                    // Guard: only update if someone ELSE sent a message AFTER I last saw AND not already pending
+                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt) {
+                        Log.d(TAG, "🔴 UPDATING lastSeenAt")
+                        viewModelScope.launch {
+                            convRepo.updateMemberLastSeenAtNow(conversationId)
+                        }
+                    }
+                }
                 // Start incremental sync (tied to viewModelScope - cancels when ViewModel dies)
                 // This syncs ONLY new messages (after last Room timestamp), not all 100
                 messageSyncJob = convRepo.startIncrementalSync(viewModelScope, conversationId)

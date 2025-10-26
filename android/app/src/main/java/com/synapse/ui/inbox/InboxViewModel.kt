@@ -10,6 +10,9 @@ import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.data.source.firestore.entity.ConversationEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -100,44 +103,48 @@ class InboxViewModel @Inject constructor(
                 }
             }
         
-        // STEP 6: Calculate unread indicator based on memberStatus
-        // LOGIC: Has unread if ANY other member sent message after my lastSeenAt
+        // STEP 6: Calculate real unread counts from Firebase
+        // Counts messages sent by OTHER users (not deleted) after user's lastSeenAt
         val unreadCountsFlow = conversationsFlow
             .map { conversations ->
                 val countsByConv = mutableMapOf<String, Int>()
                 
-                conversations.forEach { conv ->
-                    val myLastSeenAtMs = conv.memberStatus[userId]?.lastSeenAt?.toDate()?.time
-                    
-                    // Get all other members (exclude myself)
-                    val otherMembers = conv.memberIds.filter { it != userId }
-                    
-                    // Check if any other member sent a message after I last saw
-                    val hasUnread = if (myLastSeenAtMs == null) {
-                        // Never opened this conversation
-                        // Check if ANY other member has sent at least one message
-                        otherMembers.any { memberId ->
-                            val lastSentAt = conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
-                            lastSentAt != null  // They sent at least one message
+                // Fetch all counts in parallel
+                coroutineScope {
+                    conversations.map { conv ->
+                        async {
+                            val lastSeenTimestamp = conv.memberStatus[userId]?.lastSeenAt
+                            val myLastSeenAtMs = lastSeenTimestamp?.toDate()?.time ?: 0L
+                            val currentTimeMs = System.currentTimeMillis()
+                            
+                            Log.d("InboxVM", "🔍 Conv ${conv.id.takeLast(6)}:")
+                            Log.d("InboxVM", "   - Firebase Timestamp: $lastSeenTimestamp")
+                            Log.d("InboxVM", "   - Converted to Ms: $myLastSeenAtMs")
+                            Log.d("InboxVM", "   - Current time Ms: $currentTimeMs")
+                            Log.d("InboxVM", "   - Diff: ${myLastSeenAtMs - currentTimeMs}ms (negative = past, positive = FUTURE!)")
+                            
+                            val unreadCount = conversationsRepo.getUnreadCount(
+                                conversationId = conv.id,
+                                userId = userId,
+                                lastSeenAtMs = myLastSeenAtMs
+                            )
+                            
+                            Log.d("InboxVM", "📊 Conv ${conv.id.takeLast(6)}: unreadCount=$unreadCount")
+                            
+                            if (unreadCount > 0) {
+                                conv.id to unreadCount
+                            } else {
+                                null
+                            }
                         }
-                    } else {
-                        // Check if any other member sent AFTER I last saw
-                        otherMembers.any { memberId ->
-                            val lastSentAt = conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
-                            lastSentAt != null && lastSentAt > myLastSeenAtMs
+                    }.mapNotNull { it.await() }
+                        .forEach { (convId, count) ->
+                            countsByConv[convId] = count
                         }
-                    }
-                    
-                    // Show "1" as indicator (generic badge)
-                    if (hasUnread) {
-                        countsByConv[conv.id] = 1
-                    }
-                    
-                    Log.d("InboxVM", "📊 Conv ${conv.id.takeLast(6)}: myLastSeenAt=$myLastSeenAtMs, hasUnread=$hasUnread")
                 }
-
-                Log.d("InboxVM", "📊 Unread counts: $countsByConv")
-                countsByConv
+                
+                Log.d("InboxVM", "📊 Total unread counts: $countsByConv")
+                countsByConv as Map<String, Int>
             }
         
         // STEP 7: Observe network connectivity

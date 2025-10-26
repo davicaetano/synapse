@@ -25,7 +25,7 @@ fun Message.recalculateStatus(memberStatus: Map<String, com.synapse.data.source.
     // Get all other members (exclude sender)
     val otherMembers = memberIdsAtCreation.filter { it != senderId }
     
-    return when {
+    val status = when {
         // PENDING: serverTimestamp is null (never reached server)
         serverTimestamp == null -> MessageStatus.PENDING
         
@@ -43,12 +43,20 @@ fun Message.recalculateStatus(memberStatus: Map<String, com.synapse.data.source.
         otherMembers.all { userId ->
             val userStatus = memberStatus[userId]
             val lastSeenMs = userStatus?.lastSeenAt?.toDate()?.time
-            lastSeenMs != null && serverTimestamp <= lastSeenMs
+            val isRead = lastSeenMs != null && serverTimestamp <= lastSeenMs
+            
+            android.util.Log.d("MessageStatus", "📖 Check READ: userId=${userId.takeLast(6)}, lastSeenMs=$lastSeenMs, serverTs=$serverTimestamp, isRead=$isRead")
+            
+            isRead
         } -> MessageStatus.READ
         
         // DELIVERED: At least one other member received but not everyone read yet
         else -> MessageStatus.DELIVERED
     }
+    
+    android.util.Log.d("MessageStatus", "✅ Final status for msg ${id.takeLast(6)}: $status (serverTs=$serverTimestamp, otherMembers=${otherMembers.size})")
+    
+    return status
 }
 
 

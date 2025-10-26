@@ -294,6 +294,57 @@ class FirestoreMessageDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Count unread messages in a conversation for a specific user.
+     * Counts messages sent by OTHER users (not the current user) that are:
+     * - Not deleted (isDeleted = false)
+     * - Created after the user's lastSeenAt timestamp
+     * 
+     * @param conversationId The conversation ID
+     * @param userId The current user ID (to exclude their own messages)
+     * @param lastSeenAtMs The user's last seen timestamp (from memberStatus)
+     * @return Number of unread messages
+     */
+    suspend fun getUnreadCount(
+        conversationId: String,
+        userId: String,
+        lastSeenAtMs: Long
+    ): Int {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "🔢 Counting unread for conv=${conversationId.takeLast(6)}, userId=${userId.takeLast(6)}, lastSeenAtMs=$lastSeenAtMs")
+        
+        return try {
+            val snapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .whereEqualTo("isDeleted", false)     // Only non-deleted
+                .whereGreaterThan("createdAtMs", lastSeenAtMs)  // After last seen
+                .whereNotEqualTo("senderId", userId)  // Exclude own messages (last to match enabled index)
+                .limit(100)  // Only need to count up to 100 (UI shows "99+")
+                .get()
+                .await()
+            
+            val count = snapshot.size()
+            val elapsed = System.currentTimeMillis() - startTime
+            
+            // Debug: Show first few messages
+            if (snapshot.documents.isNotEmpty()) {
+                Log.d(TAG, "   📄 Sample messages:")
+                snapshot.documents.take(3).forEach { doc ->
+                    Log.d(TAG, "      - senderId=${doc.getString("senderId")?.takeLast(6)}, createdAt=${doc.getLong("createdAtMs")}, deleted=${doc.getBoolean("isDeleted")}")
+                }
+            }
+            
+            Log.d(TAG, "✅ Unread count: $count (${elapsed}ms)")
+            
+            count
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "❌ Error counting unread messages: ${e.message} (${elapsed}ms)", e)
+            0
+        }
+    }
+    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================
@@ -326,7 +377,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "memberIdsAtCreation" to memberIds,
             "serverTimestamp" to FieldValue.serverTimestamp(),
             "type" to "bot",  // Message type (bot welcome message)
-            "sendNotification" to sendNotification  // Control notification sending
+            "sendNotification" to sendNotification,  // Control notification sending
+            "isDeleted" to false  // Default: not deleted
         )
         
         return try {
@@ -377,7 +429,8 @@ class FirestoreMessageDataSource @Inject constructor(
             "createdAtMs" to System.currentTimeMillis(),
             "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
             "serverTimestamp" to FieldValue.serverTimestamp(),  // Server assigns actual timestamp
-            "type" to "text"  // Message type (normal user message)
+            "type" to "text",  // Message type (normal user message)
+            "isDeleted" to false  // Default: not deleted
         )
         
         return try {
@@ -438,7 +491,8 @@ class FirestoreMessageDataSource @Inject constructor(
                     "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
                     "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
                     "serverTimestamp" to FieldValue.serverTimestamp(), // Server assigns actual timestamp
-                    "type" to "text"  // Message type (normal user message)
+                    "type" to "text",  // Message type (normal user message)
+                    "isDeleted" to false  // Default: not deleted
                 )
                 
                 batch.set(messageRef, messageData)
