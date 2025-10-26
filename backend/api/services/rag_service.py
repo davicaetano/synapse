@@ -83,6 +83,10 @@ async def semantic_search_with_rag(
     # Step 2 & 3: Create vector store with embeddings
     # Using in-memory Chroma for fast queries (no persistence needed)
     # CRITICAL: Use cosine distance for semantic similarity (0-2 range)
+    # CRITICAL: Use unique collection name to avoid accumulation between searches
+    import uuid
+    collection_name = f"messages_temp_{uuid.uuid4().hex[:8]}"
+
     vectorstore = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
@@ -90,11 +94,23 @@ async def semantic_search_with_rag(
         collection_metadata={"hnsw:space": "cosine"}  # Use cosine similarity
     )
     
+    print(f"📚 [RAG] Indexed {len(documents)} unique documents")
+    
     # Step 4: Perform similarity search (fetch more than needed for filtering)
+    k = max_results * 2
     results = vectorstore.similarity_search_with_score(
         query=query,
-        k=max_results * 2  # Fetch 2x to ensure enough results after filtering
+        k=k
     )
+    
+    print(f"🔎 [RAG] Requested top-{k} results from vector store")
+    
+    # CRITICAL: Delete the collection immediately after search to prevent accumulation
+    try:
+        vectorstore.delete_collection()
+        print(f"🗑️  [RAG] Deleted collection '{collection_name}' to free memory")
+    except Exception as e:
+        print(f"⚠️  [RAG] Failed to delete collection: {e}")
     
     # Step 5: Format and filter results by similarity threshold
     print(f"\n🔍 [RAG] Query: '{query}' | Analyzing {len(results)} candidates")

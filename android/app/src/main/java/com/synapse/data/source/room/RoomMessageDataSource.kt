@@ -47,7 +47,7 @@ class RoomMessageDataSource @Inject constructor(
                 pageSize = 50,
                 prefetchDistance = 15,
                 enablePlaceholders = false,
-                initialLoadSize = 20
+                initialLoadSize = 100
             ),
             pagingSourceFactory = { messageDao.observeMessagesPaged(conversationId) }
         ).flow.map { pagingData ->
