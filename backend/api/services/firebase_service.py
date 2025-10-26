@@ -35,18 +35,16 @@ async def get_conversation_messages(
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         
         # Build query (fetch 100 messages, filter in Python, return 50 text messages)
-        # NOTE: Can't use server-side .where() filters because old messages don't have type/isDeleted fields
-        # Firestore .where() on missing fields returns 0 results!
         fetch_limit = 100  # Always fetch 100 to ensure we get 50+ text messages after filtering
         query = (messages_ref
-                 .order_by('createdAtMs', direction=firestore.Query.DESCENDING)
+                 .order_by('localTimestamp', direction=firestore.Query.DESCENDING)
                  .limit(fetch_limit))
         
-        # Apply date filters if provided
+        # Apply date filters if provided (convert to Timestamp for comparison)
         if start_date:
-            query = query.where('createdAtMs', '>=', int(start_date.timestamp() * 1000))
+            query = query.where('localTimestamp', '>=', start_date)
         if end_date:
-            query = query.where('createdAtMs', '<=', int(end_date.timestamp() * 1000))
+            query = query.where('localTimestamp', '<=', end_date)
         
         # Execute query
         docs = query.stream()
@@ -62,16 +60,20 @@ async def get_conversation_messages(
                 continue
             
             # Only analyze user text messages (ignore AI summaries, errors, bot messages)
-            message_type = data.get('type', 'text')  # Default to 'text' for old messages without type
+            message_type = data.get('type', 'text')
             if message_type != 'text':
                 continue
+            
+            # Get localTimestamp (Firestore Timestamp object)
+            local_ts = data.get('localTimestamp')
+            created_at = local_ts.to_pydatetime() if local_ts else datetime.fromtimestamp(0)
             
             all_messages.append(Message(
                 id=doc.id,
                 text=data.get('text', ''),
                 sender_id=data.get('senderId', ''),
                 sender_name=data.get('senderName', 'Unknown'),
-                created_at=datetime.fromtimestamp(data.get('createdAtMs', 0) / 1000),
+                created_at=created_at,
                 conversation_id=conversation_id
             ))
         
@@ -135,12 +137,17 @@ async def get_message_by_id(conversation_id: str, message_id: str) -> Optional[M
             return None
         
         data = doc.to_dict()
+        
+        # Get localTimestamp (Firestore Timestamp object)
+        local_ts = data.get('localTimestamp')
+        created_at = local_ts.to_pydatetime() if local_ts else datetime.fromtimestamp(0)
+        
         return Message(
             id=doc.id,
             text=data.get('text', ''),
             sender_id=data.get('senderId', ''),
             sender_name=data.get('senderName', 'Unknown'),
-            created_at=datetime.fromtimestamp(data.get('createdAtMs', 0) / 1000),
+            created_at=created_at,
             conversation_id=conversation_id
         )
     
@@ -161,23 +168,24 @@ async def create_ai_summary_message(
     Returns the created message ID
     """
     try:
-        import time
         from google.cloud.firestore import SERVER_TIMESTAMP
+        from datetime import datetime
         
         # Create message document
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()  # Auto-generate ID
         
-        timestamp_ms = int(time.time() * 1000)
+        now = datetime.now()
         
         message_data = {
             'id': message_ref.id,
             'text': summary_text,
             'senderId': 'synapse-bot-system',  # Bot ID for identification
-            'createdAtMs': timestamp_ms,
+            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': 'ai_summary',  # AI summary message type (special rendering in Android)
+            'sendNotification': False,  # Don't send push notification for summaries
             'isDeleted': False,
             'metadata': {
                 'generatedBy': generated_by_user_id,
@@ -193,8 +201,8 @@ async def create_ai_summary_message(
         conv_ref = db.collection('conversations').document(conversation_id)
         conv_ref.set({
             'lastMessageText': '🤖 AI Summary generated',
-            'updatedAtMs': timestamp_ms,
-            'memberStatus': {
+            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
+            'members': {
                 'synapse-bot-system': {
                     'lastMessageSentAt': SERVER_TIMESTAMP
                 }
@@ -222,22 +230,23 @@ async def create_ai_message(
     Returns the created message ID
     """
     try:
-        import time
         from google.cloud.firestore import SERVER_TIMESTAMP
+        from datetime import datetime
         
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()
         
-        timestamp_ms = int(time.time() * 1000)
+        now = datetime.now()
         
         message_data = {
             'id': message_ref.id,
             'text': text,
             'senderId': 'synapse-bot-system',
-            'createdAtMs': timestamp_ms,
+            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': message_type,
+            'sendNotification': False,  # Don't send push notifications for AI messages
             'isDeleted': False,
             'metadata': metadata or {}
         }
@@ -248,8 +257,8 @@ async def create_ai_message(
         conv_ref = db.collection('conversations').document(conversation_id)
         conv_ref.set({
             'lastMessageText': text[:100],
-            'updatedAtMs': timestamp_ms,
-            'memberStatus': {
+            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
+            'members': {
                 'synapse-bot-system': {
                     'lastMessageSentAt': SERVER_TIMESTAMP
                 }
@@ -273,8 +282,8 @@ async def create_error_message(
     Returns the created message ID
     """
     try:
-        import time
         from google.cloud.firestore import SERVER_TIMESTAMP
+        from datetime import datetime
         
         SYNAPSE_BOT_ID = "synapse-bot-system"
         
@@ -282,16 +291,17 @@ async def create_error_message(
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()  # Auto-generate ID
         
-        timestamp_ms = int(time.time() * 1000)
+        now = datetime.now()
         
         message_data = {
             'id': message_ref.id,
             'text': error_text,
             'senderId': SYNAPSE_BOT_ID,
-            'createdAtMs': timestamp_ms,
+            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
             'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': 'ai_error',  # AI error message type (special rendering in Android)
+            'sendNotification': True,  # Send notification for errors (user needs to know)
             'isDeleted': False
         }
         
@@ -301,10 +311,8 @@ async def create_error_message(
         conv_ref = db.collection('conversations').document(conversation_id)
         conv_ref.set({
             'lastMessageText': '❌ AI Error',
-            'lastMessageSenderId': SYNAPSE_BOT_ID,
-            'lastMessageTimestamp': SERVER_TIMESTAMP,
-            'updatedAt': SERVER_TIMESTAMP,
-            'memberStatus': {
+            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
+            'members': {
                 SYNAPSE_BOT_ID: {
                     'lastMessageSentAt': SERVER_TIMESTAMP
                 }
