@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.tasks.await
@@ -99,6 +100,13 @@ class FirestoreConversationDataSource @Inject constructor(
         started = SharingStarted.Eagerly,
         initialValue = emptyMap()
     )
+    
+    init {
+        // Force global conversations listener to start collecting immediately
+        // This prevents race conditions where conversations are created before listener is active
+        globalConversationsFlow.launchIn(appScope)
+        Log.d(TAG, "🌍 Global conversations flow initialized and actively collecting")
+    }
     
     // ============================================================
     // READ OPERATIONS
