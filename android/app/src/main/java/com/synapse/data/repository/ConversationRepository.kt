@@ -2,6 +2,7 @@ package com.synapse.data.repository
 
 import android.util.Log
 import androidx.paging.PagingData
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.source.firestore.FirestoreConversationDataSource
 import com.synapse.data.source.firestore.FirestoreMessageDataSource
@@ -135,12 +136,12 @@ Feel free to start chatting!"""
         conversationId: String
     ): Job {
         return scope.launch {
-            // Get initial last timestamp from Room
-            var lastTimestamp = roomMessageDataSource.getLastMessageTimestamp(conversationId)
-            Log.d("ConversationRepo", "🔄 Starting incremental sync for $conversationId (lastTimestamp=$lastTimestamp)")
+            // Get initial last timestamp from Room (stored as Long ms)
+            var lastTimestampMs = roomMessageDataSource.getLastMessageTimestamp(conversationId)
+            Log.d("ConversationRepo", "🔄 Starting incremental sync for $conversationId (lastTimestampMs=$lastTimestampMs)")
             
             // If Room is empty, fetch initial messages first (only last 200, not all history)
-            if (lastTimestamp == null) {
+            if (lastTimestampMs == null) {
                 Log.d("ConversationRepo", "   📦 Room is empty, fetching initial 200 messages...")
                 val initialMessages = firestoreMessageDataSource.fetchRecentMessages(
                     conversationId = conversationId,
@@ -151,11 +152,14 @@ Feel free to start chatting!"""
                     Log.d("ConversationRepo", "   💾 Upserting ${initialMessages.size} initial messages to Room...")
                     roomMessageDataSource.upsertMessages(initialMessages, conversationId)
                     
-                    // Update lastTimestamp to the most recent message
-                    lastTimestamp = initialMessages.maxByOrNull { it.createdAtMs }?.createdAtMs
-                    Log.d("ConversationRepo", "   ✅ Initial messages loaded, lastTimestamp=$lastTimestamp")
+                    // Update lastTimestampMs to the most recent message
+                    lastTimestampMs = initialMessages.maxByOrNull { it.localTimestamp.toDate().time }?.localTimestamp?.toDate()?.time
+                    Log.d("ConversationRepo", "   ✅ Initial messages loaded, lastTimestampMs=$lastTimestampMs")
                 }
             }
+            
+            // Convert Long ms to Timestamp for Firestore query
+            val lastTimestamp = lastTimestampMs?.let { Timestamp(java.util.Date(it)) }
             
             // Listen to Firestore for messages AFTER lastTimestamp (only new messages from now on)
             firestoreMessageDataSource.listenMessages(conversationId, lastTimestamp)
@@ -166,11 +170,11 @@ Feel free to start chatting!"""
                         // Upsert to Room
                         roomMessageDataSource.upsertMessages(newMessages, conversationId)
                         
-                        // Update lastTimestamp to the most recent message
-                        val newestMessage = newMessages.maxByOrNull { it.createdAtMs }
-                        if (newestMessage != null && newestMessage.createdAtMs > (lastTimestamp ?: 0)) {
-                            lastTimestamp = newestMessage.createdAtMs
-                            Log.d("ConversationRepo", "   ✅ Updated lastTimestamp to $lastTimestamp")
+                        // Update lastTimestampMs to the most recent message
+                        val newestMessageMs = newMessages.maxByOrNull { it.localTimestamp.toDate().time }?.localTimestamp?.toDate()?.time
+                        if (newestMessageMs != null && newestMessageMs > (lastTimestampMs ?: 0)) {
+                            lastTimestampMs = newestMessageMs
+                            Log.d("ConversationRepo", "   ✅ Updated lastTimestampMs to $lastTimestampMs")
                         }
                     } else {
                         Log.d("ConversationRepo", "   ℹ️ No new messages")
@@ -222,7 +226,7 @@ Feel free to start chatting!"""
      * 
      * @param conversationId The conversation ID
      * @param userId The current user ID (to exclude their own messages)
-     * @param lastSeenAtMs The user's last seen timestamp (from memberStatus.lastSeenAt)
+     * @param lastSeenAtMs The user's last seen timestamp (from members.lastSeenAt)
      * @return Number of unread messages
      */
     suspend fun getUnreadCount(
@@ -230,12 +234,15 @@ Feel free to start chatting!"""
         userId: String,
         lastSeenAtMs: Long
     ): Int {
+        // Convert Long ms to Timestamp for Firestore query
+        val lastSeenAt = Timestamp(java.util.Date(lastSeenAtMs))
         return firestoreMessageDataSource.getUnreadCount(
             conversationId = conversationId,
             userId = userId,
-            lastSeenAtMs = lastSeenAtMs
+            lastSeenAt = lastSeenAt
         )
     }
+
 
     // ============================================================
     // WRITE OPERATIONS (coordinating multiple DataSources)
@@ -251,17 +258,18 @@ Feel free to start chatting!"""
     private suspend fun sendWelcomeMessage(conversationId: String, memberIds: List<String>) {
         // Send welcome message as the Synapse Bot with timestamp 0 to ensure it appears first
         // sendNotification = false to avoid spamming users with welcome message notifications
+        val epochStart = Timestamp(java.util.Date(0L))
         firestoreMessageDataSource.sendMessageAs(
             conversationId = conversationId,
             text = WELCOME_MESSAGE,
             memberIds = memberIds,
             senderId = SYNAPSE_BOT_ID,
-            createdAtMs = 0L,  // Timestamp 0 ensures this message always appears first
+            localTimestamp = epochStart,  // Timestamp 0 ensures this message always appears first
             sendNotification = false  // Don't send push notification for welcome messages
         )
         
         // Update conversation metadata (use actual timestamp for conversation ordering)
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Timestamp.now()
         conversationDataSource.updateConversationMetadata(
             conversationId = conversationId,
             lastMessageText = WELCOME_MESSAGE,
@@ -284,7 +292,7 @@ Feel free to start chatting!"""
         // ALWAYS update conversation metadata, even if messageId is null
         // This ensures the inbox shows the latest message immediately,
         // even when offline (Firestore will sync when back online)
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Timestamp.now()
         conversationDataSource.updateConversationMetadata(
             conversationId = conversationId,
             lastMessageText = text,
@@ -380,7 +388,7 @@ Feel free to start chatting!"""
      * @param conversationId Conversation ID
      * @param serverTimestamp Server timestamp from the most recent message
      */
-    suspend fun updateMemberLastReceivedAt(conversationId: String, serverTimestamp: com.google.firebase.Timestamp) {
+    suspend fun updateMemberLastReceivedAt(conversationId: String, serverTimestamp: Timestamp) {
         conversationDataSource.updateMemberLastReceivedAt(conversationId, serverTimestamp)
     }
     
@@ -415,7 +423,7 @@ Feel free to start chatting!"""
             conversationDataSource.updateConversationMetadata(
                 conversationId = conversationId,
                 lastMessageText = messages.last(),
-                timestamp = System.currentTimeMillis()
+                timestamp = Timestamp.now()
             )
         }
     }
@@ -430,13 +438,14 @@ Feel free to start chatting!"""
      */
     suspend fun deleteMessage(conversationId: String, messageId: String) {
         val currentUserId = auth.currentUser?.uid ?: return
-        val timestamp = System.currentTimeMillis()
+        val timestamp = Timestamp.now()
+        val timestampMs = timestamp.toDate().time
         
         // Update Firestore (soft delete)
         firestoreMessageDataSource.deleteMessage(conversationId, messageId, currentUserId, timestamp)
         
-        // Update Room cache (soft delete)
-        roomMessageDataSource.markMessageAsDeleted(messageId, currentUserId, timestamp)
+        // Update Room cache (soft delete) - Room uses Long ms
+        roomMessageDataSource.markMessageAsDeleted(messageId, currentUserId, timestampMs)
     }
     
     /**
@@ -453,20 +462,23 @@ Feel free to start chatting!"""
      * @return Number of messages fetched (0 if reached end)
      */
     suspend fun fetchOlderMessages(conversationId: String): Int {
-        // Get oldest message timestamp from Room
-        val oldestTimestamp = roomMessageDataSource.getOldestMessageTimestamp(conversationId)
+        // Get oldest message timestamp from Room (stored as Long ms)
+        val oldestTimestampMs = roomMessageDataSource.getOldestMessageTimestamp(conversationId)
         
-        if (oldestTimestamp == null) {
+        if (oldestTimestampMs == null) {
             Log.d("ConversationRepo", "📭 No messages in Room yet, skipping older messages fetch")
             return 0
         }
         
-        Log.d("ConversationRepo", "📥 Fetching older messages before timestamp: $oldestTimestamp")
+        Log.d("ConversationRepo", "📥 Fetching older messages before timestamp: $oldestTimestampMs")
+        
+        // Convert Long ms to Timestamp for Firestore query
+        val beforeTimestamp = Timestamp(java.util.Date(oldestTimestampMs))
         
         // Fetch older messages from Firestore
         val olderMessages = firestoreMessageDataSource.fetchOlderMessages(
             conversationId = conversationId,
-            beforeTimestamp = oldestTimestamp,
+            beforeTimestamp = beforeTimestamp,
             limit = 200
         )
         

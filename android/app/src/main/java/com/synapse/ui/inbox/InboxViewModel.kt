@@ -3,14 +3,12 @@ package com.synapse.ui.inbox
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
 import com.synapse.data.source.firestore.entity.ConversationEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -44,23 +42,25 @@ class InboxViewModel @Inject constructor(
             .onEach { conversations ->
                 // Update lastReceivedAt when new messages arrive
                 conversations.forEach { conv ->
-                    val myLastReceivedAt = conv.memberStatus[userId]?.lastReceivedAt?.toDate()?.time ?: 0L
+                    val myMember = conv.members[userId] ?: return@forEach  // Skip if I'm not in members
+                    val myLastReceivedAt = myMember.lastReceivedAt
 
-                    // Get all other members (exclude myself)
-                    val otherMembers = conv.memberIds.filter { it != userId }
+                    // Get all other members (exclude myself, bots, and deleted)
+                    val otherMembers = conv.members
+                        .filterKeys { it != userId }
+                        .filterValues { !it.isBot && !it.isDeleted }
 
                     // Find the most recent lastMessageSentAt from OTHER members
-                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
-                        conv.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
-                    }.maxOrNull()
+                    val mostRecentOtherSentAt = otherMembers.values
+                        .map { it.lastMessageSentAt }
+                        .maxOrNull()
 
                     Log.d("InboxVM", "🔵 Loop check - 2: convId=${conv.id.takeLast(6)}, mostRecentOtherSent=$mostRecentOtherSentAt, myLastReceived=$myLastReceivedAt")
 
                     if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastReceivedAt) {
                         Log.d("InboxVM", "🔴 UPDATING lastReceivedAt for ${conv.id.takeLast(6)}")
-                        val ts = Timestamp(mostRecentOtherSentAt / 1000, ((mostRecentOtherSentAt % 1000) * 1000000).toInt())
                         viewModelScope.launch {
-                            conversationsRepo.updateMemberLastReceivedAt(conv.id, ts)
+                            conversationsRepo.updateMemberLastReceivedAt(conv.id, mostRecentOtherSentAt)
                         }
                     }
                 }
@@ -73,7 +73,7 @@ class InboxViewModel @Inject constructor(
         val memberIdsFlow = conversationsFlow
             .map { conversations ->
                 conversations
-                    .flatMap { it.memberIds }
+                    .flatMap { it.members.keys }  // members é Map<String, Member>
                     .distinct()
                     .sorted()
             }
@@ -113,7 +113,7 @@ class InboxViewModel @Inject constructor(
                 coroutineScope {
                     conversations.map { conv ->
                         async {
-                            val lastSeenTimestamp = conv.memberStatus[userId]?.lastSeenAt
+                            val lastSeenTimestamp = conv.members[userId]?.lastSeenAt
                             val myLastSeenAtMs = lastSeenTimestamp?.toDate()?.time ?: 0L
                             val currentTimeMs = System.currentTimeMillis()
                             

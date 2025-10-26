@@ -16,46 +16,6 @@ import java.util.concurrent.TimeUnit
  */
 
 /**
- * Compare two ConversationEntity objects for UI-relevant changes.
- * Ignores deep equality of Timestamp objects to prevent unnecessary recompositions.
- * 
- * Returns true if conversations are considered equal for UI purposes.
- */
-fun areConversationsEqual(a: ConversationEntity?, b: ConversationEntity?): Boolean {
-    // Both null = equal
-    if (a == null && b == null) {
-        android.util.Log.d("ConvMapper", "✅ Both null = EQUAL")
-        return true
-    }
-    
-    // One null = not equal
-    if (a == null || b == null) {
-        android.util.Log.d("ConvMapper", "❌ One null = DIFFERENT")
-        return false
-    }
-    
-    // Compare fields that matter for UI
-    val isEqual = a.id == b.id &&
-           a.convType == b.convType &&
-           a.lastMessageText == b.lastMessageText &&
-           a.updatedAtMs == b.updatedAtMs &&
-           a.groupName == b.groupName &&
-           a.createdBy == b.createdBy &&
-           a.memberIds.sorted() == b.memberIds.sorted()
-    
-    android.util.Log.d("ConvMapper", if (isEqual) "✅ EQUAL (will NOT emit)" else "❌ DIFFERENT (will emit)")
-    android.util.Log.d("ConvMapper", "  updatedAtMs: ${a.updatedAtMs} vs ${b.updatedAtMs}")
-    android.util.Log.d("ConvMapper", "  lastMessageText: '${a.lastMessageText}' vs '${b.lastMessageText}'")
-    
-    return isEqual
-    
-    // NOTE: We intentionally ignore memberStatus comparison here because:
-    // 1. Timestamp objects create new instances even with same values
-    // 2. memberStatus changes are handled by separate flows (presence, typing)
-    // 3. Only structural changes (members, name, last message) should trigger UI rebuild
-}
-
-/**
  * Build ConversationUIState from raw data.
  */
 fun buildConversationUIState(
@@ -80,15 +40,18 @@ fun buildConversationUIState(
     // Build user map
     val usersMap = users.associateBy { it.id }
     
-    // Build members with presence
-    val members = conversation.memberIds.mapNotNull { memberId ->
-        val userEntity = usersMap[memberId]
-        val presenceEntity = presence[memberId]
-        userEntity?.toDomain(
-            presence = presenceEntity,
-            isMyself = (memberId == userId)
-        )
-    }
+    // Build members with presence (only active members, not deleted)
+    val members = conversation.members
+        .filterValues { !it.isDeleted }  // Exclude deleted members
+        .keys
+        .mapNotNull { memberId ->
+            val userEntity = usersMap[memberId]
+            val presenceEntity = presence[memberId]
+            userEntity?.toDomain(
+                presence = presenceEntity,
+                isMyself = (memberId == userId)
+            )
+        }
     
     // NOTE: Messages are handled separately via Paging3 (messagesPaged)
     // uiState.messages will always be empty

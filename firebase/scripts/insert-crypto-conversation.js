@@ -135,9 +135,12 @@ async function insertConversation() {
       const messageData = {
         text: msg.text,
         senderId: senderId,
-        createdAtMs: timestamp,
+        localTimestamp: admin.firestore.Timestamp.fromMillis(timestamp),
         memberIdsAtCreation: groupData.memberIds,
-        serverTimestamp: admin.firestore.FieldValue.serverTimestamp()
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: 'text',
+        sendNotification: true,
+        isDeleted: false
       };
 
       await db.collection('conversations')

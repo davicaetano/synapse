@@ -18,10 +18,10 @@ data class Message constructor(
 )
 
 /**
- * Recalculate message status based on current memberStatus.
+ * Recalculate message status based on current members.
  * Used for real-time checkmark updates in UI.
  */
-fun Message.recalculateStatus(memberStatus: Map<String, com.synapse.data.source.firestore.entity.MemberStatus>): MessageStatus {
+fun Message.recalculateStatus(members: Map<String, com.synapse.data.source.firestore.entity.Member>): MessageStatus {
     // Get all other members (exclude sender)
     val otherMembers = memberIdsAtCreation.filter { it != senderId }
     
@@ -34,15 +34,15 @@ fun Message.recalculateStatus(memberStatus: Map<String, com.synapse.data.source.
         
         // SENT: No other members received yet
         otherMembers.all { userId ->
-            val userStatus = memberStatus[userId]
-            val lastReceivedMs = userStatus?.lastReceivedAt?.toDate()?.time
+            val member = members[userId]
+            val lastReceivedMs = member?.lastReceivedAt?.toDate()?.time
             lastReceivedMs == null || serverTimestamp > lastReceivedMs
         } -> MessageStatus.SENT
         
         // READ: All other members have seen this message
         otherMembers.all { userId ->
-            val userStatus = memberStatus[userId]
-            val lastSeenMs = userStatus?.lastSeenAt?.toDate()?.time
+            val member = members[userId]
+            val lastSeenMs = member?.lastSeenAt?.toDate()?.time
             val isRead = lastSeenMs != null && serverTimestamp <= lastSeenMs
             
             android.util.Log.d("MessageStatus", "📖 Check READ: userId=${userId.takeLast(6)}, lastSeenMs=$lastSeenMs, serverTs=$serverTimestamp, isRead=$isRead")

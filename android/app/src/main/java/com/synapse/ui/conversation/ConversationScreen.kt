@@ -68,7 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.google.firebase.auth.FirebaseAuth
-import com.synapse.data.source.firestore.entity.MemberStatus
+import com.synapse.data.source.firestore.entity.Member
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import com.synapse.domain.conversation.MessageStatus
@@ -94,8 +94,8 @@ fun ConversationScreen(
     // Use paged messages (Room + Paging3)
     val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<Message>()
     
-    // Member status for real-time checkmark updates
-    val memberStatus by vm.memberStatusFlow.collectAsStateWithLifecycle()
+    // Members for real-time checkmark updates
+    val members by vm.membersFlow.collectAsStateWithLifecycle()
     
     // AI active job count (for spinner on AI button)
     val activeAIJobCount by vm.activeAIJobCount.collectAsStateWithLifecycle()
@@ -153,7 +153,7 @@ fun ConversationScreen(
     ConversationScreen(
         ui = ui,
         pagedMessages = pagedMessages,
-        memberStatus = memberStatus,
+        members = members,
         selectedMessageId = selectedMessageId,
         activeAIJobCount = activeAIJobCount,
         showBatchButtons = showBatchButtons,
@@ -202,7 +202,7 @@ fun ConversationScreen(
 fun ConversationScreen(
     ui: ConversationUIState,
     pagedMessages: LazyPagingItems<Message>,
-    memberStatus: Map<String, MemberStatus>,
+    members: Map<String, Member>,
     selectedMessageId: String?,
     activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
@@ -419,8 +419,8 @@ fun ConversationScreen(
                                 val isHighlighted = searchState.results.isNotEmpty() && 
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 
-                                // Recalculate status with current memberStatus for real-time checkmarks
-                                val currentStatus = m.recalculateStatus(memberStatus)
+                                // Recalculate status with current members for real-time checkmarks
+                                val currentStatus = m.recalculateStatus(members)
                                 
                                 MessageBubble(
                                     text = m.text,
@@ -454,8 +454,8 @@ fun ConversationScreen(
                                 val isHighlighted = searchState.results.isNotEmpty() && 
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 
-                                // Recalculate status with current memberStatus for real-time checkmarks
-                                val currentStatus = m.recalculateStatus(memberStatus)
+                                // Recalculate status with current members for real-time checkmarks
+                                val currentStatus = m.recalculateStatus(members)
                                 
                                 MessageBubble(
                                     text = m.text,

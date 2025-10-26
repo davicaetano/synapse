@@ -29,9 +29,8 @@ class GroupSettingsViewModel @Inject constructor(
                 if (conversation == null) {
                     GroupSettingsUIState(isLoading = true)
                 } else {
-                    // Get member users
-                    val memberIds = conversation.memberIds
-                    
+
+
                     GroupSettingsUIState(
                         conversationId = conversation.id,
                         groupName = conversation.groupName ?: "Unnamed Group",
@@ -55,13 +54,23 @@ class GroupSettingsViewModel @Inject constructor(
         
         convRepo.observeConversation(conversationId)
             .flatMapLatest { conversation ->
-                if (conversation == null || conversation.memberIds.isEmpty()) {
+                if (conversation == null || conversation.members.isEmpty()) {
                     flowOf(emptyList())
                 } else {
-                    convRepo.observeUsers(conversation.memberIds)
-                        .map { userEntities ->
-                            userEntities.map { it.toDomain(presence = null, isMyself = it.id == userId) }
-                        }
+                    // Get active member IDs (exclude deleted and bots)
+                    val activeMemberIds = conversation.members
+                        .filterValues { !it.isDeleted && !it.isBot }
+                        .keys
+                        .toList()
+                    
+                    if (activeMemberIds.isEmpty()) {
+                        flowOf(emptyList())
+                    } else {
+                        convRepo.observeUsers(activeMemberIds)
+                            .map { userEntities ->
+                                userEntities.map { it.toDomain(presence = null, isMyself = it.id == userId) }
+                            }
+                    }
                 }
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())

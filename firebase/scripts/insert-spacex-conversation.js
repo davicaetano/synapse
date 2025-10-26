@@ -131,32 +131,40 @@ async function insertConversation() {
       const SYNAPSE_BOT_ID = 'synapse-bot-system';
       const now = admin.firestore.Timestamp.now();
       
-      // Build memberStatus with real members + bot (bot NOT in memberIds!)
-      const memberStatus = memberIds.reduce((acc, id) => {
-        acc[id] = {
-          lastSeenAt: 0,
-          lastReceivedAt: 0,
-          lastMessageSentAt: 0
-        };
-        return acc;
-      }, {});
+      // Build members map with real members + bot
+      const members = {};
       
-      // Add bot to memberStatus (but NOT to memberIds)
-      memberStatus[SYNAPSE_BOT_ID] = {
+      // Add real members (first one is admin/creator)
+      memberIds.forEach((id, index) => {
+        members[id] = {
+          lastSeenAt: now,
+          lastReceivedAt: now,
+          lastMessageSentAt: now,
+          isBot: false,
+          isAdmin: index === 0,  // First member is admin/creator
+          isDeleted: false
+        };
+      });
+      
+      // Add bot to members (isBot: true, NOT in memberIds array)
+      members[SYNAPSE_BOT_ID] = {
         lastSeenAt: now,
         lastReceivedAt: now,
-        lastMessageSentAt: now  // ✅ This allows Android to find lastMessageSentAt
+        lastMessageSentAt: now,
+        isBot: true,
+        isAdmin: false,
+        isDeleted: false
       };
       
       const newGroupRef = await db.collection('conversations').add({
-        convType: 'GROUP',  // ✅ FIXED: Android expects 'convType', not 'type'
+        convType: 'GROUP',
         groupName: 'SpaceX Starship',
-        memberIds: memberIds,  // ✅ Bot NOT in memberIds (can't be removed)
+        memberIds: memberIds,  // Pre-populated for instant inbox visibility
         createdBy: memberIds[0],  // First user is the creator
-        createdAtMs: Date.now(),
-        updatedAtMs: Date.now(),
+        localTimestamp: now,  // Using Timestamp format (not milliseconds)
+        updatedAt: now,
         lastMessageText: '',
-        memberStatus: memberStatus  // ✅ Bot IS in memberStatus (for lastMessageSentAt)
+        members: members  // NEW: Unified members map with isBot, isAdmin, isDeleted
       });
 
       groupId = newGroupRef.id;
@@ -207,9 +215,12 @@ async function insertConversation() {
       const messageData = {
         text: msg.text,
         senderId: senderId,
-        createdAtMs: timestamp,
+        localTimestamp: admin.firestore.Timestamp.fromMillis(timestamp),
         memberIdsAtCreation: groupData.memberIds,
-        serverTimestamp: admin.firestore.FieldValue.serverTimestamp()
+        serverTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+        type: 'text',
+        sendNotification: true,
+        isDeleted: false
       };
 
       await db.collection('conversations')

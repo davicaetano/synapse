@@ -151,3 +151,65 @@ exports.sendNotificationOnNewMessage = functions.firestore
     }
   });
 
+/**
+ * Auto-sync memberIds array from members map
+ * 
+ * Keeps memberIds in sync with members, filtering out:
+ * - Bots (isBot: true)
+ * - Deleted members (isDeleted: true)
+ * 
+ * Trigger: Firestore onWrite at conversations/{convId}
+ * 
+ * WHY: Firestore queries need an array field (can't query map keys efficiently).
+ * memberIds is used ONLY for inbox query: .whereArrayContains("memberIds", userId)
+ */
+exports.syncMemberIds = functions.firestore
+  .document('conversations/{conversationId}')
+  .onWrite(async (change, context) => {
+    try {
+      // Skip if deleted
+      if (!change.after.exists) {
+        console.log('Conversation deleted, skipping sync');
+        return null;
+      }
+      
+      const conversationId = context.params.conversationId;
+      const data = change.after.data();
+      
+      // Skip if no members field
+      if (!data.members || typeof data.members !== 'object') {
+        console.log('No members field, skipping sync');
+        return null;
+      }
+      
+      // Extract member IDs, filtering out bots and deleted members
+      const memberIds = Object.keys(data.members)
+        .filter(id => {
+          const member = data.members[id];
+          return member && !member.isBot && !member.isDeleted;
+        })
+        .sort();
+      
+      // Check if memberIds changed (avoid infinite loop)
+      const currentMemberIds = (data.memberIds || []).sort();
+      const hasChanged = JSON.stringify(memberIds) !== JSON.stringify(currentMemberIds);
+      
+      if (!hasChanged) {
+        console.log(`memberIds already up to date for ${conversationId}`);
+        return null;
+      }
+      
+      // Update memberIds
+      console.log(`Syncing memberIds for ${conversationId}:`, memberIds);
+      await change.after.ref.set(
+        { memberIds: memberIds },
+        { merge: true }
+      );
+      
+      return null;
+    } catch (error) {
+      console.error('Error syncing memberIds:', error);
+      return null;
+    }
+  });
+

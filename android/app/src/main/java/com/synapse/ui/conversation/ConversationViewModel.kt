@@ -14,7 +14,7 @@ import com.synapse.data.network.NetworkConnectivityMonitor
 import com.synapse.data.repository.AIRepository
 import com.synapse.data.repository.ConversationRepository
 import com.synapse.data.repository.TypingRepository
-import com.synapse.data.source.firestore.entity.MemberStatus
+import com.synapse.data.source.firestore.entity.Member
 import com.synapse.domain.conversation.ConversationType
 import com.synapse.domain.conversation.Message
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -82,27 +82,27 @@ class ConversationViewModel @Inject constructor(
 
         convRepo.observeConversation(conversationId, false)
             .distinctUntilChanged { convA, convB ->
-                val otherMembersConvA = convA?.memberIds?.filter { it != userId }
-                val otherMembersConvB = convB?.memberIds?.filter { it != userId }
-                val mostRecentOtherSentAtA = otherMembersConvA?.mapNotNull { memberId ->
-                    convA.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                val otherMembersConvA = convA?.members?.filterKeys { it != userId && convA.members[it]?.isDeleted == false }
+                val otherMembersConvB = convB?.members?.filterKeys { it != userId && convB.members[it]?.isDeleted == false }
+                val mostRecentOtherSentAtA = otherMembersConvA?.values?.mapNotNull { member ->
+                    member.lastMessageSentAt.toDate().time
                 }?.maxOrNull()
-                val mostRecentOtherSentAtB = otherMembersConvB?.mapNotNull { memberId ->
-                    convB.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                val mostRecentOtherSentAtB = otherMembersConvB?.values?.mapNotNull { member ->
+                    member.lastMessageSentAt.toDate().time
                 }?.maxOrNull()
                 mostRecentOtherSentAtA == mostRecentOtherSentAtB
             }
             .onEach { conversation ->
                 // Update lastSeenAt if there are new messages (guard prevents loop)
                 if (conversation != null) {
-                    val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
+                    val myLastSeenAt = conversation.members[userId]?.lastSeenAt?.toDate()?.time ?: 0L
 
-                    // Get all other members (exclude myself)
-                    val otherMembers = conversation.memberIds.filter { it != userId }
+                    // Get all other members (exclude myself and deleted members)
+                    val otherMembers = conversation.members.filterKeys { it != userId && conversation.members[it]?.isDeleted == false }.keys
 
                     // Find the most recent lastMessageSentAt from OTHER members
                     val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
-                        conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
+                        conversation.members[memberId]?.lastMessageSentAt?.toDate()?.time
                     }.maxOrNull()
 
                     Log.d(TAG, "🔵 Loop check - 1: mostRecentOtherSent=$mostRecentOtherSentAt, myLastSeenAt=$myLastSeenAt")
@@ -120,9 +120,13 @@ class ConversationViewModel @Inject constructor(
         // STEP 1: Get the conversation entity + update lastSeenAt when needed
         val conversationFlow = convRepo.observeConversation(conversationId)
         
-        // STEP 2: Extract member IDs (stable)
+        // STEP 2: Extract member IDs (stable) - only active members
         val memberIdsFlow = conversationFlow
-            .map { conv -> conv?.memberIds?.sorted() ?: emptyList() }
+            .map { conv -> 
+                conv?.members
+                    ?.filterValues { !it.isDeleted }  // Exclude deleted members
+                    ?.keys?.sorted() ?: emptyList()
+            }
             .distinctUntilChanged()
         
         // STEP 3: Observe users (only recreates when members change)
@@ -184,26 +188,8 @@ class ConversationViewModel @Inject constructor(
             if (messageSyncJob == null && a.title != "Unknown") {
                 Log.d(TAG, "🚀 Starting INCREMENTAL message sync AFTER UI ready")
 
-                if (conversation != null) {
-                    val myLastSeenAt = conversation.memberStatus[userId]?.lastSeenAt?.toDate()?.time ?: 0L
-
-                    // Get all other members (exclude myself)
-                    val otherMembers = conversation.memberIds.filter { it != userId }
-
-                    // Find the most recent lastMessageSentAt from OTHER members
-                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
-                        conversation.memberStatus[memberId]?.lastMessageSentAt?.toDate()?.time
-                    }.maxOrNull()
-
-                    Log.d(TAG, "🔵 Loop check - 1: mostRecentOtherSent=$mostRecentOtherSentAt, myLastSeenAt=$myLastSeenAt")
-
-                    // Guard: only update if someone ELSE sent a message AFTER I last saw AND not already pending
-                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt) {
-                        Log.d(TAG, "🔴 UPDATING lastSeenAt")
-                        viewModelScope.launch {
-                            convRepo.updateMemberLastSeenAtNow(conversationId)
-                        }
-                    }
+                viewModelScope.launch {
+                    convRepo.updateMemberLastSeenAtNow(conversationId)
                 }
                 // Start incremental sync (tied to viewModelScope - cancels when ViewModel dies)
                 // This syncs ONLY new messages (after last Room timestamp), not all 100
@@ -239,7 +225,7 @@ class ConversationViewModel @Inject constructor(
                     messageEntity.toDomain(
                         currentUserId = userId,
                         memberCount = messageEntity.memberIdsAtCreation.size,
-                        memberStatus = emptyMap()  // Status calculated in UI with memberStatusFlow
+                        members = emptyMap()  // Status calculated in UI with members flow
                     )
                 }
             }
@@ -251,9 +237,9 @@ class ConversationViewModel @Inject constructor(
      * Updates independently from messagesPaged for optimal performance.
      * UI recalculates status when this changes (Compose recomposes only affected items).
      */
-    val memberStatusFlow: StateFlow<Map<String, MemberStatus>> =
+    val membersFlow: StateFlow<Map<String, Member>> =
         convRepo.observeConversation(conversationId)
-            .map { it?.memberStatus ?: emptyMap() }
+            .map { it?.members ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
     
     /**

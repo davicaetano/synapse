@@ -9,7 +9,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
-import com.synapse.data.source.firestore.entity.MemberStatus
+import com.synapse.data.source.firestore.entity.Member
 import com.synapse.domain.conversation.ConversationType
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +45,7 @@ class FirestoreConversationDataSource @Inject constructor(
         includesCacheChanges: Boolean = true
     ): Flow<List<ConversationEntity>> = callbackFlow {
         
+        // NOTE: memberIds is maintained by Cloud Function (filters out bots & deleted members)
         val ref = firestore.collection("conversations")
             .whereArrayContains("memberIds", userId)
 
@@ -113,38 +114,41 @@ class FirestoreConversationDataSource @Inject constructor(
     
     /**
      * Parse ConversationEntity from Firestore document.
-     * Handles memberStatus map parsing.
+     * Handles members map parsing.
      */
     private fun parseConversationEntity(doc: DocumentSnapshot): ConversationEntity {
-        // Parse memberStatus map
-        val memberStatusRaw = doc.get("memberStatus") as? Map<*, *>
-        val memberStatus = memberStatusRaw?.mapNotNull { (key, value) ->
+        // Parse members map
+        val membersRaw = doc.get("members") as? Map<*, *>
+        val members = membersRaw?.mapNotNull { (key, value) ->
             val userId = key as? String ?: return@mapNotNull null
-            val statusMap = value as? Map<*, *> ?: return@mapNotNull null
+            val memberMap = value as? Map<*, *> ?: return@mapNotNull null
             
-            val lastSeenAt = statusMap["lastSeenAt"] as? Timestamp
-            val lastReceivedAt = statusMap["lastReceivedAt"] as? Timestamp
-            val lastMessageSentAt = statusMap["lastMessageSentAt"] as? Timestamp
+            val lastSeenAt = memberMap["lastSeenAt"] as? Timestamp ?: return@mapNotNull null
+            val lastReceivedAt = memberMap["lastReceivedAt"] as? Timestamp ?: return@mapNotNull null
+            val lastMessageSentAt = memberMap["lastMessageSentAt"] as? Timestamp ?: return@mapNotNull null
+            val isBot = memberMap["isBot"] as? Boolean ?: false
+            val isAdmin = memberMap["isAdmin"] as? Boolean ?: false
+            val isDeleted = memberMap["isDeleted"] as? Boolean ?: false
             
-            userId to MemberStatus(
+            userId to Member(
                 lastSeenAt = lastSeenAt,
                 lastReceivedAt = lastReceivedAt,
-                lastMessageSentAt = lastMessageSentAt
+                lastMessageSentAt = lastMessageSentAt,
+                isBot = isBot,
+                isAdmin = isAdmin,
+                isDeleted = isDeleted
             )
         }?.toMap() ?: emptyMap()
         
         return ConversationEntity(
             id = doc.id,
-            memberIds = (doc.get("memberIds") as? List<*>)
-                ?.mapNotNull { it as? String } 
-                ?: emptyList(),
             convType = doc.getString("convType") ?: ConversationType.DIRECT.name,
-            lastMessageText = doc.getString("lastMessageText"),
-            updatedAtMs = doc.getLong("updatedAtMs") ?: 0L,
-            createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+            localTimestamp = doc.getTimestamp("localTimestamp") ?: Timestamp.now(),
+            updatedAt = doc.getTimestamp("updatedAt") ?: Timestamp.now(),
+            lastMessageText = doc.getString("lastMessageText") ?: "",
             groupName = doc.getString("groupName"),
             createdBy = doc.getString("createdBy"),
-            memberStatus = memberStatus
+            members = members
         )
     }
     
@@ -176,11 +180,26 @@ class FirestoreConversationDataSource @Inject constructor(
         }
         
         // Create new
+        val now = Timestamp.now()
+        val members = sortedIds.associate { userId ->
+            userId to mapOf(
+                "lastSeenAt" to now,
+                "lastReceivedAt" to now,
+                "lastMessageSentAt" to now,
+                "isBot" to false,
+                "isAdmin" to false,
+                "isDeleted" to false
+            )
+        }
+        
         val data = mapOf(
-            "memberIds" to sortedIds,
             "convType" to ConversationType.DIRECT.name,
-            "createdAtMs" to System.currentTimeMillis(),
-            "updatedAtMs" to System.currentTimeMillis()
+            "localTimestamp" to now,
+            "updatedAt" to now,
+            "lastMessageText" to "",
+            "memberIds" to sortedIds,  // Pre-populate for instant inbox visibility
+            "members" to members
+            // NOTE: memberIds is kept in sync by Cloud Function after creation
         )
         
         return try {
@@ -214,12 +233,27 @@ class FirestoreConversationDataSource @Inject constructor(
         
         // Always create new group (allow multiple groups with same members)
         // Each group is unique by ID - useful for different topics/projects
+        val now = Timestamp.now()
+        val members = sortedIds.associate { userId ->
+            userId to mapOf(
+                "lastSeenAt" to now,
+                "lastReceivedAt" to now,
+                "lastMessageSentAt" to now,
+                "isBot" to false,
+                "isAdmin" to (userId == createdBy),  // Creator is admin
+                "isDeleted" to false
+            )
+        }
+        
         val data = mutableMapOf<String, Any>(
-            "memberIds" to sortedIds,
             "convType" to ConversationType.GROUP.name,
-            "createdBy" to createdBy,  // Store creator as admin
-            "createdAtMs" to System.currentTimeMillis(),
-            "updatedAtMs" to System.currentTimeMillis()
+            "createdBy" to createdBy,
+            "localTimestamp" to now,
+            "updatedAt" to now,
+            "lastMessageText" to "",
+            "memberIds" to sortedIds,  // Pre-populate for instant inbox visibility
+            "members" to members
+            // NOTE: memberIds is kept in sync by Cloud Function after creation
         )
         
         if (groupName != null) {
@@ -253,11 +287,26 @@ class FirestoreConversationDataSource @Inject constructor(
         }
         
         // Create new
+        val now = Timestamp.now()
+        val members = mapOf(
+            userId to mapOf(
+                "lastSeenAt" to now,
+                "lastReceivedAt" to now,
+                "lastMessageSentAt" to now,
+                "isBot" to false,
+                "isAdmin" to true,  // Self conversation - user is admin
+                "isDeleted" to false
+            )
+        )
+        
         val data = mapOf(
-            "memberIds" to listOf(userId),
             "convType" to ConversationType.SELF.name,
-            "createdAtMs" to System.currentTimeMillis(),
-            "updatedAtMs" to System.currentTimeMillis()
+            "localTimestamp" to now,
+            "updatedAt" to now,
+            "lastMessageText" to "",
+            "memberIds" to listOf(userId),  // Pre-populate for instant inbox visibility
+            "members" to members
+            // NOTE: memberIds is kept in sync by Cloud Function after creation
         )
         
         return try {
@@ -279,21 +328,19 @@ class FirestoreConversationDataSource @Inject constructor(
     suspend fun updateConversationMetadata(
         conversationId: String,
         lastMessageText: String,
-        timestamp: Long
+        timestamp: Timestamp
     ) {
-        
         try {
             firestore.collection("conversations")
                 .document(conversationId)
                 .set(
                     mapOf(
                         "lastMessageText" to lastMessageText,
-                        "updatedAtMs" to timestamp
+                        "updatedAt" to timestamp
                     ),
                     SetOptions.merge()
                 )
                 .await()
-            
         } catch (e: Exception) {
             // Log but don't fail - Firestore will cache this and sync when online
         }
@@ -302,15 +349,27 @@ class FirestoreConversationDataSource @Inject constructor(
     /**
      * Add a user to a group conversation.
      */
-    suspend fun addMemberToGroup(conversationId: String, userId: String) {
+    suspend fun addMemberToGroup(conversationId: String, userId: String, isAdmin: Boolean = false) {
         try {
+            val now = Timestamp.now()
             firestore.collection("conversations")
                 .document(conversationId)
-                .update(
+                .set(
                     mapOf(
-                        "memberIds" to FieldValue.arrayUnion(userId),
-                        "updatedAtMs" to System.currentTimeMillis()
-                    )
+                        "members" to mapOf(
+                            userId to mapOf(
+                                "lastSeenAt" to now,
+                                "lastReceivedAt" to now,
+                                "lastMessageSentAt" to now,
+                                "isBot" to false,
+                                "isAdmin" to isAdmin,
+                                "isDeleted" to false
+                            )
+                        ),
+                        "updatedAt" to now
+                        // NOTE: memberIds is auto-synced by Cloud Function
+                    ),
+                    SetOptions.merge()
                 )
                 .await()
         } catch (e: Exception) {
@@ -319,17 +378,22 @@ class FirestoreConversationDataSource @Inject constructor(
     }
     
     /**
-     * Remove a user from a group conversation.
+     * Remove a user from a group conversation (soft delete).
      */
     suspend fun removeMemberFromGroup(conversationId: String, userId: String) {
         try {
             firestore.collection("conversations")
                 .document(conversationId)
-                .update(
+                .set(
                     mapOf(
-                        "memberIds" to FieldValue.arrayRemove(userId),
-                        "updatedAtMs" to System.currentTimeMillis()
-                    )
+                        "members" to mapOf(
+                            userId to mapOf(
+                                "isDeleted" to true
+                            )
+                        ),
+                        "updatedAt" to Timestamp.now()
+                    ),
+                    SetOptions.merge()
                 )
                 .await()
         } catch (e: Exception) {
@@ -344,11 +408,12 @@ class FirestoreConversationDataSource @Inject constructor(
         try {
             firestore.collection("conversations")
                 .document(conversationId)
-                .update(
+                .set(
                     mapOf(
                         "groupName" to groupName,
-                        "updatedAtMs" to System.currentTimeMillis()
-                    )
+                        "updatedAt" to Timestamp.now()
+                    ),
+                    SetOptions.merge()
                 )
                 .await()
             Log.d(TAG, "Group name updated to: $groupName")
@@ -371,7 +436,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 .document(conversationId)
                 .set(
                     mapOf(
-                        "memberStatus" to mapOf(
+                        "members" to mapOf(
                             userId to mapOf(
                                 "lastSeenAt" to FieldValue.serverTimestamp()
                             )
@@ -402,7 +467,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 .document(conversationId)
                 .set(
                     mapOf(
-                        "memberStatus" to mapOf(
+                        "members" to mapOf(
                             userId to mapOf(
                                 "lastReceivedAt" to serverTimestamp
                             )
@@ -432,7 +497,7 @@ class FirestoreConversationDataSource @Inject constructor(
                 .document(conversationId)
                 .set(
                     mapOf(
-                        "memberStatus" to mapOf(
+                        "members" to mapOf(
                             userId to mapOf(
                                 "lastMessageSentAt" to FieldValue.serverTimestamp()
                             )

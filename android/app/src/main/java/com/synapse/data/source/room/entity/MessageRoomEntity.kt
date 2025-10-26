@@ -2,14 +2,15 @@ package com.synapse.data.source.room.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.google.firebase.Timestamp
 import com.synapse.data.source.firestore.entity.MessageEntity
 
 /**
  * Room entity for caching messages locally.
  * Provides instant read performance compared to Firestore deserializing.
  * 
- * Status tracking is now done via conversation.memberStatus timestamps.
- * Old per-message fields (readBy, receivedBy, etc) removed for simplicity.
+ * NOTE: Room stores timestamps as Long (ms) because SQLite doesn't have Timestamp type.
+ * Conversions to/from Firestore Timestamp happen in toEntity() and fromEntity().
  */
 @Entity(tableName = "messages")
 data class MessageRoomEntity(
@@ -17,35 +18,39 @@ data class MessageRoomEntity(
     val conversationId: String,
     val text: String,
     val senderId: String,
-    val createdAtMs: Long,
+    val createdAtMs: Long,  // SQLite: Long ms
     val memberIdsAtCreation: String,  // Stored as comma-separated
-    val serverTimestamp: Long?,
-    val type: String = "text",  // Message type: "text", "AI_SUMMARY"
-    val isDeleted: Boolean = false,  // Soft delete flag
-    val deletedBy: String? = null,  // User who deleted the message
-    val deletedAtMs: Long? = null  // Timestamp of deletion
+    val serverTimestampMs: Long?,  // SQLite: Long ms (nullable for offline)
+    val type: String = "text",
+    val isDeleted: Boolean = false,
+    val sendNotification: Boolean = true,
+    val deletedBy: String? = null,
+    val deletedAtMs: Long? = null  // SQLite: Long ms
 ) {
     /**
      * Convert Room entity back to Firestore entity.
+     * Converts Long ms → Timestamp.
      */
     fun toEntity(): MessageEntity {
         return MessageEntity(
             id = id,
             text = text,
             senderId = senderId,
-            createdAtMs = createdAtMs,
+            localTimestamp = Timestamp(java.util.Date(createdAtMs)),  // Long ms → Timestamp
             memberIdsAtCreation = memberIdsAtCreation.split(",").filter { it.isNotBlank() },
-            serverTimestamp = serverTimestamp,
             type = type,
             isDeleted = isDeleted,
+            sendNotification = sendNotification,
+            serverTimestamp = serverTimestampMs?.let { Timestamp(java.util.Date(it)) },  // Long ms → Timestamp
             deletedBy = deletedBy,
-            deletedAtMs = deletedAtMs
+            deletedAt = deletedAtMs?.let { Timestamp(java.util.Date(it)) }  // Long ms → Timestamp
         )
     }
     
     companion object {
         /**
          * Convert Firestore entity to Room entity.
+         * Converts Timestamp → Long ms.
          */
         fun fromEntity(entity: MessageEntity, conversationId: String): MessageRoomEntity {
             return MessageRoomEntity(
@@ -53,13 +58,14 @@ data class MessageRoomEntity(
                 conversationId = conversationId,
                 text = entity.text,
                 senderId = entity.senderId,
-                createdAtMs = entity.createdAtMs,
+                createdAtMs = entity.localTimestamp.toDate().time,  // Timestamp → Long ms
                 memberIdsAtCreation = entity.memberIdsAtCreation.joinToString(","),
-                serverTimestamp = entity.serverTimestamp,
+                serverTimestampMs = entity.serverTimestamp?.toDate()?.time,  // Timestamp → Long ms
                 type = entity.type,
                 isDeleted = entity.isDeleted,
+                sendNotification = entity.sendNotification,
                 deletedBy = entity.deletedBy,
-                deletedAtMs = entity.deletedAtMs
+                deletedAtMs = entity.deletedAt?.toDate()?.time  // Timestamp → Long ms
             )
         }
     }

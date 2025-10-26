@@ -31,7 +31,7 @@ class AddMembersViewModel @Inject constructor(
         _selectedUserIds,
         _searchQuery
     ) { conversation, allUsers, selected, query ->
-        val currentMemberIds = conversation?.memberIds?.toSet() ?: emptySet()
+        val currentMemberIds = conversation?.members?.keys ?: emptySet()
         
         // Filter: exclude current members and apply search
         val filteredUsers = allUsers

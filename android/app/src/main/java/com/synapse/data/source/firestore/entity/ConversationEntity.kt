@@ -3,13 +3,16 @@ package com.synapse.data.source.firestore.entity
 import com.google.firebase.Timestamp
 
 /**
- * Member status in a conversation.
- * Tracks when a user last saw, received, and sent messages.
+ * Member in a conversation.
+ * Tracks status, permissions, and activity timestamps.
  */
-data class MemberStatus(
-    val lastSeenAt: Timestamp? = null,         // Server timestamp when user last viewed conversation
-    val lastReceivedAt: Timestamp? = null,     // Server timestamp when user last received messages
-    val lastMessageSentAt: Timestamp? = null   // Server timestamp when user last sent a message
+data class Member(
+    val lastSeenAt: Timestamp,
+    val lastReceivedAt: Timestamp,
+    val lastMessageSentAt: Timestamp,
+    val isBot: Boolean,
+    val isAdmin: Boolean,
+    val isDeleted: Boolean
 )
 
 /**
@@ -18,13 +21,12 @@ data class MemberStatus(
  */
 data class ConversationEntity(
     val id: String,
-    val memberIds: List<String>,
     val convType: String,
-    val lastMessageText: String?,
-    val updatedAtMs: Long,
-    val createdAtMs: Long,
-    val groupName: String? = null,
-    val createdBy: String? = null,  // Creator/admin user ID (only for GROUP conversations)
-    val memberStatus: Map<String, MemberStatus> = emptyMap()  // Per-user read/received timestamps
+    val localTimestamp: Timestamp,
+    val updatedAt: Timestamp,
+    val lastMessageText: String,
+    val groupName: String? = null,  // Optional: Only for GROUP type
+    val createdBy: String? = null,  // Optional: Only for GROUP type
+    val members: Map<String, Member>  // Replaces memberIds + memberStatus (removes duplication)
 )
 

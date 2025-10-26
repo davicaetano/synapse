@@ -1,7 +1,7 @@
 package com.synapse.data.mapper
 
 import com.synapse.data.source.firestore.entity.ConversationEntity
-import com.synapse.data.source.firestore.entity.MemberStatus
+import com.synapse.data.source.firestore.entity.Member
 import com.synapse.data.source.firestore.entity.MessageEntity
 import com.synapse.data.source.firestore.entity.UserEntity
 import com.synapse.data.source.realtime.entity.PresenceEntity
@@ -64,7 +64,7 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
     return ConversationSummary(
         id = this.id,
         lastMessageText = this.lastMessageText,
-        updatedAtMs = this.updatedAtMs,
+        updatedAtMs = this.updatedAt.toDate().time,
         members = members,
         convType = try {
             ConversationType.valueOf(this.convType)
@@ -80,31 +80,33 @@ fun ConversationEntity.toDomain(members: List<User>): ConversationSummary {
 fun MessageEntity.toDomain(
     currentUserId: String?,
     memberCount: Int,
-    memberStatus: Map<String, MemberStatus>
+    members: Map<String, Member>
 ): Message {
-    // Calculate status based on memberStatus timestamps (conversation-level tracking)
+    // Calculate status based on members timestamps (conversation-level tracking)
     // Get all other members (exclude sender)
     val otherMembers = memberIdsAtCreation.filter { it != senderId }
     
+    val serverTimestampMs = serverTimestamp?.toDate()?.time
+    
     val status = when {
         // PENDING: serverTimestamp is null (never reached server)
-        serverTimestamp == null -> MessageStatus.PENDING
+        serverTimestampMs == null -> MessageStatus.PENDING
         
         // For single-user conversations (SELF), always mark as READ
         otherMembers.isEmpty() -> MessageStatus.READ
         
         // SENT: No other members received yet
         otherMembers.all { userId ->
-            val userStatus = memberStatus[userId]
-            val lastReceivedMs = userStatus?.lastReceivedAt?.toDate()?.time
-            lastReceivedMs == null || serverTimestamp!! > lastReceivedMs
+            val member = members[userId]
+            val lastReceivedMs = member?.lastReceivedAt?.toDate()?.time
+            lastReceivedMs == null || serverTimestampMs > lastReceivedMs
         } -> MessageStatus.SENT
         
         // READ: All other members have seen this message
         otherMembers.all { userId ->
-            val userStatus = memberStatus[userId]
-            val lastSeenMs = userStatus?.lastSeenAt?.toDate()?.time
-            lastSeenMs != null && serverTimestamp!! <= lastSeenMs
+            val member = members[userId]
+            val lastSeenMs = member?.lastSeenAt?.toDate()?.time
+            lastSeenMs != null && serverTimestampMs <= lastSeenMs
         } -> MessageStatus.READ
         
         // DELIVERED: At least one other member received but not everyone read yet
@@ -115,7 +117,7 @@ fun MessageEntity.toDomain(
         id = this.id,
         text = this.text,
         senderId = this.senderId,
-        createdAtMs = this.createdAtMs,
+        createdAtMs = this.localTimestamp.toDate().time,
         isMine = (currentUserId != null && this.senderId == currentUserId),
         receivedBy = emptyList(),  // Not used anymore
         readBy = emptyList(),  // Not used anymore
@@ -123,7 +125,7 @@ fun MessageEntity.toDomain(
         status = status,
         type = this.type,
         memberIdsAtCreation = this.memberIdsAtCreation,
-        serverTimestamp = this.serverTimestamp  // Already Long?, no need to convert
+        serverTimestamp = serverTimestampMs
     )
 }
 

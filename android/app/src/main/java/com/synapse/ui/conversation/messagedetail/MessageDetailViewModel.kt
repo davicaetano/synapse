@@ -38,26 +38,33 @@ class MessageDetailViewModel @Inject constructor(
                             if (message == null) {
                                 flowOf(MessageDetailUIState(isLoading = false))
                             } else {
+                                // Get active member IDs (exclude deleted and bots)
+                                val activeMemberIds = conversation.members
+                                    .filterValues { !it.isDeleted && !it.isBot }
+                                    .keys
+                                    .toList()
+                                
                                 // Get users to map IDs to User objects
-                                convRepo.observeUsers(conversation.memberIds)
+                                convRepo.observeUsers(activeMemberIds)
                                     .map { userEntities ->
                                         val usersMap = userEntities.map { it.toDomain(null, it.id == userId) }
                                             .associateBy { it.id }
                                         
                                         val sender = usersMap[message.senderId]
-                                        val serverTimestamp = message.serverTimestamp ?: 0L
-                                        val memberStatus = conversation.memberStatus
+                                        val serverTimestamp = message.serverTimestamp?.toDate()?.time ?: 0L
+                                        val members = conversation.members
                                         
                                         // Calculate status for each member (except sender)
-                                        val memberStatuses = conversation.memberIds
+                                        val memberStatuses = activeMemberIds
                                             .filter { it != message.senderId }  // Exclude sender
                                             .mapNotNull { memberId ->
                                                 val user = usersMap[memberId] ?: return@mapNotNull null
+                                                val member = members[memberId]
                                                 
                                                 val status = calculateMemberStatus(
                                                     serverTimestamp = serverTimestamp,
-                                                    lastReceivedAt = memberStatus[memberId]?.lastReceivedAt?.toDate()?.time,
-                                                    lastSeenAt = memberStatus[memberId]?.lastSeenAt?.toDate()?.time
+                                                    lastReceivedAt = member?.lastReceivedAt?.toDate()?.time,
+                                                    lastSeenAt = member?.lastSeenAt?.toDate()?.time
                                                 )
                                                 
                                                 MemberDeliveryStatus(user = user, status = status)
@@ -68,7 +75,7 @@ class MessageDetailViewModel @Inject constructor(
                                             text = message.text,
                                             senderId = message.senderId,
                                             senderName = sender?.displayName ?: "Unknown",
-                                            sentAt = message.createdAtMs,
+                                            sentAt = message.localTimestamp.toDate().time,
                                             serverTimestamp = serverTimestamp,
                                             memberStatuses = memberStatuses,
                                             isLoading = false

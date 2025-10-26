@@ -1,6 +1,7 @@
 package com.synapse.data.source.firestore
 
 import android.util.Log
+import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -39,18 +40,18 @@ class FirestoreMessageDataSource @Inject constructor(
      * @param conversationId The conversation ID to listen to
      * @param afterTimestamp Optional timestamp to only fetch messages created after this time (incremental sync)
      */
-    fun listenMessages(conversationId: String, afterTimestamp: Long? = null): Flow<List<MessageEntity>> = callbackFlow {
+    fun listenMessages(conversationId: String, afterTimestamp: Timestamp? = null): Flow<List<MessageEntity>> = callbackFlow {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "⏱️ listenMessages START: $conversationId (afterTimestamp=$afterTimestamp)")
         
         var query = firestore.collection("conversations")
             .document(conversationId)
             .collection("messages")
-            .orderBy("createdAtMs", Query.Direction.DESCENDING)
+            .orderBy("localTimestamp", Query.Direction.DESCENDING)
         
         // If afterTimestamp provided, only fetch new messages (incremental sync)
         if (afterTimestamp != null) {
-            query = query.whereGreaterThan("createdAtMs", afterTimestamp)
+            query = query.whereGreaterThan("localTimestamp", afterTimestamp)
             Log.d(TAG, "   🔄 Incremental sync: fetching messages after $afterTimestamp")
         }
         
@@ -75,15 +76,16 @@ class FirestoreMessageDataSource @Inject constructor(
                         id = doc.id,
                         text = doc.getString("text") ?: "",
                         senderId = doc.getString("senderId") ?: "",
-                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                        localTimestamp = doc.getTimestamp("localTimestamp") ?: Timestamp.now(),
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
-                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
                         type = doc.getString("type") ?: "text",
                         isDeleted = false,  // Already filtered above
+                        sendNotification = doc.getBoolean("sendNotification") ?: true,
+                        serverTimestamp = doc.getTimestamp("serverTimestamp"),
                         deletedBy = null,
-                        deletedAtMs = null
+                        deletedAt = null
                     )
                 } catch (e: Exception) {
                     null
@@ -146,15 +148,16 @@ class FirestoreMessageDataSource @Inject constructor(
                     id = snapshot.id,
                     text = snapshot.getString("text") ?: "",
                     senderId = snapshot.getString("senderId") ?: "",
-                    createdAtMs = snapshot.getLong("createdAtMs") ?: 0L,
+                    localTimestamp = snapshot.getTimestamp("localTimestamp") ?: Timestamp.now(),
                     memberIdsAtCreation = (snapshot.get("memberIdsAtCreation") as? List<*>)
                         ?.mapNotNull { it as? String } 
                         ?: emptyList(),
-                    serverTimestamp = snapshot.getTimestamp("serverTimestamp")?.toDate()?.time,
                     type = snapshot.getString("type") ?: "text",
                     isDeleted = false,
+                    sendNotification = snapshot.getBoolean("sendNotification") ?: true,
+                    serverTimestamp = snapshot.getTimestamp("serverTimestamp"),
                     deletedBy = null,
-                    deletedAtMs = null
+                    deletedAt = null
                 )
                 
                 trySend(message)
@@ -180,7 +183,7 @@ class FirestoreMessageDataSource @Inject constructor(
      */
     suspend fun fetchOlderMessages(
         conversationId: String,
-        beforeTimestamp: Long,
+        beforeTimestamp: Timestamp,
         limit: Int = 200
     ): List<MessageEntity> {
         val startTime = System.currentTimeMillis()
@@ -190,8 +193,8 @@ class FirestoreMessageDataSource @Inject constructor(
             val snapshot = firestore.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
-                .orderBy("createdAtMs", Query.Direction.DESCENDING)
-                .whereLessThan("createdAtMs", beforeTimestamp)
+                .orderBy("localTimestamp", Query.Direction.DESCENDING)
+                .whereLessThan("localTimestamp", beforeTimestamp)
                 .limit(limit.toLong())
                 .get()
                 .await()
@@ -206,15 +209,16 @@ class FirestoreMessageDataSource @Inject constructor(
                         id = doc.id,
                         text = doc.getString("text") ?: "",
                         senderId = doc.getString("senderId") ?: "",
-                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                        localTimestamp = doc.getTimestamp("localTimestamp") ?: Timestamp.now(),
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
-                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
                         type = doc.getString("type") ?: "text",
                         isDeleted = false,
+                        sendNotification = doc.getBoolean("sendNotification") ?: true,
+                        serverTimestamp = doc.getTimestamp("serverTimestamp"),
                         deletedBy = null,
-                        deletedAtMs = null
+                        deletedAt = null
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error parsing message: ${e.message}")
@@ -252,7 +256,7 @@ class FirestoreMessageDataSource @Inject constructor(
             val snapshot = firestore.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
-                .orderBy("createdAtMs", Query.Direction.DESCENDING)
+                .orderBy("localTimestamp", Query.Direction.DESCENDING)
                 .limit(limit.toLong())
                 .get()
                 .await()
@@ -267,15 +271,16 @@ class FirestoreMessageDataSource @Inject constructor(
                         id = doc.id,
                         text = doc.getString("text") ?: "",
                         senderId = doc.getString("senderId") ?: "",
-                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                        localTimestamp = doc.getTimestamp("localTimestamp") ?: Timestamp.now(),
                         memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
                             ?.mapNotNull { it as? String } 
                             ?: emptyList(),
-                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
                         type = doc.getString("type") ?: "text",
                         isDeleted = false,
+                        sendNotification = doc.getBoolean("sendNotification") ?: true,
+                        serverTimestamp = doc.getTimestamp("serverTimestamp"),
                         deletedBy = null,
-                        deletedAtMs = null
+                        deletedAt = null
                     )
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error parsing message: ${e.message}")
@@ -308,17 +313,17 @@ class FirestoreMessageDataSource @Inject constructor(
     suspend fun getUnreadCount(
         conversationId: String,
         userId: String,
-        lastSeenAtMs: Long
+        lastSeenAt: Timestamp
     ): Int {
         val startTime = System.currentTimeMillis()
-        Log.d(TAG, "🔢 Counting unread for conv=${conversationId.takeLast(6)}, userId=${userId.takeLast(6)}, lastSeenAtMs=$lastSeenAtMs")
+        Log.d(TAG, "🔢 Counting unread for conv=${conversationId.takeLast(6)}, userId=${userId.takeLast(6)}, lastSeenAt=$lastSeenAt")
         
         return try {
             val snapshot = firestore.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
                 .whereEqualTo("isDeleted", false)     // Only non-deleted
-                .whereGreaterThan("createdAtMs", lastSeenAtMs)  // After last seen
+                .whereGreaterThan("serverTimestamp", lastSeenAt)  // ✅ FIXED: Use serverTimestamp (consistent with checkmarks)
                 .whereNotEqualTo("senderId", userId)  // Exclude own messages (last to match enabled index)
                 .limit(100)  // Only need to count up to 100 (UI shows "99+")
                 .get()
@@ -331,7 +336,7 @@ class FirestoreMessageDataSource @Inject constructor(
             if (snapshot.documents.isNotEmpty()) {
                 Log.d(TAG, "   📄 Sample messages:")
                 snapshot.documents.take(3).forEach { doc ->
-                    Log.d(TAG, "      - senderId=${doc.getString("senderId")?.takeLast(6)}, createdAt=${doc.getLong("createdAtMs")}, deleted=${doc.getBoolean("isDeleted")}")
+                    Log.d(TAG, "      - senderId=${doc.getString("senderId")?.takeLast(6)}, localTimestamp=${doc.getTimestamp("localTimestamp")}, deleted=${doc.getBoolean("isDeleted")}")
                 }
             }
             
@@ -365,20 +370,20 @@ class FirestoreMessageDataSource @Inject constructor(
         text: String,
         memberIds: List<String>,
         senderId: String,
-        createdAtMs: Long = System.currentTimeMillis(),
-        sendNotification: Boolean = true  // Default: send notifications
+        localTimestamp: Timestamp = Timestamp.now(),
+        sendNotification: Boolean = true
     ): String? {
         val startTime = System.currentTimeMillis()
         
         val messageData = hashMapOf(
             "text" to text,
-            "senderId" to senderId,  // Use provided sender ID
-            "createdAtMs" to createdAtMs,  // Use provided timestamp (0 for welcome messages)
+            "senderId" to senderId,
+            "localTimestamp" to localTimestamp,
             "memberIdsAtCreation" to memberIds,
             "serverTimestamp" to FieldValue.serverTimestamp(),
-            "type" to "bot",  // Message type (bot welcome message)
-            "sendNotification" to sendNotification,  // Control notification sending
-            "isDeleted" to false  // Default: not deleted
+            "type" to "bot",
+            "sendNotification" to sendNotification,
+            "isDeleted" to false
         )
         
         return try {
@@ -426,11 +431,12 @@ class FirestoreMessageDataSource @Inject constructor(
         val messageData = hashMapOf(
             "text" to text,
             "senderId" to userId,
-            "createdAtMs" to System.currentTimeMillis(),
-            "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
-            "serverTimestamp" to FieldValue.serverTimestamp(),  // Server assigns actual timestamp
-            "type" to "text",  // Message type (normal user message)
-            "isDeleted" to false  // Default: not deleted
+            "localTimestamp" to Timestamp.now(),
+            "memberIdsAtCreation" to memberIdsAtCreation,
+            "serverTimestamp" to FieldValue.serverTimestamp(),
+            "type" to "text",
+            "sendNotification" to true,
+            "isDeleted" to false
         )
         
         return try {
@@ -475,7 +481,7 @@ class FirestoreMessageDataSource @Inject constructor(
             val memberIdsAtCreation = memberIds
             
             val batch = firestore.batch()
-            val timestamp = System.currentTimeMillis()
+            val baseTime = System.currentTimeMillis()
             
             // Create a message document for each message text
             messages.forEachIndexed { index, text ->
@@ -484,15 +490,19 @@ class FirestoreMessageDataSource @Inject constructor(
                     .collection("messages")
                     .document()  // Auto-generate ID
                 
+                // Offset each message by 1ms to guarantee ordering
+                val localTimestamp = Timestamp(java.util.Date(baseTime + index))
+                
                 val messageData = hashMapOf(
                     "id" to messageRef.id,
                     "text" to text,
                     "senderId" to userId,
-                    "createdAtMs" to (timestamp + index), // Slightly offset to maintain order
-                    "memberIdsAtCreation" to memberIdsAtCreation,  // Snapshot of group members
-                    "serverTimestamp" to FieldValue.serverTimestamp(), // Server assigns actual timestamp
-                    "type" to "text",  // Message type (normal user message)
-                    "isDeleted" to false  // Default: not deleted
+                    "localTimestamp" to localTimestamp,  // Offset: +0ms, +1ms, +2ms...
+                    "memberIdsAtCreation" to memberIdsAtCreation,
+                    "serverTimestamp" to FieldValue.serverTimestamp(),
+                    "type" to "text",
+                    "sendNotification" to true,
+                    "isDeleted" to false
                 )
                 
                 batch.set(messageRef, messageData)
@@ -512,7 +522,7 @@ class FirestoreMessageDataSource @Inject constructor(
      * Delete a message (soft delete).
      * Marks the message as deleted by updating isDeleted flag in Firestore.
      */
-    suspend fun deleteMessage(conversationId: String, messageId: String, deletedBy: String, timestamp: Long) {
+    suspend fun deleteMessage(conversationId: String, messageId: String, deletedBy: String, deletedAt: Timestamp) {
         try {
             val messageRef = firestore.collection("conversations")
                 .document(conversationId)
@@ -522,7 +532,7 @@ class FirestoreMessageDataSource @Inject constructor(
             val updates = hashMapOf<String, Any>(
                 "isDeleted" to true,
                 "deletedBy" to deletedBy,
-                "deletedAtMs" to timestamp
+                "deletedAt" to deletedAt
             )
             
             messageRef.update(updates).await()

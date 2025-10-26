@@ -34,7 +34,7 @@ fun buildInboxUIState(
     // Transform to UI items (unreadCounts comes from reactive Flow)
     val items = conversations.mapNotNull { conv ->
         buildInboxItem(userId, conv, usersMap, presence, typing, unreadCounts)
-    }.sortedByDescending { it.updatedAtMs }
+    }.sortedByDescending { it.updatedAt.toDate().time }
     
     return InboxUIState(items = items, isLoading = false, isConnected = isConnected)
 }
@@ -59,7 +59,10 @@ fun buildInboxItem(
     }
     
     // Build members with presence
-    val members = conv.memberIds.mapNotNull { memberId ->
+    val members = conv.members
+        .filter { !it.value.isAdmin && !it.value.isBot && !it.value.isDeleted }
+        .map { it.key }
+        .mapNotNull { memberId ->
         val userEntity = usersMap[memberId]
         val presenceEntity = presence[memberId]
         userEntity?.toDomain(
@@ -84,8 +87,8 @@ fun buildInboxItem(
             id = conv.id,
             title = title,
             lastMessageText = conv.lastMessageText,
-            updatedAtMs = conv.updatedAtMs,
-            displayTime = formatTime(conv.updatedAtMs),
+            updatedAt = conv.updatedAt,
+            displayTime = formatTime(conv.updatedAt),
             convType = ConversationType.SELF,
             unreadCount = unreadCount,
             typingText = typingText
@@ -97,8 +100,8 @@ fun buildInboxItem(
                     id = conv.id,
                     title = title,
                     lastMessageText = conv.lastMessageText,
-                    updatedAtMs = conv.updatedAtMs,
-                    displayTime = formatTime(conv.updatedAtMs),
+                    updatedAt = conv.updatedAt,
+                    displayTime = formatTime(conv.updatedAt),
                     convType = ConversationType.DIRECT,
                     otherUser = otherUser,
                     unreadCount = unreadCount,
@@ -112,8 +115,8 @@ fun buildInboxItem(
             id = conv.id,
             title = title,
             lastMessageText = conv.lastMessageText,
-            updatedAtMs = conv.updatedAtMs,
-            displayTime = formatTime(conv.updatedAtMs),
+            updatedAt = conv.updatedAt,
+            displayTime = formatTime(conv.updatedAt),
             convType = ConversationType.GROUP,
             members = members,
             groupName = conv.groupName,
@@ -124,9 +127,8 @@ fun buildInboxItem(
     }
 }
 
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return ""
-    val date = java.util.Date(ms)
+private fun formatTime(timestamp: com.google.firebase.Timestamp): String {
+    val date = timestamp.toDate()
     val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
     return fmt.format(date)
 }

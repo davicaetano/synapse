@@ -44,12 +44,13 @@ class RemoveMembersViewModel @Inject constructor(
     
     // Observe members separately
     val members: StateFlow<List<com.synapse.domain.user.User>> = run {
+
         convRepo.observeConversation(conversationId)
             .flatMapLatest { conversation ->
-                if (conversation == null || conversation.memberIds.isEmpty()) {
+                if (conversation == null || conversation.members.filter { !it.value.isBot && !it.value.isAdmin && !it.value.isDeleted }.isEmpty()) {
                     flowOf(emptyList())
                 } else {
-                    convRepo.observeUsers(conversation.memberIds)
+                    convRepo.observeUsers(conversation.members.filter { !it.value.isBot && !it.value.isAdmin && !it.value.isDeleted }.map { it.key })
                         .map { userEntities ->
                             userEntities.map { it.toDomain(presence = null, isMyself = it.id == currentUserId) }
                         }

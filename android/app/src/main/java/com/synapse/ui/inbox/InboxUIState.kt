@@ -1,5 +1,6 @@
 package com.synapse.ui.inbox
 
+import com.google.firebase.Timestamp
 import com.synapse.domain.user.User
 import com.synapse.domain.conversation.ConversationType
 
@@ -7,7 +8,7 @@ sealed class InboxItem {
     abstract val id: String
     abstract val title: String
     abstract val lastMessageText: String?
-    abstract val updatedAtMs: Long
+    abstract val updatedAt: Timestamp
     abstract val displayTime: String
     abstract val convType: ConversationType
     abstract val unreadCount: Int
@@ -17,7 +18,7 @@ sealed class InboxItem {
         override val id: String,
         override val title: String,
         override val lastMessageText: String?,
-        override val updatedAtMs: Long,
+        override val updatedAt: Timestamp,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.SELF,
         override val unreadCount: Int = 0,
@@ -28,7 +29,7 @@ sealed class InboxItem {
         override val id: String,
         override val title: String,
         override val lastMessageText: String?,
-        override val updatedAtMs: Long,
+        override val updatedAt: Timestamp,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.DIRECT,
         val otherUser: User, // Other user for direct conversations
@@ -40,7 +41,7 @@ sealed class InboxItem {
         override val id: String,
         override val title: String,
         override val lastMessageText: String?,
-        override val updatedAtMs: Long,
+        override val updatedAt: Timestamp,
         override val displayTime: String,
         override val convType: ConversationType = ConversationType.GROUP,
         val members: List<User>,

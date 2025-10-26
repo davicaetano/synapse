@@ -45,25 +45,45 @@ async function createGroup() {
 
     console.log('\n📝 Creating group "CryptoProject"...');
 
-    // Create group conversation
-    const groupData = {
-      convType: 'GROUP',  // ✅ FIXED: Was 'type: group'
-      groupName: 'CryptoProject',
-      memberIds: memberIds,
-      createdBy: memberIds[0], // First user is the creator
-      createdAtMs: Date.now(),
-      updatedAtMs: Date.now(),
-      lastMessageText: '',
-      memberStatus: {}
-    };
-
-    // Initialize memberStatus for each member
-    memberIds.forEach(memberId => {
-      groupData.memberStatus[memberId] = {
-        lastSeenAt: 0,
-        lastReceivedAt: 0
+    // Create group conversation with new schema
+    const now = admin.firestore.Timestamp.now();
+    const SYNAPSE_BOT_ID = 'synapse-bot-system';
+    
+    // Build members map with real members + bot
+    const members = {};
+    
+    // Add real members (first one is admin/creator)
+    memberIds.forEach((id, index) => {
+      members[id] = {
+        lastSeenAt: now,
+        lastReceivedAt: now,
+        lastMessageSentAt: now,
+        isBot: false,
+        isAdmin: index === 0,  // First member is admin/creator
+        isDeleted: false
       };
     });
+    
+    // Add bot to members (isBot: true, NOT in memberIds array)
+    members[SYNAPSE_BOT_ID] = {
+      lastSeenAt: now,
+      lastReceivedAt: now,
+      lastMessageSentAt: now,
+      isBot: true,
+      isAdmin: false,
+      isDeleted: false
+    };
+
+    const groupData = {
+      convType: 'GROUP',
+      groupName: 'CryptoProject',
+      memberIds: memberIds,  // Pre-populated for instant inbox visibility
+      createdBy: memberIds[0],  // First user is the creator
+      localTimestamp: now,  // Using Timestamp format (not milliseconds)
+      updatedAt: now,
+      lastMessageText: '',
+      members: members  // NEW: Unified members map with isBot, isAdmin, isDeleted
+    };
 
     const groupRef = await db.collection('conversations').add(groupData);
 
