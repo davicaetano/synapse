@@ -420,7 +420,10 @@ fun ConversationScreen(
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 
                                 // Recalculate status with current members for real-time checkmarks
-                                val currentStatus = m.recalculateStatus(members)
+                                // rememberSaveable to cache and avoid recalculation on every recomposition
+                                val currentStatus = rememberSaveable(m.id, members) {
+                                    m.recalculateStatus(members)
+                                }
                                 
                                 MessageBubble(
                                     text = m.text,
@@ -455,7 +458,10 @@ fun ConversationScreen(
                                                     searchState.results.getOrNull(searchState.currentIndex) == m.id
                                 
                                 // Recalculate status with current members for real-time checkmarks
-                                val currentStatus = m.recalculateStatus(members)
+                                // rememberSaveable to cache and avoid recalculation on every recomposition
+                                val currentStatus = rememberSaveable(m.id, members) {
+                                    m.recalculateStatus(members)
+                                }
                                 
                                 MessageBubble(
                                     text = m.text,
