@@ -63,43 +63,34 @@ async def track_decisions(
         # Calculate processing time
         processing_time = int((time.time() - start_time) * 1000)
         
-        # Format decisions as text
+        # Format decisions as text (ULTRA compact)
         if len(decisions) == 0:
-            decisions_text = "📋 **Decision Tracking**\n\nNo decisions found in this conversation."
+            decisions_text = "📋 **Decision Tracking**\n\nNo decisions found."
         else:
-            decisions_text = f"📋 **Decision Tracking**\n\nFound {len(decisions)} decision(s):\n\n"
+            decisions_text = f"📋 **Decision Tracking** ({len(decisions)})\n\n"
             
-            for i, decision in enumerate(decisions[:10], 1):  # Show top 10
-                # Confidence emoji
-                confidence_emoji = "✅" if decision.confidence >= 0.8 else "⚠️" if decision.confidence >= 0.5 else "❓"
-                
-                decisions_text += f"{i}. {confidence_emoji} **{decision.decision}**\n"
-                decisions_text += f"   👥 Decided by: {', '.join(decision.decided_by)}\n"
-                decisions_text += f"   🕐 When: {decision.timestamp}\n"
-                decisions_text += f"   📊 Confidence: {int(decision.confidence * 100)}%\n"
-                
-                # Add context (truncated)
-                if decision.context:
-                    context_preview = decision.context[:100] + "..." if len(decision.context) > 100 else decision.context
-                    decisions_text += f"   💬 Context: \"{context_preview}\"\n"
-                
-                decisions_text += "\n"
+            # TOP 3 only for speed
+            for i, decision in enumerate(decisions[:3], 1):
+                decisions_text += f"{i}. **{decision.decision}**\n"
+                decisions_text += f"   👥 {', '.join(decision.decided_by)} • {decision.timestamp}\n\n"
         
         # Add metadata footer
         if request.dev_summary:
             decisions_text += f"\n_({len(messages)} messages analyzed • {len(decisions)} decisions • {processing_time}ms • API v{API_VERSION})_"
         
-        # Create AI decisions message in Firestore
+        # Create AI decisions message in Firestore (using ai_summary type for Android compatibility)
         message_id = await firebase_service.create_ai_message(
             conversation_id=request.conversation_id,
             text=decisions_text,
-            message_type="ai_decisions",
-            generated_by_user_id=user_id,
+            message_type="ai_summary",  # Use ai_summary (Android supports this)
             member_ids=member_ids,
+            send_notification=False,
             metadata={
+                "generatedBy": user_id,
                 "messageCount": len(messages),
                 "decisionsCount": len(decisions),
-                "aiGenerated": True
+                "aiGenerated": True,
+                "feature": "decision_tracking"  # Track which AI feature generated this
             }
         )
         
@@ -127,10 +118,12 @@ The decision tracking failed with the following error:
 
 Please try again or contact support if the issue persists."""
             
-            await firebase_service.create_error_message(
+            await firebase_service.create_ai_message(
                 conversation_id=request.conversation_id,
-                error_text=error_text,
-                member_ids=member_ids
+                text=error_text,
+                message_type='ai_error',
+                member_ids=member_ids,
+                send_notification=True  # Errors need notifications
             )
         except Exception as firestore_error:
             print(f"Failed to write error message to Firestore: {firestore_error}")

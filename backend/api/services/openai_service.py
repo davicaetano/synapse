@@ -221,49 +221,45 @@ Respond in JSON format:
 async def track_decisions(messages: List[Message]) -> List[Decision]:
     """
     Identify decisions made in conversation using LangChain
+    ULTRA OPTIMIZED for speed: ~2-3s response time
     """
+    # Simplified format - no MSG_ID (saves tokens)
     conversation_text = "\n".join([
-        f"[MSG_ID:{msg.id}] [{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
+        f"[{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
         for msg in messages
     ])
     
-    # Create prompt template
+    # ULTRA simplified prompt (minimal instructions)
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert at identifying decisions made in team conversations."),
-        ("user", """Look for:
-- Explicit decisions ("we decided to...", "let's go with...")
-- Agreements ("sounds good", "agreed", "👍")
-- Consensus ("everyone okay with...?", "yes", "approved")
-- Resolutions ("we'll do X", "final decision is...")
+        ("system", "Extract decisions from conversation. BE BRIEF."),
+        ("user", """Find decisions:
+- "we decided", "let's go with", "agreed", "approved"
 
-Conversation:
 {conversation}
 
-For each decision, extract:
-- decision: clear statement of what was decided
-- decided_by: list of people who agreed (names)
-- timestamp: when it was decided
-- confidence: 0.0 to 1.0 (how certain this is a decision)
-- context: relevant surrounding messages
-- message_ids: array of MSG_IDs involved
+Extract TOP 3 ONLY:
+- decision (1 sentence)
+- decided_by (names)
+- timestamp (time)
 
-Respond in JSON format:
+JSON:
 {{
     "decisions": [
         {{
-            "decision": "decision statement",
-            "decided_by": ["name1", "name2"],
-            "timestamp": "time",
-            "confidence": 0.85,
-            "context": "surrounding text",
-            "message_ids": ["MSG_ID1", "MSG_ID2"]
+            "decision": "Use PostgreSQL",
+            "decided_by": ["Sarah", "Alex"],
+            "timestamp": "14:30"
         }}
     ]
 }}""")
     ])
     
-    # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
+    # AGGRESSIVE limits for speed
+    llm_low_temp = ChatOpenAI(
+        model="gpt-3.5-turbo", 
+        temperature=0.1,  # Lower = faster, more deterministic
+        max_tokens=300    # Very limited output
+    )
     parser = JsonOutputParser()
     chain = prompt | llm_low_temp | parser
     
@@ -277,9 +273,9 @@ Respond in JSON format:
             decision=item["decision"],
             decided_by=item["decided_by"],
             timestamp=item["timestamp"],
-            confidence=item["confidence"],
-            context=item["context"],
-            message_ids=item["message_ids"]
+            confidence=0.85,  # Fixed confidence
+            context="",  # No rationale
+            message_ids=[]
         ))
     
     return decisions

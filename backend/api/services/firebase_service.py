@@ -189,125 +189,36 @@ async def get_message_by_id(conversation_id: str, message_id: str) -> Optional[M
         print(f"❌ Error fetching message: {e}")
         return None
 
-async def create_ai_summary_message(
-    conversation_id: str,
-    summary_text: str,
-    generated_by_user_id: str,
-    member_ids: List[str],
-    message_count: int,
-    custom_instructions: Optional[str] = None
-) -> str:
-    """
-    Create an AI summary message in Firestore
-    Returns the created message ID
-    """
-    try:
-        from google.cloud.firestore import SERVER_TIMESTAMP
-        
-        # Create message document
-        messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
-        message_ref = messages_ref.document()  # Auto-generate ID
-        
-        message_data = {
-            'id': message_ref.id,
-            'text': summary_text,
-            'senderId': 'synapse-bot-system',  # Bot ID for identification
-            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
-            'memberIdsAtCreation': member_ids,
-            'serverTimestamp': SERVER_TIMESTAMP,
-            'type': 'ai_summary',  # AI summary message type (special rendering in Android)
-            'sendNotification': False,  # Don't send push notification for summaries
-            'isDeleted': False,
-            'metadata': {
-                'generatedBy': generated_by_user_id,
-                'messageCount': message_count,
-                'customInstructions': custom_instructions or '',
-                'aiGenerated': True  # Mark as AI-generated for future features
-            }
-        }
-        
-        message_ref.set(message_data)
-        
-        # Update conversation metadata AND bot's lastMessageSentAt (merge to create if not exists)
-        conv_ref = db.collection('conversations').document(conversation_id)
-        conv_ref.set({
-            'lastMessageText': '🤖 AI Summary generated',
-            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
-            'members': {
-                'synapse-bot-system': {
-                    'lastMessageSentAt': SERVER_TIMESTAMP
-                }
-            }
-        }, merge=True)
-        
-        print(f"✅ Created AI summary message: {message_ref.id}")
-        return message_ref.id
-    
-    except Exception as e:
-        print(f"❌ Error creating AI summary message: {e}")
-        raise
-
 async def create_ai_message(
     conversation_id: str,
     text: str,
     message_type: str,
-    generated_by_user_id: str,
     member_ids: List[str],
-    metadata: dict = None
+    send_notification: bool = False,
+    metadata: Optional[dict] = None
 ) -> str:
     """
-    Generic method to create any type of AI message in Firestore
-    Supports: ai_summary, ai_action_items, ai_decisions, ai_priority, etc.
-    Returns the created message ID
-    """
-    try:
-        from google.cloud.firestore import SERVER_TIMESTAMP
-        
-        messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
-        message_ref = messages_ref.document()
-        
-        message_data = {
-            'id': message_ref.id,
-            'text': text,
-            'senderId': 'synapse-bot-system',
-            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
-            'memberIdsAtCreation': member_ids,
-            'serverTimestamp': SERVER_TIMESTAMP,
-            'type': message_type,
-            'sendNotification': False,  # Don't send push notifications for AI messages
-            'isDeleted': False,
-            'metadata': metadata or {}
-        }
-        
-        message_ref.set(message_data)
-        
-        # Update conversation's lastMessageText AND bot's lastMessageSentAt (merge to create if not exists)
-        conv_ref = db.collection('conversations').document(conversation_id)
-        conv_ref.set({
-            'lastMessageText': text[:100],
-            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
-            'members': {
-                'synapse-bot-system': {
-                    'lastMessageSentAt': SERVER_TIMESTAMP
-                }
-            }
-        }, merge=True)
-        
-        print(f"✅ Created AI message: type={message_type}, id={message_ref.id}")
-        return message_ref.id
+    ✨ UNIFIED method to create ANY type of AI message in Firestore (DRY principle)
     
-    except Exception as e:
-        print(f"❌ Error creating AI message: {e}")
-        raise
-
-async def create_error_message(
-    conversation_id: str,
-    error_text: str,
-    member_ids: List[str]
-) -> str:
-    """
-    Create an error message in Firestore (sent by Synapse Bot)
-    Returns the created message ID
+    Consolidates: create_ai_summary_message, create_ai_message, create_error_message
+    
+    Supports all AI message types:
+    - ai_summary: Thread summaries
+    - ai_action_items: Extracted tasks
+    - ai_priority: Urgent message detection
+    - ai_decisions: Decision tracking
+    - ai_error: Error messages
+    
+    Args:
+        conversation_id: Conversation ID
+        text: Message content (formatted markdown)
+        message_type: One of: ai_summary, ai_action_items, ai_priority, ai_decisions, ai_error
+        member_ids: List of active member IDs (bot will be added automatically)
+        send_notification: Whether to send push notification (True for errors, False for AI analysis)
+        metadata: Optional metadata dictionary
+    
+    Returns:
+        Created message ID
     """
     try:
         from google.cloud.firestore import SERVER_TIMESTAMP
@@ -320,23 +231,34 @@ async def create_error_message(
         
         message_data = {
             'id': message_ref.id,
-            'text': error_text,
+            'text': text,
             'senderId': SYNAPSE_BOT_ID,
-            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
+            'localTimestamp': SERVER_TIMESTAMP,  # Server timestamp for consistency
             'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
             'serverTimestamp': SERVER_TIMESTAMP,
-            'type': 'ai_error',  # AI error message type (special rendering in Android)
-            'sendNotification': True,  # Send notification for errors (user needs to know)
-            'isDeleted': False
+            'type': message_type,
+            'sendNotification': send_notification,
+            'isDeleted': False,
+            'metadata': metadata or {}
         }
         
         message_ref.set(message_data)
         
-        # Update conversation metadata AND bot's lastMessageSentAt (merge to create if not exists)
+        # Determine preview text based on message type
+        preview_map = {
+            'ai_summary': '📊 AI Summary',
+            'ai_action_items': '📝 Action Items',
+            'ai_priority': '🔥 Priority Alert',
+            'ai_decisions': '📋 Decision Tracking',
+            'ai_error': '❌ AI Error'
+        }
+        preview_text = preview_map.get(message_type, text[:100])
+        
+        # Update conversation metadata AND bot's lastMessageSentAt
         conv_ref = db.collection('conversations').document(conversation_id)
         conv_ref.set({
-            'lastMessageText': '❌ AI Error',
-            'updatedAt': SERVER_TIMESTAMP,  # Using serverTimestamp for updatedAt
+            'lastMessageText': preview_text,
+            'updatedAt': SERVER_TIMESTAMP,
             'members': {
                 SYNAPSE_BOT_ID: {
                     'lastMessageSentAt': SERVER_TIMESTAMP
@@ -344,10 +266,10 @@ async def create_error_message(
             }
         }, merge=True)
         
-        print(f"✅ Created error message: {message_ref.id}")
+        print(f"✅ [FIREBASE] Created AI message: type={message_type}, id={message_ref.id}, notify={send_notification}")
         return message_ref.id
     
     except Exception as e:
-        print(f"❌ Error creating error message: {e}")
+        print(f"❌ [FIREBASE] Error creating AI message: {e}")
         raise
 

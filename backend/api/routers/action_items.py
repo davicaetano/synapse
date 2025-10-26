@@ -78,14 +78,15 @@ async def extract_action_items(
         if request.dev_summary:
             action_items_text += f"\n_({len(messages)} messages analyzed • {processing_time}ms • API v{API_VERSION})_"
         
-        # Create AI action items message in Firestore
+        # Create AI action items message in Firestore (using unified function)
         message_id = await firebase_service.create_ai_message(
             conversation_id=request.conversation_id,
             text=action_items_text,
             message_type="ai_action_items",
-            generated_by_user_id=user_id,
             member_ids=member_ids,
+            send_notification=False,
             metadata={
+                "generatedBy": user_id,
                 "messageCount": len(messages),
                 "actionItemsCount": len(action_items),
                 "customInstructions": request.custom_instructions or "",
@@ -118,10 +119,12 @@ The action items extraction failed with the following error:
 
 Please try again or contact support if the issue persists."""
             
-            await firebase_service.create_error_message(
+            await firebase_service.create_ai_message(
                 conversation_id=request.conversation_id,
-                error_text=error_text,
-                member_ids=member_ids
+                text=error_text,
+                message_type='ai_error',
+                member_ids=member_ids,
+                send_notification=True  # Errors need notifications
             )
         except Exception as firestore_error:
             print(f"Failed to write error message to Firestore: {firestore_error}")

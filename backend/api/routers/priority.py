@@ -83,17 +83,19 @@ async def detect_priority(
         if request.dev_summary:
             priority_text += f"\n_({len(messages)} messages analyzed • {len(priority_results)} priority • {processing_time}ms • API v{API_VERSION})_"
         
-        # Create AI priority message in Firestore
+        # Create AI priority message in Firestore (using ai_summary type for Android compatibility)
         message_id = await firebase_service.create_ai_message(
             conversation_id=request.conversation_id,
             text=priority_text,
-            message_type="ai_priority",
-            generated_by_user_id=user_id,
+            message_type="ai_summary",  # Use ai_summary (Android supports this)
             member_ids=member_ids,
+            send_notification=False,
             metadata={
+                "generatedBy": user_id,
                 "messageCount": len(messages),
                 "priorityCount": len(priority_results),
-                "aiGenerated": True
+                "aiGenerated": True,
+                "feature": "priority_detection"  # Track which AI feature generated this
             }
         )
         
@@ -122,10 +124,12 @@ The priority detection failed with the following error:
 
 Please try again or contact support if the issue persists."""
             
-            await firebase_service.create_error_message(
+            await firebase_service.create_ai_message(
                 conversation_id=request.conversation_id,
-                error_text=error_text,
-                member_ids=member_ids
+                text=error_text,
+                message_type='ai_error',
+                member_ids=member_ids,
+                send_notification=True  # Errors need notifications
             )
         except Exception as firestore_error:
             print(f"Failed to write error message to Firestore: {firestore_error}")
