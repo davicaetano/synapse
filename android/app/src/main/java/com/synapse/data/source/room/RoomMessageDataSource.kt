@@ -46,7 +46,7 @@ class RoomMessageDataSource @Inject constructor(
             config = PagingConfig(
                 pageSize = 50,
                 prefetchDistance = 15,
-                enablePlaceholders = false,
+                enablePlaceholders = true,
                 initialLoadSize = 50
             ),
             pagingSourceFactory = { messageDao.observeMessagesPaged(conversationId) }

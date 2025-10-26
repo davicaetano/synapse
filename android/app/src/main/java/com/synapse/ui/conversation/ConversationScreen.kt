@@ -1,10 +1,12 @@
 package com.synapse.ui.conversation
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -28,11 +30,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -57,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -65,12 +65,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.google.firebase.auth.FirebaseAuth
+import com.synapse.data.source.firestore.entity.MemberStatus
 import com.synapse.domain.conversation.ConversationType
+import com.synapse.domain.conversation.Message
 import com.synapse.domain.conversation.MessageStatus
 import com.synapse.domain.conversation.recalculateStatus
+import com.synapse.domain.user.User
 import com.synapse.ui.components.GroupAvatar
 import com.synapse.ui.components.UserAvatar
+import com.synapse.util.getPresenceStatus
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +92,7 @@ fun ConversationScreen(
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages (Room + Paging3)
-    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<com.synapse.domain.conversation.Message>()
+    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<Message>()
     
     // Member status for real-time checkmark updates
     val memberStatus by vm.memberStatusFlow.collectAsStateWithLifecycle()
@@ -114,17 +120,17 @@ fun ConversationScreen(
     
     // Log Paging3 usage
     LaunchedEffect(pagedMessages.itemCount) {
-        android.util.Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
+        Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
     }
 
     // Delete confirmation dialog
     if (showDeleteDialog) {
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { androidx.compose.material3.Text("Delete message?") },
-            text = { androidx.compose.material3.Text("This message will be deleted for everyone in the conversation.") },
+            title = { Text("Delete message?") },
+            text = { Text("This message will be deleted for everyone in the conversation.") },
             confirmButton = {
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = {
                         selectedMessageId?.let { 
                             vm.deleteMessage(it)
@@ -133,12 +139,12 @@ fun ConversationScreen(
                         showDeleteDialog = false
                     }
                 ) {
-                    androidx.compose.material3.Text("Delete", color = androidx.compose.material3.MaterialTheme.colorScheme.error)
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showDeleteDialog = false }) {
-                    androidx.compose.material3.Text("Cancel")
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -195,8 +201,8 @@ fun ConversationScreen(
 @Composable
 fun ConversationScreen(
     ui: ConversationUIState,
-    pagedMessages: androidx.paging.compose.LazyPagingItems<com.synapse.domain.conversation.Message>,
-    memberStatus: Map<String, com.synapse.data.source.firestore.entity.MemberStatus>,
+    pagedMessages: LazyPagingItems<Message>,
+    memberStatus: Map<String, MemberStatus>,
     selectedMessageId: String?,
     activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
@@ -236,8 +242,9 @@ fun ConversationScreen(
     // Auto-scroll to bottom when new messages arrive
     // Use lastMessageId from UIState - only changes when a NEW message arrives
     // Does NOT change when loading old messages (scrolling up)
-    LaunchedEffect(ui.lastMessageId) {
-        if (ui.lastMessageId != null) {
+    val first = pagedMessages.itemSnapshotList.items.firstOrNull()?.id
+    LaunchedEffect(first) {
+        if (first != null) {
             scope.launch {
                 listState.animateScrollToItem(0)
             }
@@ -265,7 +272,7 @@ fun ConversationScreen(
     // Manual lazy loading: detect when scrolled to top (oldest messages)
     // and load more messages from Firebase
     val isAtTop = remember {
-        androidx.compose.runtime.derivedStateOf {
+        derivedStateOf {
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
             // With reverseLayout=true, last visible item = oldest message (at top)
             lastVisibleItem?.index == pagedMessages.itemCount - 1
@@ -279,7 +286,7 @@ fun ConversationScreen(
             !isLoadingOlderMessages && 
             !hasReachedEnd
         ) {
-            android.util.Log.d("ConversationScreen", "📍 Reached top, loading older messages...")
+            Log.d("ConversationScreen", "📍 Reached top, loading older messages...")
             onLoadOlderMessages()
         }
     }
@@ -395,29 +402,12 @@ fun ConversationScreen(
                     state = listState,
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    contentPadding = PaddingValues(
                         top = 8.dp,
                         bottom = 8.dp
                     )
                 ) {
-                    // Loading indicator at top (oldest messages) when fetching more
-                    if (isLoadingOlderMessages) {
-                        item(key = "loading_older") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 2.dp
-                                )
-                            }
-                        }
-                    }
-                    
+
                     // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->
@@ -548,7 +538,7 @@ private fun ConversationTopAppBar(
     title: String,
     subtitle: String?,
     convType: ConversationType,
-    members: List<com.synapse.domain.user.User>,
+    members: List<User>,
     otherUserPhotoUrl: String?,
     otherUserOnline: Boolean?,
     isUserAdmin: Boolean,
@@ -570,21 +560,21 @@ private fun ConversationTopAppBar(
     var showMenu by remember { mutableStateOf(false) }
     
     // For DIRECT conversations, calculate status from members Flow (updates automatically)
-    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
     val otherUser = if (convType == ConversationType.DIRECT) {
         members.firstOrNull { it.id != currentUserId }
     } else null
     
     // Debug: Log when otherUser changes
-    androidx.compose.runtime.LaunchedEffect(otherUser?.isOnline, otherUser?.lastSeenMs) {
-        android.util.Log.d("ConversationTopBar", "👤 Other user updated: isOnline=${otherUser?.isOnline}, lastSeenMs=${otherUser?.lastSeenMs}")
+    LaunchedEffect(otherUser?.isOnline, otherUser?.lastSeenMs) {
+        Log.d("ConversationTopBar", "👤 Other user updated: isOnline=${otherUser?.isOnline}, lastSeenMs=${otherUser?.lastSeenMs}")
     }
     
     // Calculate dynamic subtitle for DIRECT (GROUP uses static subtitle)
     // members comes from Flow -> when it changes, Compose recomposes automatically
     val dynamicSubtitle = when (convType) {
         ConversationType.DIRECT -> {
-            com.synapse.util.getPresenceStatus(
+            getPresenceStatus(
                 isOnline = otherUser?.isOnline ?: false,
                 lastSeenMs = otherUser?.lastSeenMs
             )
@@ -592,7 +582,7 @@ private fun ConversationTopAppBar(
         else -> subtitle // GROUP/SELF use static subtitle
     }
     
-    android.util.Log.d("ConversationTopBar", "🔄 Recomposing: dynamicSubtitle=$dynamicSubtitle")
+    Log.d("ConversationTopBar", "🔄 Recomposing: dynamicSubtitle=$dynamicSubtitle")
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -636,7 +626,7 @@ private fun ConversationTopAppBar(
                             Text(
                                 text = displayText,
                                 style = MaterialTheme.typography.bodySmall.copy(
-                                    fontStyle = if (typingText != null) androidx.compose.ui.text.font.FontStyle.Italic else androidx.compose.ui.text.font.FontStyle.Normal
+                                    fontStyle = if (typingText != null) FontStyle.Italic else FontStyle.Normal
                                 ),
                                 color = when {
                                     typingText != null -> MaterialTheme.colorScheme.primary
@@ -778,7 +768,7 @@ private fun MessageBubble(
     isReadByEveryone: Boolean = false,
     senderName: String? = null,
     senderPhotoUrl: String? = null,
-    status: com.synapse.domain.conversation.MessageStatus = com.synapse.domain.conversation.MessageStatus.DELIVERED,
+    status: MessageStatus = MessageStatus.DELIVERED,
     isSelected: Boolean = false,
     onClick: () -> Unit = {},
     isAIMessage: Boolean = false,  // Special flag for AI messages (full-width layout)
