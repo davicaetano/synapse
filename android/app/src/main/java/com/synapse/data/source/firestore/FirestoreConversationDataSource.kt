@@ -11,9 +11,16 @@ import com.google.firebase.firestore.SetOptions
 import com.synapse.data.source.firestore.entity.ConversationEntity
 import com.synapse.data.source.firestore.entity.Member
 import com.synapse.domain.conversation.ConversationType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,84 +39,109 @@ class FirestoreConversationDataSource @Inject constructor(
     private val auth: FirebaseAuth
 ) {
     
+    // Application-level scope (survives entire app lifecycle)
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    /**
+     * Global conversations flow - listens to ALL user's conversations ONCE.
+     * 
+     * Uses callbackFlow + stateIn for proper lifecycle management:
+     * - SharingStarted.Eagerly: starts immediately, stays active
+     * - StateFlow: caches last value, provides instant data to new collectors
+     * - awaitClose: guarantees cleanup when scope is cancelled
+     * 
+     * This single listener serves ALL observeConversations() calls.
+     * Query is already filtered (only user's conversations via memberIds).
+     */
+    private val globalConversationsFlow: StateFlow<Map<String, ConversationEntity>> = callbackFlow {
+        val userId = auth.currentUser?.uid
+        
+        if (userId == null) {
+            Log.w(TAG, "🌍 Cannot start global conversations listener: user not authenticated")
+            trySend(emptyMap())
+            awaitClose {}
+            return@callbackFlow
+        }
+        
+        val query = firestore.collection("conversations")
+            .whereArrayContains("memberIds", userId)
+        
+        val listener = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e(TAG, "❌ Global conversations listener error: ${error.message}")
+                return@addSnapshotListener
+            }
+            
+            val conversationsMap = snapshot?.documents
+                ?.mapNotNull { doc ->
+                    try {
+                        parseConversationEntity(doc)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error parsing conversation ${doc.id}", e)
+                        null
+                    }
+                }
+                ?.associateBy { it.id }
+                ?: emptyMap()
+            
+            Log.d(TAG, "🌍 Global conversations updated: ${conversationsMap.size} conversations")
+            trySend(conversationsMap)
+        }
+        
+        Log.d(TAG, "🌍 Started global conversations listener for user $userId")
+        
+        awaitClose {
+            Log.d(TAG, "🌍 Removing global conversations listener")
+            listener.remove()
+        }
+    }.stateIn(
+        scope = appScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyMap()
+    )
+    
     // ============================================================
     // READ OPERATIONS
     // ============================================================
     
     /**
      * Listen to all conversations where the user is a member.
+     * 
+     * NOW USES GLOBAL LISTENER:
+     * - No new listeners created (all data comes from global flow)
+     * - Filters from globalConversationsFlow (already filtered by userId in query)
+     * - INSTANT response (data already in memory)
+     * - Eliminates race conditions and repeated listener creation
+     * 
      * Returns raw Firestore data without user details or presence.
      */
     fun listenConversations(
         userId: String,
         includesCacheChanges: Boolean = true
-    ): Flow<List<ConversationEntity>> = callbackFlow {
-        
-        // NOTE: memberIds is maintained by Cloud Function (filters out bots & deleted members)
-        val ref = firestore.collection("conversations")
-            .whereArrayContains("memberIds", userId)
-
-        
-        val registration = ref.addSnapshotListener { snapshot, error ->
-            val isFromCache = snapshot!!.metadata.isFromCache
-
-            if (!includesCacheChanges and isFromCache) return@addSnapshotListener
-            
-            if (error != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
-            
-            val conversations = snapshot?.documents?.mapNotNull { doc ->
-                try {
-                    parseConversationEntity(doc)
-                } catch (e: Exception) {
-                    null
-                }
-            } ?: emptyList()
-            
-            conversations.forEach { conv ->
-            }
-            
-            trySend(conversations)
-        }
-        
-        awaitClose { 
-            registration.remove()
+    ): Flow<List<ConversationEntity>> {
+        // Simply map the global flow to a list
+        // Global flow is already filtered by current user's memberIds
+        return globalConversationsFlow.map { conversationsMap ->
+            conversationsMap.values.toList()
         }
     }
     
     /**
      * Listen to a single conversation by ID.
-     * More efficient than listening to all conversations and filtering.
+     * 
+     * NOW USES GLOBAL LISTENER:
+     * - Filters from globalConversationsFlow by conversationId
+     * - INSTANT response (data already in memory)
+     * - No additional listener created
      */
     fun listenConversation(
         conversationId: String,
         includesCacheChanges: Boolean = true
-    ): Flow<ConversationEntity?> = callbackFlow {
-        val registration = firestore.collection("conversations")
-            .document(conversationId)
-            .addSnapshotListener { snapshot, error ->
-                val isFromCache = snapshot!!.metadata.isFromCache
-                if (!includesCacheChanges && isFromCache) return@addSnapshotListener
-
-                if (error != null) {
-                    trySend(null)
-                    return@addSnapshotListener
-                }
-                
-                val conversation = snapshot.let { doc ->
-                    try {
-                        parseConversationEntity(doc)
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-                
-                trySend(conversation)
-            }
-        
-        awaitClose { registration.remove() }
+    ): Flow<ConversationEntity?> {
+        // Simply filter the global flow by ID
+        return globalConversationsFlow.map { conversationsMap ->
+            conversationsMap[conversationId]
+        }
     }
     
     /**

@@ -92,7 +92,7 @@ fun ConversationScreen(
     val ui: ConversationUIState by vm.uiState.collectAsStateWithLifecycle()
     
     // Use paged messages (Room + Paging3)
-    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems<Message>()
+    val pagedMessages = vm.messagesPaged.collectAsLazyPagingItems()
     
     // Members for real-time checkmark updates
     val members by vm.membersFlow.collectAsStateWithLifecycle()
@@ -117,11 +117,6 @@ fun ConversationScreen(
     
     // Delete confirmation dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
-    
-    // Log Paging3 usage
-    LaunchedEffect(pagedMessages.itemCount) {
-        Log.d("ConversationScreen", "🔥 Using PAGING3: itemCount=${pagedMessages.itemCount}")
-    }
 
     // Delete confirmation dialog
     if (showDeleteDialog) {
