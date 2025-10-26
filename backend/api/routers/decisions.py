@@ -88,8 +88,6 @@ async def track_decisions(
         # Add metadata footer
         if request.dev_summary:
             decisions_text += f"\n_({len(messages)} messages analyzed • {len(decisions)} decisions • {processing_time}ms • API v{API_VERSION})_"
-        else:
-            decisions_text += f"\n_({len(messages)} messages analyzed • {len(decisions)} decisions)_"
         
         # Create AI decisions message in Firestore
         message_id = await firebase_service.create_ai_message(

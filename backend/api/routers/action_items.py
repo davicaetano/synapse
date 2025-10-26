@@ -77,8 +77,6 @@ async def extract_action_items(
         # Add metadata footer
         if request.dev_summary:
             action_items_text += f"\n_({len(messages)} messages analyzed • {processing_time}ms • API v{API_VERSION})_"
-        else:
-            action_items_text += f"\n_({len(messages)} messages analyzed)_"
         
         # Create AI action items message in Firestore
         message_id = await firebase_service.create_ai_message(

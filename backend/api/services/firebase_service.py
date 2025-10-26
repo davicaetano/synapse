@@ -8,6 +8,7 @@ from firebase_admin import credentials, firestore
 from typing import List, Optional
 from datetime import datetime
 from models.schemas import Message
+import asyncio
 
 # Initialize Firebase Admin SDK (only once)
 try:
@@ -85,6 +86,37 @@ async def get_conversation_messages(
         messages.reverse()
         
         print(f"📊 [FIREBASE] Fetched {len(messages)} text messages (Python-filtered from {fetch_limit} queried, {len(all_messages)} valid)")
+        
+        # Fetch user names in parallel for all unique sender IDs
+        unique_sender_ids = list(set([msg.sender_id for msg in messages]))
+        print(f"👥 [FIREBASE] Fetching names for {len(unique_sender_ids)} unique users in parallel...")
+        
+        # Helper function to fetch a single user (synchronous Firestore call)
+        def fetch_user_name_sync(user_id: str) -> tuple[str, str]:
+            try:
+                user_doc = db.collection('users').document(user_id).get()
+                if user_doc.exists:
+                    user_data = user_doc.to_dict()
+                    return (user_id, user_data.get('displayName', 'Unknown'))
+                return (user_id, 'Unknown')
+            except Exception as e:
+                print(f"⚠️  Error fetching user {user_id}: {e}")
+                return (user_id, 'Unknown')
+        
+        # Run synchronous Firestore calls in parallel threads using asyncio.to_thread
+        user_results = await asyncio.gather(*[
+            asyncio.to_thread(fetch_user_name_sync, uid) 
+            for uid in unique_sender_ids
+        ])
+        
+        # Create userId -> userName map
+        user_map = dict(user_results)
+        
+        # Update sender_name for all messages
+        for msg in messages:
+            msg.sender_name = user_map.get(msg.sender_id, 'Unknown')
+        
+        print(f"✅ [FIREBASE] Updated {len(messages)} messages with user names")
         
         return messages
     

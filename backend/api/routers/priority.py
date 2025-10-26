@@ -82,8 +82,6 @@ async def detect_priority(
         # Add metadata footer
         if request.dev_summary:
             priority_text += f"\n_({len(messages)} messages analyzed • {len(priority_results)} priority • {processing_time}ms • API v{API_VERSION})_"
-        else:
-            priority_text += f"\n_({len(messages)} messages analyzed • {len(priority_results)} priority messages)_"
         
         # Create AI priority message in Firestore
         message_id = await firebase_service.create_ai_message(

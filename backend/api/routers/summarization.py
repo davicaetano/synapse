@@ -92,8 +92,6 @@ async def summarize_thread(
         # Add message count and optionally dev info (processing time + API version)
         if request.dev_summary:
             summary_text += f"\n_({len(messages)} messages analyzed • {processing_time}ms • API v{API_VERSION})_"
-        else:
-            summary_text += f"\n_({len(messages)} messages analyzed)_"
         
         # Create AI summary message in Firestore
         message_id = await firebase_service.create_ai_summary_message(
