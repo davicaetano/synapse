@@ -96,95 +96,68 @@ const messages = [
 
 async function insertConversation() {
   try {
-    console.log('🔍 Finding group "SpaceX Starship"...\n');
+    // Always create a new group with random ID
+    // Hardcoded user IDs for the 3 test devices
+    const memberIds = [
+      'CvnL1uK3WaYDEX7boDc3TyHrSPY2',
+      'XlylnTcLSeawP3GaspFDYVwFnoj2',
+      'fOfbZadtNTXiBGwb8zldQk4Z4Lv2'
+    ];
 
-    // Find group "SpaceX Starship"
-    const conversationsSnapshot = await db.collection('conversations')
-      .where('groupName', '==', 'SpaceX Starship')
-      .get();
+    // Generate random group ID
+    const groupId = db.collection('conversations').doc().id;
+    console.log(`📝 Generated random group ID: ${groupId}\n`);
 
-    let groupId = null;
-    let groupData = null;
+    // Create the group
+    console.log('🔨 Creating group "SpaceX Starship"...\n');
 
-    if (conversationsSnapshot.size > 0) {
-      const doc = conversationsSnapshot.docs[0];
-      groupId = doc.id;
-      groupData = doc.data();
-    }
+    const SYNAPSE_BOT_ID = 'synapse-bot-system';
+    const now = admin.firestore.Timestamp.now();
+    // Set lastSeenAt to 4 hours ago (before messages start at 3h ago)
+    // This makes all messages appear as unread for testing
+    const fourHoursAgo = admin.firestore.Timestamp.fromMillis(Date.now() - (4 * 60 * 60 * 1000));
 
-    if (!groupId) {
-      console.error('❌ Group "SpaceX Starship" not found!');
-      console.log('\n💡 Creating group "SpaceX Starship" first...\n');
-      
-      // Get first 3 users from Firestore to create the group
-      const usersSnapshot = await db.collection('users').limit(3).get();
-      
-      if (usersSnapshot.size < 3) {
-        console.error('❌ Need at least 3 users in Firestore!');
-        console.log('Run: node create-test-users.js 5');
-        process.exit(1);
-      }
+    // Build members map with real members + bot
+    const members = {};
 
-      const memberIds = usersSnapshot.docs.map(doc => doc.id);
-      
-      // Create the group
-      const SYNAPSE_BOT_ID = 'synapse-bot-system';
-      const now = admin.firestore.Timestamp.now();
-      
-      // Build members map with real members + bot
-      const members = {};
-      
-      // Add real members (first one is admin/creator)
-      memberIds.forEach((id, index) => {
-        members[id] = {
-          lastSeenAt: now,
-          lastReceivedAt: now,
-          lastMessageSentAt: now,
-          isBot: false,
-          isAdmin: index === 0,  // First member is admin/creator
-          isDeleted: false
-        };
-      });
-      
-      // Add bot to members (isBot: true, NOT in memberIds array)
-      members[SYNAPSE_BOT_ID] = {
-        lastSeenAt: now,
-        lastReceivedAt: now,
-        lastMessageSentAt: now,
-        isBot: true,
-        isAdmin: false,
+    // Add real members (first one is admin/creator)
+    memberIds.forEach((id, index) => {
+      members[id] = {
+        lastSeenAt: fourHoursAgo, // 4h ago - before any messages
+        lastReceivedAt: fourHoursAgo,
+        lastMessageSentAt: admin.firestore.Timestamp.fromMillis(0), // Will be updated with first message
+        isBot: false,
+        isAdmin: index === 0,  // First member is admin/creator
         isDeleted: false
       };
-      
-      const newGroupRef = await db.collection('conversations').add({
-        convType: 'GROUP',
-        groupName: 'SpaceX Starship',
-        memberIds: memberIds,  // Pre-populated for instant inbox visibility
-        createdBy: memberIds[0],  // First user is the creator
-        localTimestamp: now,  // Using Timestamp format (not milliseconds)
-        updatedAt: now,
-        lastMessageText: '',
-        members: members  // NEW: Unified members map with isBot, isAdmin, isDeleted
-      });
+    });
 
-      groupId = newGroupRef.id;
-      groupData = { memberIds };
-      
-      console.log('✅ Created group "SpaceX Starship":', groupId);
-    } else {
-      console.log('✅ Found group "SpaceX Starship":', groupId);
-    }
+    // Add bot to members (isBot: true, NOT in memberIds array)
+    members[SYNAPSE_BOT_ID] = {
+      lastSeenAt: now,
+      lastReceivedAt: now,
+      lastMessageSentAt: now,
+      isBot: true,
+      isAdmin: false,
+      isDeleted: false
+    };
 
-    console.log('📋 Members:', groupData.memberIds);
-    console.log('👥 Member count:', groupData.memberIds.length);
+    const groupData = {
+      convType: 'GROUP',
+      groupName: 'SpaceX Starship',
+      memberIds: memberIds,  // Pre-populated for instant inbox visibility
+      createdBy: memberIds[0],  // First user is the creator
+      localTimestamp: now,  // Using Timestamp format (not milliseconds)
+      updatedAt: now,
+      lastMessageText: '',
+      members: members  // NEW: Unified members map with isBot, isAdmin, isDeleted
+    };
 
-    if (groupData.memberIds.length < 3) {
-      console.error('❌ Group must have at least 3 members!');
-      console.log('Current members:', groupData.memberIds.length);
-      process.exit(1);
-    }
+    await db.collection('conversations').doc(groupId).set(groupData);
+    console.log('✅ Created group "SpaceX Starship":', groupId);
+    console.log('👥 Members:', memberIds);
 
-    const [userA, userB, userC] = groupData.memberIds;
+    const [userA, userB, userC] = memberIds;
     console.log('\n👤 Sarah (Project Lead):', userA);
     console.log('👤 Alex (Propulsion):', userB);
     console.log('👤 Maria (Avionics):', userC);
@@ -216,8 +189,8 @@ async function insertConversation() {
         text: msg.text,
         senderId: senderId,
         localTimestamp: admin.firestore.Timestamp.fromMillis(timestamp),
-        memberIdsAtCreation: groupData.memberIds,
-        serverTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+        memberIdsAtCreation: memberIds,
+        serverTimestamp: admin.firestore.Timestamp.fromMillis(timestamp), // Use same timestamp as local
         type: 'text',
         sendNotification: true,
         isDeleted: false
@@ -227,6 +200,12 @@ async function insertConversation() {
         .doc(groupId)
         .collection('messages')
         .add(messageData);
+
+      // Update sender's lastMessageSentAt in members map
+      const messageTimestamp = admin.firestore.Timestamp.fromMillis(timestamp);
+      await db.collection('conversations').doc(groupId).update({
+        [`members.${senderId}.lastMessageSentAt`]: messageTimestamp
+      });
 
       // Show preview (truncate long messages)
       const preview = msg.text.length > 60 ? msg.text.substring(0, 60) + '...' : msg.text;
@@ -238,9 +217,10 @@ async function insertConversation() {
 
     // Update conversation metadata with last message
     const lastMessage = messages[messages.length - 1];
+    const lastTimestamp = admin.firestore.Timestamp.fromMillis(timestamp);
     await db.collection('conversations').doc(groupId).update({
       lastMessageText: lastMessage.text,
-      updatedAtMs: timestamp
+      updatedAt: lastTimestamp  // Changed from updatedAtMs to updatedAt (Timestamp)
     });
 
     console.log('\n🎉 Successfully inserted 50 messages into group "SpaceX Starship"!');

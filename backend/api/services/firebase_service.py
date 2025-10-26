@@ -66,7 +66,8 @@ async def get_conversation_messages(
             
             # Get localTimestamp (Firestore Timestamp object)
             local_ts = data.get('localTimestamp')
-            created_at = local_ts.to_pydatetime() if local_ts else datetime.fromtimestamp(0)
+            # DatetimeWithNanoseconds is already a datetime-like object
+            created_at = local_ts if local_ts else datetime.fromtimestamp(0)
             
             all_messages.append(Message(
                 id=doc.id,
@@ -140,7 +141,8 @@ async def get_message_by_id(conversation_id: str, message_id: str) -> Optional[M
         
         # Get localTimestamp (Firestore Timestamp object)
         local_ts = data.get('localTimestamp')
-        created_at = local_ts.to_pydatetime() if local_ts else datetime.fromtimestamp(0)
+        # DatetimeWithNanoseconds is already a datetime-like object
+        created_at = local_ts if local_ts else datetime.fromtimestamp(0)
         
         return Message(
             id=doc.id,
@@ -169,19 +171,16 @@ async def create_ai_summary_message(
     """
     try:
         from google.cloud.firestore import SERVER_TIMESTAMP
-        from datetime import datetime
         
         # Create message document
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()  # Auto-generate ID
         
-        now = datetime.now()
-        
         message_data = {
             'id': message_ref.id,
             'text': summary_text,
             'senderId': 'synapse-bot-system',  # Bot ID for identification
-            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
+            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': 'ai_summary',  # AI summary message type (special rendering in Android)
@@ -231,18 +230,15 @@ async def create_ai_message(
     """
     try:
         from google.cloud.firestore import SERVER_TIMESTAMP
-        from datetime import datetime
         
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()
-        
-        now = datetime.now()
         
         message_data = {
             'id': message_ref.id,
             'text': text,
             'senderId': 'synapse-bot-system',
-            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
+            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
             'memberIdsAtCreation': member_ids,
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': message_type,
@@ -283,7 +279,6 @@ async def create_error_message(
     """
     try:
         from google.cloud.firestore import SERVER_TIMESTAMP
-        from datetime import datetime
         
         SYNAPSE_BOT_ID = "synapse-bot-system"
         
@@ -291,13 +286,11 @@ async def create_error_message(
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
         message_ref = messages_ref.document()  # Auto-generate ID
         
-        now = datetime.now()
-        
         message_data = {
             'id': message_ref.id,
             'text': error_text,
             'senderId': SYNAPSE_BOT_ID,
-            'localTimestamp': now,  # Using Timestamp format (not milliseconds)
+            'localTimestamp': SERVER_TIMESTAMP,  # Use server timestamp for both fields
             'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
             'serverTimestamp': SERVER_TIMESTAMP,
             'type': 'ai_error',  # AI error message type (special rendering in Android)

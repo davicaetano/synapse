@@ -75,39 +75,64 @@ const messages = [
 
 async function insertConversation() {
   try {
-    console.log('🔍 Finding group "CryptoProject"...\n');
+    // Hardcoded test user IDs
+    const memberIds = [
+      'CvnL1uK3WaYDEX7boDc3TyHrSPY2',
+      'XlylnTcLSeawP3GaspFDYVwFnoj2',
+      'fOfbZadtNTXiBGwb8zldQk4Z4Lv2'
+    ];
 
-    // Find group "CryptoProject"
-    const conversationsSnapshot = await db.collection('conversations')
-      .where('groupName', '==', 'CryptoProject')
-      .get();
+    // Generate random group ID
+    const groupId = db.collection('conversations').doc().id;
+    console.log(`📝 Generated random group ID: ${groupId}\n`);
 
-    let groupId = null;
-    let groupData = null;
+    // Create the group first
+    console.log('🔨 Creating group "CryptoProject"...\n');
 
-    if (conversationsSnapshot.size > 0) {
-      const doc = conversationsSnapshot.docs[0];
-      groupId = doc.id;
-      groupData = doc.data();
-    }
+    const now = admin.firestore.Timestamp.now();
+    // Set lastSeenAt to 3 hours ago (before messages start at 2h ago)
+    // This makes all messages appear as unread for testing
+    const threeHoursAgo = admin.firestore.Timestamp.fromMillis(Date.now() - (3 * 60 * 60 * 1000));
+    const members = {};
 
-    if (!groupId) {
-      console.error('❌ Group "CryptoProject" not found!');
-      console.log('Please create a group named "CryptoProject" first.');
-      process.exit(1);
-    }
+    // Initialize members map
+    memberIds.forEach(userId => {
+      members[userId] = {
+        lastSeenAt: threeHoursAgo, // 3h ago - before any messages
+        lastReceivedAt: threeHoursAgo,
+        lastMessageSentAt: admin.firestore.Timestamp.fromMillis(0), // Will be updated with first message
+        isBot: false,
+        isAdmin: false,
+        isDeleted: false
+      };
+    });
 
-    console.log('✅ Found group "CryptoProject":', groupId);
-    console.log('📋 Members:', groupData.memberIds);
-    console.log('👥 Member count:', groupData.memberIds.length);
+    // Add bot to members (not in memberIds)
+    members['synapse-bot-system'] = {
+      lastSeenAt: now,
+      lastReceivedAt: now,
+      lastMessageSentAt: now,
+      isBot: true,
+      isAdmin: false,
+      isDeleted: false
+    };
 
-    if (groupData.memberIds.length !== 3) {
-      console.error('❌ Group must have exactly 3 members!');
-      console.log('Current members:', groupData.memberIds.length);
-      process.exit(1);
-    }
+    const groupData = {
+      convType: 'GROUP',
+      groupName: 'CryptoProject',
+      createdBy: memberIds[0],
+      localTimestamp: now,
+      updatedAt: now,
+      lastMessageText: '',
+      memberIds: memberIds, // Array for queries
+      members: members // Map with member details
+    };
 
-    const [userA, userB, userC] = groupData.memberIds;
+    await db.collection('conversations').doc(groupId).set(groupData);
+    console.log('✅ Group "CryptoProject" created:', groupId);
+    console.log('👥 Members:', memberIds);
+
+    const [userA, userB, userC] = memberIds;
     console.log('\n👤 Person A:', userA);
     console.log('👤 Person B:', userB);
     console.log('👤 Person C:', userC);
@@ -136,8 +161,8 @@ async function insertConversation() {
         text: msg.text,
         senderId: senderId,
         localTimestamp: admin.firestore.Timestamp.fromMillis(timestamp),
-        memberIdsAtCreation: groupData.memberIds,
-        serverTimestamp: admin.firestore.FieldValue.serverTimestamp(),
+        memberIdsAtCreation: memberIds,
+        serverTimestamp: admin.firestore.Timestamp.fromMillis(timestamp), // Use same timestamp as local
         type: 'text',
         sendNotification: true,
         isDeleted: false
@@ -148,14 +173,21 @@ async function insertConversation() {
         .collection('messages')
         .add(messageData);
 
+      // Update sender's lastMessageSentAt in members map
+      const messageTimestamp = admin.firestore.Timestamp.fromMillis(timestamp);
+      await db.collection('conversations').doc(groupId).update({
+        [`members.${senderId}.lastMessageSentAt`]: messageTimestamp
+      });
+
       console.log(`✅ [${i + 1}/52] ${msg.sender}: ${msg.text.substring(0, 50)}...`);
     }
 
     // Update conversation metadata with last message
     const lastMessage = messages[messages.length - 1];
+    const lastTimestamp = admin.firestore.Timestamp.fromMillis(timestamp);
     await db.collection('conversations').doc(groupId).update({
       lastMessageText: lastMessage.text,
-      updatedAtMs: timestamp
+      updatedAt: lastTimestamp  // Changed from updatedAtMs to updatedAt (Timestamp)
     });
 
     console.log('\n🎉 Successfully inserted 52 messages into group "CryptoProject"!');
