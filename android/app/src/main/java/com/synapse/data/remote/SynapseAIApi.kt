@@ -47,6 +47,30 @@ interface SynapseAIApi {
     suspend fun searchMessages(
         @Body request: SearchRequest
     ): SearchResponse
+    
+    /**
+     * Detect priority messages in conversation
+     * Creates an AI message with priority analysis
+     * 
+     * @param request Priority detection request with conversation_id
+     * @return Response with message_id and metadata
+     */
+    @POST("priority")
+    suspend fun detectPriority(
+        @Body request: PriorityDetectionRequest
+    ): PriorityDetectionResponse
+    
+    /**
+     * Track decisions made in conversation
+     * Creates an AI message with decision summary
+     * 
+     * @param request Decision tracking request with conversation_id
+     * @return Response with message_id and metadata
+     */
+    @POST("decisions")
+    suspend fun trackDecisions(
+        @Body request: DecisionTrackingRequest
+    ): DecisionTrackingResponse
 }
 
 /**
@@ -115,5 +139,54 @@ data class SearchResponse(
     val total_count: Int,
     val processing_time_ms: Int,
     val api_version: String? = null
+)
+
+// ============================================================
+// PRIORITY DETECTION (Feature 4)
+// ============================================================
+
+/**
+ * Request body for priority detection
+ */
+data class PriorityDetectionRequest(
+    val conversation_id: String,
+    val dev_summary: Boolean = false
+)
+
+/**
+ * Response from /api/priority endpoint
+ */
+data class PriorityDetectionResponse(
+    val success: Boolean,
+    val message_id: String,
+    val conversation_id: String,
+    val priority_count: Int,
+    val total_analyzed: Int,
+    val processing_time_ms: Int
+)
+
+// ============================================================
+// DECISION TRACKING (Feature 5)
+// ============================================================
+
+/**
+ * Request body for decision tracking
+ */
+data class DecisionTrackingRequest(
+    val conversation_id: String,
+    val start_date: String? = null,
+    val end_date: String? = null,
+    val dev_summary: Boolean = false
+)
+
+/**
+ * Response from /api/decisions endpoint
+ */
+data class DecisionTrackingResponse(
+    val success: Boolean,
+    val message_id: String,
+    val conversation_id: String,
+    val decisions_count: Int,
+    val processing_time_ms: Int
 )
 

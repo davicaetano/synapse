@@ -19,6 +19,8 @@ import androidx.compose.ui.unit.dp
 enum class AIAgentMode {
     THREAD_SUMMARIZATION,
     ACTION_ITEMS,
+    PRIORITY_DETECTION,
+    DECISION_TRACKING,
     CUSTOM,
     FORCE_ERROR  // Dev only: Force backend to throw error
 }
@@ -26,10 +28,12 @@ enum class AIAgentMode {
 /**
  * Synapse AI Agent Screen
  * 
- * Provides 3 AI capabilities:
+ * Provides 5 AI capabilities for Remote Team Professionals:
  * 1. Thread Summarization (Rubric Item 1)
  * 2. Action Item Extraction (Rubric Item 2)
- * 3. Custom Instructions (flexible AI interaction)
+ * 3. Priority Detection (Rubric Item 4)
+ * 4. Decision Tracking (Rubric Item 5)
+ * 5. Custom Instructions (flexible AI interaction)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,7 +150,67 @@ fun SummarizeInputScreen(
                     }
                 }
                 
-                // Option 3: Custom Instructions
+                // Option 3: Priority Detection
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selectedMode == AIAgentMode.PRIORITY_DETECTION,
+                            onClick = { selectedMode = AIAgentMode.PRIORITY_DETECTION },
+                            role = Role.RadioButton
+                        )
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedMode == AIAgentMode.PRIORITY_DETECTION,
+                        onClick = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Priority Detection",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Identify urgent and high-priority messages",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                // Option 4: Decision Tracking
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selectedMode == AIAgentMode.DECISION_TRACKING,
+                            onClick = { selectedMode = AIAgentMode.DECISION_TRACKING },
+                            role = Role.RadioButton
+                        )
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedMode == AIAgentMode.DECISION_TRACKING,
+                        onClick = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Decision Tracking",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Text(
+                            text = "Track decisions and agreements made",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                // Option 5: Custom Instructions
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -240,6 +304,8 @@ fun SummarizeInputScreen(
                     val instructions = when (selectedMode) {
                         AIAgentMode.THREAD_SUMMARIZATION -> null  // Default summary
                         AIAgentMode.ACTION_ITEMS -> null  // Default action items extraction
+                        AIAgentMode.PRIORITY_DETECTION -> null  // Default priority detection
+                        AIAgentMode.DECISION_TRACKING -> null  // Default decision tracking
                         AIAgentMode.CUSTOM -> customText.trim().takeIf { it.isNotEmpty() }
                         AIAgentMode.FORCE_ERROR -> "FORCE_ERROR"  // Special trigger for backend error testing
                     }

@@ -189,12 +189,17 @@ async def create_ai_summary_message(
         
         message_ref.set(message_data)
         
-        # Update conversation metadata
+        # Update conversation metadata AND bot's lastMessageSentAt (merge to create if not exists)
         conv_ref = db.collection('conversations').document(conversation_id)
-        conv_ref.update({
+        conv_ref.set({
             'lastMessageText': '🤖 AI Summary generated',
-            'updatedAtMs': timestamp_ms
-        })
+            'updatedAtMs': timestamp_ms,
+            'memberStatus': {
+                'synapse-bot-system': {
+                    'lastMessageSentAt': SERVER_TIMESTAMP
+                }
+            }
+        }, merge=True)
         
         print(f"✅ Created AI summary message: {message_ref.id}")
         return message_ref.id
@@ -239,12 +244,17 @@ async def create_ai_message(
         
         message_ref.set(message_data)
         
-        # Update conversation's lastMessageText
+        # Update conversation's lastMessageText AND bot's lastMessageSentAt (merge to create if not exists)
         conv_ref = db.collection('conversations').document(conversation_id)
-        conv_ref.update({
+        conv_ref.set({
             'lastMessageText': text[:100],
-            'updatedAtMs': timestamp_ms
-        })
+            'updatedAtMs': timestamp_ms,
+            'memberStatus': {
+                'synapse-bot-system': {
+                    'lastMessageSentAt': SERVER_TIMESTAMP
+                }
+            }
+        }, merge=True)
         
         print(f"✅ Created AI message: type={message_type}, id={message_ref.id}")
         return message_ref.id
@@ -287,14 +297,19 @@ async def create_error_message(
         
         message_ref.set(message_data)
         
-        # Update conversation metadata
+        # Update conversation metadata AND bot's lastMessageSentAt (merge to create if not exists)
         conv_ref = db.collection('conversations').document(conversation_id)
-        conv_ref.update({
+        conv_ref.set({
             'lastMessageText': '❌ AI Error',
             'lastMessageSenderId': SYNAPSE_BOT_ID,
             'lastMessageTimestamp': SERVER_TIMESTAMP,
-            'updatedAt': SERVER_TIMESTAMP
-        })
+            'updatedAt': SERVER_TIMESTAMP,
+            'memberStatus': {
+                SYNAPSE_BOT_ID: {
+                    'lastMessageSentAt': SERVER_TIMESTAMP
+                }
+            }
+        }, merge=True)
         
         print(f"✅ Created error message: {message_ref.id}")
         return message_ref.id

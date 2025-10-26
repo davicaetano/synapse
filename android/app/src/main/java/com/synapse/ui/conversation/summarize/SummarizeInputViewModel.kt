@@ -32,16 +32,26 @@ class SummarizeInputViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
     
     /**
-     * Generate AI analysis (summary or action items) based on mode
+     * Generate AI analysis based on mode
      * Job runs in ApplicationScope and survives Activity destruction
      * 
-     * @param mode "THREAD_SUMMARIZATION" or "ACTION_ITEMS"
+     * Supports 5 AI features:
+     * - THREAD_SUMMARIZATION: Generate conversation summary
+     * - ACTION_ITEMS: Extract tasks and assignments
+     * - PRIORITY_DETECTION: Identify urgent messages
+     * - DECISION_TRACKING: Track decisions made
+     * - CUSTOM: Custom instructions
+     * 
+     * @param mode AIAgentMode as string
      * @param customInstructions Optional custom instructions
      */
     fun generateAIAnalysis(mode: String, customInstructions: String? = null) {
         when (mode) {
             "THREAD_SUMMARIZATION" -> aiRepo.summarizeThreadAsync(conversationId, customInstructions)
             "ACTION_ITEMS" -> aiRepo.extractActionItemsAsync(conversationId, customInstructions)
+            "PRIORITY_DETECTION" -> aiRepo.detectPriorityAsync(conversationId)
+            "DECISION_TRACKING" -> aiRepo.trackDecisionsAsync(conversationId)
+            "CUSTOM" -> aiRepo.summarizeThreadAsync(conversationId, customInstructions) // Custom uses summary with instructions
             else -> aiRepo.summarizeThreadAsync(conversationId, customInstructions) // Default to summary
         }
     }

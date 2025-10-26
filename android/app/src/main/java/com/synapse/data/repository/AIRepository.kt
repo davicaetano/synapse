@@ -225,6 +225,104 @@ class AIRepository @Inject constructor(
         return api.searchMessages(request)
     }
     
+    /**
+     * Detect priority messages in conversation (Fire-and-forget)
+     * 
+     * Job runs in ApplicationScope and survives Activity/ViewModel destruction.
+     * Backend processes messages and creates AI message in Firestore with priority analysis.
+     * 
+     * @param conversationId Firestore conversation ID
+     */
+    fun detectPriorityAsync(conversationId: String) {
+        applicationScope.launch {
+            val jobId = "priority_${conversationId.takeLast(6)}_${System.currentTimeMillis()}"
+            
+            try {
+                incrementJobCount(conversationId)
+                Log.d(TAG, "🚨 [$jobId] Starting Priority Detection (active: ${getJobCount(conversationId)})")
+                
+                // Read dev preference
+                val devSummary = devPreferences.showAIProcessingTime.first()
+                
+                // Call backend API
+                val request = com.synapse.data.remote.PriorityDetectionRequest(
+                    conversation_id = conversationId,
+                    dev_summary = devSummary
+                )
+                
+                val response = api.detectPriority(request)
+                
+                Log.d(TAG, "✅ [$jobId] Priority Detection complete: messageId=${response.message_id.takeLast(6)}, " +
+                        "priorityCount=${response.priority_count}, analyzed=${response.total_analyzed}, time=${response.processing_time_ms}ms")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ [$jobId] Priority Detection failed: ${e.message}", e)
+                
+                // Emit error message for MainActivity to show Toast
+                val errorMsg = when {
+                    e.message?.contains("502") == true -> "AI service is starting up. Please try again in a moment."
+                    e.message?.contains("timeout") == true -> "Request timeout. Please check your connection."
+                    e.message?.contains("401") == true -> "Authentication error. Please sign in again."
+                    else -> "Priority detection failed: ${e.message}"
+                }
+                _errorMessages.value = errorMsg
+                
+            } finally {
+                decrementJobCount(conversationId)
+                Log.d(TAG, "🏁 [$jobId] Job finished (remaining: ${getJobCount(conversationId)})")
+            }
+        }
+    }
+    
+    /**
+     * Track decisions made in conversation (Fire-and-forget)
+     * 
+     * Job runs in ApplicationScope and survives Activity/ViewModel destruction.
+     * Backend analyzes conversation and creates AI message in Firestore with decision summary.
+     * 
+     * @param conversationId Firestore conversation ID
+     */
+    fun trackDecisionsAsync(conversationId: String) {
+        applicationScope.launch {
+            val jobId = "decisions_${conversationId.takeLast(6)}_${System.currentTimeMillis()}"
+            
+            try {
+                incrementJobCount(conversationId)
+                Log.d(TAG, "📋 [$jobId] Starting Decision Tracking (active: ${getJobCount(conversationId)})")
+                
+                // Read dev preference
+                val devSummary = devPreferences.showAIProcessingTime.first()
+                
+                // Call backend API
+                val request = com.synapse.data.remote.DecisionTrackingRequest(
+                    conversation_id = conversationId,
+                    dev_summary = devSummary
+                )
+                
+                val response = api.trackDecisions(request)
+                
+                Log.d(TAG, "✅ [$jobId] Decision Tracking complete: messageId=${response.message_id.takeLast(6)}, " +
+                        "decisionsCount=${response.decisions_count}, time=${response.processing_time_ms}ms")
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ [$jobId] Decision Tracking failed: ${e.message}", e)
+                
+                // Emit error message for MainActivity to show Toast
+                val errorMsg = when {
+                    e.message?.contains("502") == true -> "AI service is starting up. Please try again in a moment."
+                    e.message?.contains("timeout") == true -> "Request timeout. Please check your connection."
+                    e.message?.contains("401") == true -> "Authentication error. Please sign in again."
+                    else -> "Decision tracking failed: ${e.message}"
+                }
+                _errorMessages.value = errorMsg
+                
+            } finally {
+                decrementJobCount(conversationId)
+                Log.d(TAG, "🏁 [$jobId] Job finished (remaining: ${getJobCount(conversationId)})")
+            }
+        }
+    }
+    
     companion object {
         private const val TAG = "AIRepository"
     }

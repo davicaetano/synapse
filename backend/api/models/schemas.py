@@ -82,22 +82,7 @@ class SearchResponse(BaseModel):
 
 class PriorityDetectionRequest(BaseModel):
     conversation_id: str = Field(..., description="Firestore conversation ID")
-    message_id: Optional[str] = Field(None, description="Specific message to analyze")
-
-class PriorityMessage(BaseModel):
-    message_id: str
-    text: str
-    sender_name: str
-    priority_score: float  # 0.0 to 1.0
-    urgency_level: str  # low, medium, high, urgent
-    reasons: List[str]  # Why it's prioritized
-    timestamp: str
-
-class PriorityDetectionResponse(BaseModel):
-    conversation_id: str
-    priority_messages: List[PriorityMessage]
-    total_analyzed: int
-    processing_time_ms: int
+    dev_summary: bool = Field(False, description="Include dev info (processing time, model version)")
 
 # ============================================================
 # DECISION TRACKING
@@ -107,6 +92,7 @@ class DecisionTrackingRequest(BaseModel):
     conversation_id: str = Field(..., description="Firestore conversation ID")
     start_date: Optional[str] = Field(None, description="ISO format start date")
     end_date: Optional[str] = Field(None, description="ISO format end date")
+    dev_summary: bool = Field(False, description="Include dev info (processing time, model version)")
 
 class Decision(BaseModel):
     decision: str
@@ -115,12 +101,6 @@ class Decision(BaseModel):
     confidence: float  # 0.0 to 1.0
     context: str  # Surrounding messages
     message_ids: List[str]  # Messages that led to decision
-
-class DecisionTrackingResponse(BaseModel):
-    conversation_id: str
-    decisions: List[Decision]
-    total_count: int
-    processing_time_ms: int
 
 # ============================================================
 # ADVANCED AGENT (Meeting Minutes)
