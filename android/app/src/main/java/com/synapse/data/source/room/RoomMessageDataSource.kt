@@ -91,6 +91,17 @@ class RoomMessageDataSource @Inject constructor(
     }
     
     /**
+     * Get the timestamp of the oldest message in Room cache.
+     * Used for manual lazy loading to fetch older messages from Firebase.
+     * Returns null if no messages exist yet.
+     */
+    suspend fun getOldestMessageTimestamp(conversationId: String): Long? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val timestamp = messageDao.getOldestMessageTimestamp(conversationId)
+        Log.d(TAG, "📅 [ROOM] Oldest message timestamp for $conversationId: $timestamp")
+        return@withContext timestamp
+    }
+    
+    /**
      * Calculate unread counts for conversations based on memberStatus timestamps.
      * 
      * NEW APPROACH - Uses conversation-level lastSeenAt tracking:

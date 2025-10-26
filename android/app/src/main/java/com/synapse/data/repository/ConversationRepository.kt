@@ -139,7 +139,25 @@ Feel free to start chatting!"""
             var lastTimestamp = roomMessageDataSource.getLastMessageTimestamp(conversationId)
             Log.d("ConversationRepo", "🔄 Starting incremental sync for $conversationId (lastTimestamp=$lastTimestamp)")
             
-            // Listen to Firestore for messages after lastTimestamp
+            // If Room is empty, fetch initial messages first (only last 200, not all history)
+            if (lastTimestamp == null) {
+                Log.d("ConversationRepo", "   📦 Room is empty, fetching initial 200 messages...")
+                val initialMessages = firestoreMessageDataSource.fetchRecentMessages(
+                    conversationId = conversationId,
+                    limit = 200
+                )
+                
+                if (initialMessages.isNotEmpty()) {
+                    Log.d("ConversationRepo", "   💾 Upserting ${initialMessages.size} initial messages to Room...")
+                    roomMessageDataSource.upsertMessages(initialMessages, conversationId)
+                    
+                    // Update lastTimestamp to the most recent message
+                    lastTimestamp = initialMessages.maxByOrNull { it.createdAtMs }?.createdAtMs
+                    Log.d("ConversationRepo", "   ✅ Initial messages loaded, lastTimestamp=$lastTimestamp")
+                }
+            }
+            
+            // Listen to Firestore for messages AFTER lastTimestamp (only new messages from now on)
             firestoreMessageDataSource.listenMessages(conversationId, lastTimestamp)
                 .collect { newMessages ->
                     if (newMessages.isNotEmpty()) {
@@ -396,6 +414,49 @@ Feel free to start chatting!"""
         
         // Update Room cache (soft delete)
         roomMessageDataSource.markMessageAsDeleted(messageId, currentUserId, timestamp)
+    }
+    
+    /**
+     * Fetch older messages from Firestore and insert into Room cache.
+     * Used for manual lazy loading when user scrolls to top.
+     * 
+     * This method:
+     * 1. Gets the oldest message timestamp from Room
+     * 2. Fetches 200 messages older than that from Firestore
+     * 3. Inserts them into Room
+     * 4. Paging3 automatically detects and displays them
+     * 
+     * @param conversationId The conversation ID
+     * @return Number of messages fetched (0 if reached end)
+     */
+    suspend fun fetchOlderMessages(conversationId: String): Int {
+        // Get oldest message timestamp from Room
+        val oldestTimestamp = roomMessageDataSource.getOldestMessageTimestamp(conversationId)
+        
+        if (oldestTimestamp == null) {
+            Log.d("ConversationRepo", "📭 No messages in Room yet, skipping older messages fetch")
+            return 0
+        }
+        
+        Log.d("ConversationRepo", "📥 Fetching older messages before timestamp: $oldestTimestamp")
+        
+        // Fetch older messages from Firestore
+        val olderMessages = firestoreMessageDataSource.fetchOlderMessages(
+            conversationId = conversationId,
+            beforeTimestamp = oldestTimestamp,
+            limit = 200
+        )
+        
+        if (olderMessages.isEmpty()) {
+            Log.d("ConversationRepo", "🏁 No more older messages to fetch (reached end)")
+            return 0
+        }
+        
+        // Insert into Room
+        roomMessageDataSource.upsertMessages(olderMessages, conversationId)
+        
+        Log.d("ConversationRepo", "✅ Fetched and inserted ${olderMessages.size} older messages")
+        return olderMessages.size
     }
 }
 

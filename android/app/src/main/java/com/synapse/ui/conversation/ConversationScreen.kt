@@ -97,6 +97,10 @@ fun ConversationScreen(
     // Dev settings
     val showBatchButtons by vm.showBatchButtons.collectAsStateWithLifecycle()
     
+    // Lazy loading states
+    val isLoadingOlderMessages by vm.isLoadingOlderMessages.collectAsStateWithLifecycle()
+    val hasReachedEnd by vm.hasReachedEnd.collectAsStateWithLifecycle()
+    
     // Message selection state
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     
@@ -147,6 +151,8 @@ fun ConversationScreen(
         selectedMessageId = selectedMessageId,
         activeAIJobCount = activeAIJobCount,
         showBatchButtons = showBatchButtons,
+        isLoadingOlderMessages = isLoadingOlderMessages,
+        hasReachedEnd = hasReachedEnd,
         searchState = searchState,
         showSearchDialog = showSearchDialog,
         searchQuery = searchQuery,
@@ -180,7 +186,8 @@ fun ConversationScreen(
         },
         onSearchClose = { vm.closeSearch() },
         onSearchNextResult = { vm.navigateToNextResult() },
-        onSearchPreviousResult = { vm.navigateToPreviousResult() }
+        onSearchPreviousResult = { vm.navigateToPreviousResult() },
+        onLoadOlderMessages = { vm.loadOlderMessages() }
     )
 }
 
@@ -193,6 +200,8 @@ fun ConversationScreen(
     selectedMessageId: String?,
     activeAIJobCount: Int = 0,
     showBatchButtons: Boolean = false,
+    isLoadingOlderMessages: Boolean = false,
+    hasReachedEnd: Boolean = false,
     searchState: SearchState = SearchState(),
     showSearchDialog: Boolean = false,
     searchQuery: String = "",
@@ -217,7 +226,8 @@ fun ConversationScreen(
     onSearchDialogDismiss: () -> Unit = {},
     onSearchClose: () -> Unit = {},
     onSearchNextResult: () -> Unit = {},
-    onSearchPreviousResult: () -> Unit = {}
+    onSearchPreviousResult: () -> Unit = {},
+    onLoadOlderMessages: () -> Unit = {}
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -249,6 +259,28 @@ fun ConversationScreen(
                     listState.animateScrollToItem(it)
                 }
             }
+        }
+    }
+    
+    // Manual lazy loading: detect when scrolled to top (oldest messages)
+    // and load more messages from Firebase
+    val isAtTop = remember {
+        androidx.compose.runtime.derivedStateOf {
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            // With reverseLayout=true, last visible item = oldest message (at top)
+            lastVisibleItem?.index == pagedMessages.itemCount - 1
+        }
+    }
+    
+    // Load older messages when reaching top
+    LaunchedEffect(isAtTop.value) {
+        if (isAtTop.value && 
+            pagedMessages.itemCount > 0 && 
+            !isLoadingOlderMessages && 
+            !hasReachedEnd
+        ) {
+            android.util.Log.d("ConversationScreen", "📍 Reached top, loading older messages...")
+            onLoadOlderMessages()
         }
     }
 
@@ -367,6 +399,24 @@ fun ConversationScreen(
                         bottom = 8.dp
                     )
                 ) {
+                    // Loading indicator at top (oldest messages) when fetching more
+                    if (isLoadingOlderMessages) {
+                        item(key = "loading_older") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                        }
+                    }
+                    
                     // Paging3 - loads 50 at a time
                     items(count = pagedMessages.itemCount) { index ->
                     pagedMessages[index]?.let { m ->

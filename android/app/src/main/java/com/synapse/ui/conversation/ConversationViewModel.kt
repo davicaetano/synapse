@@ -234,6 +234,59 @@ class ConversationViewModel @Inject constructor(
         convRepo.observeConversation(conversationId)
             .map { it?.memberStatus ?: emptyMap() }
             .stateIn(viewModelScope, SharingStarted.Lazily, emptyMap())
+    
+    /**
+     * Loading state for older messages fetch.
+     * Prevents multiple simultaneous fetches.
+     */
+    private val _isLoadingOlderMessages = MutableStateFlow(false)
+    val isLoadingOlderMessages: StateFlow<Boolean> = _isLoadingOlderMessages
+    
+    /**
+     * Has reached end of message history (no more messages to fetch).
+     */
+    private val _hasReachedEnd = MutableStateFlow(false)
+    val hasReachedEnd: StateFlow<Boolean> = _hasReachedEnd
+    
+    /**
+     * Load older messages from Firestore when user scrolls to top.
+     * 
+     * Manual lazy loading approach:
+     * - Fetches 200 older messages from Firebase
+     * - Inserts into Room cache
+     * - Paging3 automatically detects and displays them
+     * - No RemoteMediator needed!
+     */
+    fun loadOlderMessages() {
+        if (_isLoadingOlderMessages.value) {
+            Log.d(TAG, "⏸️ Already loading older messages, skipping")
+            return
+        }
+        
+        if (_hasReachedEnd.value) {
+            Log.d(TAG, "🏁 Already reached end of message history, skipping")
+            return
+        }
+        
+        viewModelScope.launch {
+            _isLoadingOlderMessages.value = true
+            try {
+                Log.d(TAG, "📥 Loading older messages...")
+                val fetchedCount = convRepo.fetchOlderMessages(conversationId)
+                
+                if (fetchedCount == 0) {
+                    _hasReachedEnd.value = true
+                    Log.d(TAG, "🏁 Reached end of message history")
+                } else {
+                    Log.d(TAG, "✅ Loaded $fetchedCount older messages")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error loading older messages", e)
+            } finally {
+                _isLoadingOlderMessages.value = false
+            }
+        }
+    }
 
     /**
      * Called when user types text in the input field.

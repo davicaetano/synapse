@@ -169,6 +169,131 @@ class FirestoreMessageDataSource @Inject constructor(
         }
     }
     
+    /**
+     * Fetch older messages from Firestore (one-time query, not a listener).
+     * Used for manual lazy loading when user scrolls to top.
+     * 
+     * @param conversationId The conversation ID
+     * @param beforeTimestamp Only fetch messages created before this timestamp
+     * @param limit Maximum number of messages to fetch (default: 200)
+     * @return List of older messages
+     */
+    suspend fun fetchOlderMessages(
+        conversationId: String,
+        beforeTimestamp: Long,
+        limit: Int = 200
+    ): List<MessageEntity> {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "📥 Fetching $limit older messages before timestamp: $beforeTimestamp")
+        
+        return try {
+            val snapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("createdAtMs", Query.Direction.DESCENDING)
+                .whereLessThan("createdAtMs", beforeTimestamp)
+                .limit(limit.toLong())
+                .get()
+                .await()
+            
+            val messages = snapshot.documents.mapNotNull { doc ->
+                try {
+                    // Skip soft-deleted messages
+                    val isDeleted = doc.getBoolean("isDeleted") ?: false
+                    if (isDeleted) return@mapNotNull null
+                    
+                    MessageEntity(
+                        id = doc.id,
+                        text = doc.getString("text") ?: "",
+                        senderId = doc.getString("senderId") ?: "",
+                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                        memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
+                            ?.mapNotNull { it as? String } 
+                            ?: emptyList(),
+                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
+                        type = doc.getString("type") ?: "text",
+                        isDeleted = false,
+                        deletedBy = null,
+                        deletedAtMs = null
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error parsing message: ${e.message}")
+                    null
+                }
+            }
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "✅ Fetched ${messages.size} older messages in ${elapsed}ms")
+            
+            messages
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "❌ Error fetching older messages: ${e.message} (${elapsed}ms)", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Fetch the most recent N messages from a conversation.
+     * Used for initial load when opening a conversation.
+     * 
+     * @param conversationId The conversation ID
+     * @param limit Number of recent messages to fetch (default: 200)
+     * @return List of the most recent messages, ordered by creation time descending
+     */
+    suspend fun fetchRecentMessages(
+        conversationId: String,
+        limit: Int = 200
+    ): List<MessageEntity> {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "📥 Fetching $limit most recent messages")
+        
+        return try {
+            val snapshot = firestore.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .orderBy("createdAtMs", Query.Direction.DESCENDING)
+                .limit(limit.toLong())
+                .get()
+                .await()
+            
+            val messages = snapshot.documents.mapNotNull { doc ->
+                try {
+                    // Skip soft-deleted messages
+                    val isDeleted = doc.getBoolean("isDeleted") ?: false
+                    if (isDeleted) return@mapNotNull null
+                    
+                    MessageEntity(
+                        id = doc.id,
+                        text = doc.getString("text") ?: "",
+                        senderId = doc.getString("senderId") ?: "",
+                        createdAtMs = doc.getLong("createdAtMs") ?: 0L,
+                        memberIdsAtCreation = (doc.get("memberIdsAtCreation") as? List<*>)
+                            ?.mapNotNull { it as? String } 
+                            ?: emptyList(),
+                        serverTimestamp = doc.getTimestamp("serverTimestamp")?.toDate()?.time,
+                        type = doc.getString("type") ?: "text",
+                        isDeleted = false,
+                        deletedBy = null,
+                        deletedAtMs = null
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "❌ Error parsing message: ${e.message}")
+                    null
+                }
+            }
+            
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.d(TAG, "✅ Fetched ${messages.size} recent messages in ${elapsed}ms")
+            
+            messages
+        } catch (e: Exception) {
+            val elapsed = System.currentTimeMillis() - startTime
+            Log.e(TAG, "❌ Error fetching recent messages: ${e.message} (${elapsed}ms)", e)
+            emptyList()
+        }
+    }
+    
     // ============================================================
     // WRITE OPERATIONS
     // ============================================================

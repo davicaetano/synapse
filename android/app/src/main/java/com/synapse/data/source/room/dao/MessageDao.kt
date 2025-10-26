@@ -49,6 +49,14 @@ interface MessageDao {
      */
     @Query("SELECT MAX(createdAtMs) FROM messages WHERE conversationId = :conversationId")
     suspend fun getLastMessageTimestamp(conversationId: String): Long?
+    
+    /**
+     * Get the oldest message timestamp for a conversation.
+     * Used for manual lazy loading to fetch older messages.
+     * Returns null if no messages exist yet.
+     */
+    @Query("SELECT MIN(createdAtMs) FROM messages WHERE conversationId = :conversationId AND isDeleted = 0")
+    suspend fun getOldestMessageTimestamp(conversationId: String): Long?
 
     /**
      * Insert or update multiple messages.
