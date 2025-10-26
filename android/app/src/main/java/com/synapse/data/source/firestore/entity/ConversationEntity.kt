@@ -27,6 +27,7 @@ data class ConversationEntity(
     val lastMessageText: String,
     val groupName: String? = null,  // Optional: Only for GROUP type
     val createdBy: String? = null,  // Optional: Only for GROUP type
-    val members: Map<String, Member>  // Replaces memberIds + memberStatus (removes duplication)
+    val memberIds: List<String>,  // Array of active member IDs (no bots, no deleted) - auto-synced by Cloud Function
+    val members: Map<String, Member>  // Map with full member data (includes bots)
 )
 

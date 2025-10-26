@@ -120,13 +120,9 @@ class ConversationViewModel @Inject constructor(
         // STEP 1: Get the conversation entity + update lastSeenAt when needed
         val conversationFlow = convRepo.observeConversation(conversationId)
         
-        // STEP 2: Extract member IDs (stable) - only active members
+        // STEP 2: Extract member IDs from memberIds array (already filtered by Cloud Function)
         val memberIdsFlow = conversationFlow
-            .map { conv -> 
-                conv?.members
-                    ?.filterValues { !it.isDeleted }  // Exclude deleted members
-                    ?.keys?.sorted() ?: emptyList()
-            }
+            .map { conv -> conv?.memberIds ?: emptyList() }
             .distinctUntilChanged()
         
         // STEP 3: Observe users (only recreates when members change)
@@ -138,7 +134,8 @@ class ConversationViewModel @Inject constructor(
                     convRepo.observeUsers(memberIds)
                 }
             }
-            .onEach { Log.d(TAG, "⏱️ usersFlow emitted ${it.size} users in ${System.currentTimeMillis() - startTime}ms") }
+            .distinctUntilChanged()
+            .onEach { Log.d(TAG, "⏱️ usersFlow emitted users in ${System.currentTimeMillis() - startTime}ms - ${it}") }
         
         // STEP 4: Observe presence (only recreates when members change)
         val presenceFlow = memberIdsFlow
@@ -149,18 +146,25 @@ class ConversationViewModel @Inject constructor(
                     convRepo.observePresence(memberIds)
                 }
             }
-            .onEach { Log.d(TAG, "⏱️ presenceFlow emitted ${it.size} in ${System.currentTimeMillis() - startTime}ms") }
+            .distinctUntilChanged()
+            .onEach { Log.d(TAG, "⏱️ presenceFlow emitted in ${System.currentTimeMillis() - startTime}ms - ${it} ") }
         
         // STEP 5: Observe typing
         val typingFlow = typingRepo.observeTypingTextInConversation(conversationId)
+            .distinctUntilChanged()
+            .onEach { Log.d(TAG, "⏱️ typingFlow emitted in ${System.currentTimeMillis() - startTime}ms - ${it} ") }
         
         // STEP 6: Observe network connectivity
         val isConnectedFlow = networkMonitor.isConnected
+            .onEach { Log.d(TAG, "⏱️ isConnectedFlow emitted in ${System.currentTimeMillis() - startTime}ms - ${it} ") }
         
         // STEP 7: Combine typing + connectivity (to avoid 5-flow limit)
         val typingAndConnectivityFlow = combine(typingFlow, isConnectedFlow) { typing, connected ->
             typing to connected
         }
+            .distinctUntilChanged()
+            .onEach { Log.d(TAG, "⏱️ typingAndConnectivityFlow emitted in ${System.currentTimeMillis() - startTime}ms - ${it} ") }
+
         
         // STEP 8: Combine everything and build UI state
         // NOTE: Messages are handled separately via Paging3 (messagesPaged)
@@ -188,8 +192,26 @@ class ConversationViewModel @Inject constructor(
             if (messageSyncJob == null && a.title != "Unknown") {
                 Log.d(TAG, "🚀 Starting INCREMENTAL message sync AFTER UI ready")
 
-                viewModelScope.launch {
-                    convRepo.updateMemberLastSeenAtNow(conversationId)
+                if (conversation != null) {
+                    val myLastSeenAt = conversation.members[userId]?.lastSeenAt?.toDate()?.time ?: 0L
+
+                    // Get all other members (exclude myself and deleted members)
+                    val otherMembers = conversation.members.filterKeys { it != userId && conversation.members[it]?.isDeleted == false }.keys
+
+                    // Find the most recent lastMessageSentAt from OTHER members
+                    val mostRecentOtherSentAt = otherMembers.mapNotNull { memberId ->
+                        conversation.members[memberId]?.lastMessageSentAt?.toDate()?.time
+                    }.maxOrNull()
+
+                    Log.d(TAG, "🔵 Loop check - 1: mostRecentOtherSent=$mostRecentOtherSentAt, myLastSeenAt=$myLastSeenAt")
+
+                    // Guard: only update if someone ELSE sent a message AFTER I last saw AND not already pending
+                    if (mostRecentOtherSentAt != null && mostRecentOtherSentAt > myLastSeenAt) {
+                        Log.d(TAG, "🔴 UPDATING lastSeenAt")
+                        viewModelScope.launch {
+                            convRepo.updateMemberLastSeenAtNow(conversationId)
+                        }
+                    }
                 }
                 // Start incremental sync (tied to viewModelScope - cancels when ViewModel dies)
                 // This syncs ONLY new messages (after last Room timestamp), not all 100

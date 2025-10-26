@@ -148,6 +148,7 @@ class FirestoreConversationDataSource @Inject constructor(
             lastMessageText = doc.getString("lastMessageText") ?: "",
             groupName = doc.getString("groupName"),
             createdBy = doc.getString("createdBy"),
+            memberIds = (doc.get("memberIds") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
             members = members
         )
     }

@@ -14,7 +14,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,62 +44,79 @@ class RealtimePresenceDataSource @Inject constructor(
     private var heartbeatJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
     
+    /**
+     * Global presence flow - listens to ALL users in /presence.
+     * 
+     * Uses callbackFlow + stateIn for proper lifecycle management:
+     * - SharingStarted.Eagerly: starts immediately, stays active
+     * - StateFlow: caches last value, provides instant data to new collectors
+     * - awaitClose: guarantees cleanup when scope is cancelled
+     * 
+     * This single listener serves ALL observePresence() calls via filtering.
+     */
+    private val globalPresenceFlow: StateFlow<Map<String, PresenceEntity>> = callbackFlow {
+        val presenceRef = realtimeDb.child("presence")
+        
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val presenceMap = mutableMapOf<String, PresenceEntity>()
+                
+                snapshot.children.forEach { userSnapshot ->
+                    val userId = userSnapshot.key ?: return@forEach
+                    val online = userSnapshot.child("online").getValue(Boolean::class.java) ?: false
+                    val lastSeenMs = userSnapshot.child("lastSeenMs").getValue(Long::class.java)
+                    
+                    presenceMap[userId] = PresenceEntity(online = online, lastSeenMs = lastSeenMs)
+                }
+                
+                Log.d(TAG, "🌍 Global presence updated: ${presenceMap.size} users")
+                trySend(presenceMap)
+            }
+            
+            override fun onCancelled(error: DatabaseError) {
+                Log.e(TAG, "❌ Global presence listener cancelled: ${error.message}")
+            }
+        }
+        
+        presenceRef.addValueEventListener(listener)
+        Log.d(TAG, "🌍 Started global presence listener for ALL users")
+        
+        awaitClose {
+            Log.d(TAG, "🌍 Removing global presence listener")
+            presenceRef.removeEventListener(listener)
+        }
+    }.stateIn(
+        scope = scope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyMap()
+    )
+    
     // ============================================================
     // READ OPERATIONS
     // ============================================================
     
     /**
      * Listen to multiple users' presence in real-time.
-     * Useful for inbox screens where you need presence for many users.
+     * 
+     * NOW USES GLOBAL LISTENER:
+     * - No new listeners created (all data comes from global flow)
+     * - Filters from globalPresenceFlow by userIds
+     * - INSTANT response (data already in memory)
+     * - Eliminates race conditions and glitches
      * 
      * Returns a Map<userId, PresenceEntity> that updates whenever any user's presence changes.
      */
-    fun listenMultiplePresence(userIds: List<String>): Flow<Map<String, PresenceEntity>> = callbackFlow {
-        
+    fun listenMultiplePresence(userIds: List<String>): Flow<Map<String, PresenceEntity>> {
         if (userIds.isEmpty()) {
-            trySend(emptyMap())
-            awaitClose {}
-            return@callbackFlow
+            return callbackFlow {
+                trySend(emptyMap())
+                awaitClose {}
+            }
         }
         
-        val listeners = mutableMapOf<String, ValueEventListener>()
-        val presenceMap = mutableMapOf<String, PresenceEntity>()
-        
-        userIds.forEach { userId ->
-            val ref = realtimeDb.child("presence").child(userId)
-            
-            val listener = object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val online = snapshot.child("online").getValue(Boolean::class.java) ?: false
-                    val lastSeenMs = snapshot.child("lastSeenMs").getValue(Long::class.java)
-                    
-                    presenceMap[userId] = PresenceEntity(online = online, lastSeenMs = lastSeenMs)
-                    
-                    
-                    // Safe send - only send if channel is not closed
-                    try {
-                        trySend(presenceMap.toMap()).isSuccess
-                    } catch (e: Exception) {
-                    }
-                }
-                
-                override fun onCancelled(error: DatabaseError) {
-                    // Keep flow alive by sending current presence map
-                    try {
-                        trySend(presenceMap.toMap()).isSuccess
-                    } catch (e: Exception) {
-                    }
-                }
-            }
-            
-            listeners[userId] = listener
-            ref.addValueEventListener(listener)
-        }
-        
-        awaitClose {
-            listeners.forEach { (userId, listener) ->
-                realtimeDb.child("presence").child(userId).removeEventListener(listener)
-            }
+        // Filter global flow by requested userIds
+        return globalPresenceFlow.map { allPresence ->
+            allPresence.filterKeys { it in userIds }
         }
     }
     
