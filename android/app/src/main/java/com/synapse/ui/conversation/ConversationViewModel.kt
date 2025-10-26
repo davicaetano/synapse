@@ -213,7 +213,7 @@ class ConversationViewModel @Inject constructor(
             a
         }.stateIn(
             viewModelScope,
-            SharingStarted.Lazily, // Keep listeners active - messages stay loaded
+            SharingStarted.Lazily, // Keep listeners active - no reload when navigating back
             ConversationUIState(
                 conversationId = conversationId,
                 title = "",

@@ -105,12 +105,8 @@ fun buildConversationUIState(
         ConversationType.DIRECT -> {
             val otherUser = members.firstOrNull { it.id != userId }
             val name = otherUser?.displayName ?: "Unknown"
-            val status = when {
-                otherUser?.isOnline == true -> "online"
-                otherUser?.lastSeenMs != null -> formatLastSeen(otherUser.lastSeenMs)
-                else -> null
-            }
-            name to status
+            // Don't calculate status here - will be calculated in UI for real-time updates
+            name to null
         }
         ConversationType.GROUP -> {
             val name = conversation.groupName ?: "Group"
@@ -137,24 +133,6 @@ fun buildConversationUIState(
         isConnected = isConnected,
         lastMessageId = null  // Not used anymore - Paging3 handles scroll detection
     )
-}
-
-fun formatLastSeen(lastSeenMs: Long): String {
-    val now = System.currentTimeMillis()
-    val diffMs = now - lastSeenMs
-    
-    return when {
-        diffMs < TimeUnit.MINUTES.toMillis(1) -> "online"
-        diffMs < TimeUnit.HOURS.toMillis(1) -> {
-            val mins = TimeUnit.MILLISECONDS.toMinutes(diffMs)
-            "last seen ${mins}m ago"
-        }
-        diffMs < TimeUnit.DAYS.toMillis(1) -> {
-            val hours = TimeUnit.MILLISECONDS.toHours(diffMs)
-            "last seen ${hours}h ago"
-        }
-        else -> "last seen recently"
-    }
 }
 
 fun formatTime(ms: Long): String {

@@ -342,6 +342,7 @@ fun ConversationScreen(
                     title = ui.title,
                     subtitle = ui.subtitle,
                     convType = ui.convType,
+                    members = ui.members,
                     otherUserPhotoUrl = ui.otherUserPhotoUrl,
                     otherUserOnline = ui.otherUserOnline,
                     isUserAdmin = ui.isUserAdmin,
@@ -358,7 +359,7 @@ fun ConversationScreen(
                 onSend20Messages = onSend20Messages,
                 onSend100Messages = onSend100Messages,
                 onSend500Messages = onSend500Messages,
-                currentUserIsConnected = ui.isConnected
+                    currentUserIsConnected = ui.isConnected
                 )
             }
         },
@@ -547,6 +548,7 @@ private fun ConversationTopAppBar(
     title: String,
     subtitle: String?,
     convType: ConversationType,
+    members: List<com.synapse.domain.user.User>,
     otherUserPhotoUrl: String?,
     otherUserOnline: Boolean?,
     isUserAdmin: Boolean,
@@ -566,6 +568,31 @@ private fun ConversationTopAppBar(
     currentUserIsConnected: Boolean
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    
+    // For DIRECT conversations, calculate status from members Flow (updates automatically)
+    val currentUserId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+    val otherUser = if (convType == ConversationType.DIRECT) {
+        members.firstOrNull { it.id != currentUserId }
+    } else null
+    
+    // Debug: Log when otherUser changes
+    androidx.compose.runtime.LaunchedEffect(otherUser?.isOnline, otherUser?.lastSeenMs) {
+        android.util.Log.d("ConversationTopBar", "👤 Other user updated: isOnline=${otherUser?.isOnline}, lastSeenMs=${otherUser?.lastSeenMs}")
+    }
+    
+    // Calculate dynamic subtitle for DIRECT (GROUP uses static subtitle)
+    // members comes from Flow -> when it changes, Compose recomposes automatically
+    val dynamicSubtitle = when (convType) {
+        ConversationType.DIRECT -> {
+            com.synapse.util.getPresenceStatus(
+                isOnline = otherUser?.isOnline ?: false,
+                lastSeenMs = otherUser?.lastSeenMs
+            )
+        }
+        else -> subtitle // GROUP/SELF use static subtitle
+    }
+    
+    android.util.Log.d("ConversationTopBar", "🔄 Recomposing: dynamicSubtitle=$dynamicSubtitle")
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -604,7 +631,7 @@ private fun ConversationTopAppBar(
                     // No point showing other user's status if you can't communicate
                     if (currentUserIsConnected) {
                         // Prioritize typing indicator over subtitle
-                        val displayText = typingText ?: subtitle
+                        val displayText = typingText ?: dynamicSubtitle
                         if (displayText != null) {
                             Text(
                                 text = displayText,

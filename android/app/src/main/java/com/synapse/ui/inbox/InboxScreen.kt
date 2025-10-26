@@ -2,6 +2,7 @@ package com.synapse.ui.inbox
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -302,7 +303,7 @@ private fun OneOnOneConversationRow(
                     } else if (item.otherUser.lastSeenMs != null) {
                         Spacer(modifier = Modifier.size(4.dp))
                         Text(
-                            text = "• ${formatLastSeenShort(item.otherUser.lastSeenMs)}",
+                            text = "• ${com.synapse.util.formatLastSeen(item.otherUser.lastSeenMs)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = androidx.compose.ui.graphics.Color.Gray,
                             fontSize = 11.sp,
@@ -397,29 +398,6 @@ private fun GroupConversationRow(
             Spacer(modifier = Modifier.size(4.dp))
             UnreadBadge(count = item.unreadCount)
         }
-    }
-}
-
-// Helper function for short format of last seen (used in inbox)
-private fun formatLastSeenShort(lastSeenMs: Long): String {
-    val now = System.currentTimeMillis()
-    val diffMs = now - lastSeenMs
-    
-    return when {
-        diffMs < java.util.concurrent.TimeUnit.MINUTES.toMillis(1) -> "just now"
-        diffMs < java.util.concurrent.TimeUnit.HOURS.toMillis(1) -> {
-            val mins = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(diffMs)
-            "${mins}m ago"
-        }
-        diffMs < java.util.concurrent.TimeUnit.DAYS.toMillis(1) -> {
-            val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(diffMs)
-            "${hours}h ago"
-        }
-        diffMs < java.util.concurrent.TimeUnit.DAYS.toMillis(7) -> {
-            val days = java.util.concurrent.TimeUnit.MILLISECONDS.toDays(diffMs)
-            "${days}d ago"
-        }
-        else -> "long ago"
     }
 }
 

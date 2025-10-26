@@ -214,34 +214,14 @@ private fun UserRowWithCheckbox(
                     fontSize = 12.sp
                 )
             } else if (user.lastSeenMs != null) {
-                val lastSeenText = formatLastSeenShort(user.lastSeenMs)
                 Text(
-                    text = lastSeenText,
+                    text = com.synapse.util.formatLastSeen(user.lastSeenMs),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
             }
         }
-    }
-}
-
-// Helper for last seen formatting
-private fun formatLastSeenShort(lastSeenMs: Long): String {
-    val now = System.currentTimeMillis()
-    val diffMs = now - lastSeenMs
-    
-    return when {
-        diffMs < java.util.concurrent.TimeUnit.MINUTES.toMillis(1) -> "just now"
-        diffMs < java.util.concurrent.TimeUnit.HOURS.toMillis(1) -> {
-            val mins = java.util.concurrent.TimeUnit.MILLISECONDS.toMinutes(diffMs)
-            "${mins}m ago"
-        }
-        diffMs < java.util.concurrent.TimeUnit.DAYS.toMillis(1) -> {
-            val hours = java.util.concurrent.TimeUnit.MILLISECONDS.toHours(diffMs)
-            "${hours}h ago"
-        }
-        else -> "offline"
     }
 }
 
