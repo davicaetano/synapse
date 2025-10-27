@@ -65,7 +65,7 @@ async def trigger_proactive_assistant(request: ProactiveRequest):
                 text=result['suggestion_text'],
                 message_type="ai_summary",  # Use existing type for Android compatibility
                 member_ids=member_ids,
-                send_notification=False,  # Silent suggestions
+                send_notification=True,  # Update metadata (Cloud Function won't send push for ai_summary)
                 metadata={
                     "feature": "proactive_assistant",
                     "context_type": result['context_type'],

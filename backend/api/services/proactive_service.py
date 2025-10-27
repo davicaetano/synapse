@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from models.schemas import Message
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Load environment variables
 load_dotenv()
@@ -59,22 +59,10 @@ async def context_detector_step(state: ProactiveState) -> ProactiveState:
     
     messages = state['messages']
     
-    # Check 1: Anti-spam (AI already suggested in last 10 messages?)
-    last_10 = messages[-10:] if len(messages) >= 10 else messages
-    ai_messages = [msg for msg in last_10 if msg.sender_id == "synapse-bot-system"]
-    
-    if len(ai_messages) > 0:
-        print(f"⏸️  [PROACTIVE] Anti-spam: AI already active in last 10 messages")
-        state['should_act'] = False
-        state['context_type'] = "none"
-        state['confidence'] = 0.0
-        state['reason'] = "anti_spam"
-        return state
-    
-    # Check 2: Conversation active? (last message < 5 minutes)
+    # Check 1: Conversation active? (last message < 5 minutes)
     if len(messages) > 0:
         last_msg = messages[-1]
-        time_since_last = datetime.now() - last_msg.created_at
+        time_since_last = datetime.now(timezone.utc) - last_msg.created_at
         if time_since_last > timedelta(minutes=5):
             print(f"⏸️  [PROACTIVE] Conversation stale ({time_since_last.seconds}s old)")
             state['should_act'] = False
@@ -83,25 +71,32 @@ async def context_detector_step(state: ProactiveState) -> ProactiveState:
             state['reason'] = "stale_conversation"
             return state
     
-    # Check 3: Has actionable context? (LLM analysis)
-    last_20 = messages[-20:] if len(messages) >= 20 else messages
+    # Check 2: LLM-based context analysis (analyzes last 50 messages)
+    # LLM decides EVERYTHING: context detection AND anti-spam
+    last_50 = messages[-50:] if len(messages) >= 50 else messages
     conversation_text = "\n".join([
         f"[{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
-        for msg in last_20
+        for msg in last_50
     ])
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a context analyzer. Determine if conversation has actionable context for suggestions."),
-        ("user", """Analyze this conversation:
+        ("system", "You are an intelligent context analyzer. You analyze conversations to decide if proactive suggestions would be helpful."),
+        ("user", """Analyze this conversation history (up to 50 messages):
 
 {conversation}
 
-Is there actionable context for helpful suggestions?
+Should you provide a proactive suggestion?
 
-CONTEXTS:
+IMPORTANT ANTI-SPAM RULES:
+1. If you ALREADY provided suggestions recently (Movie Suggestions, Restaurant Suggestions, etc.), DO NOT suggest again
+2. If the conversation has moved to a different topic, DO NOT repeat previous suggestions
+3. Only suggest if there's a CLEAR, NEW need that hasn't been addressed
+
+CONTEXTS TO DETECT:
 - cinema: discussing movies, films, watching something, entertainment
-- restaurant: discussing food, eating, restaurants, dining
+- restaurant: discussing food, eating, restaurants, dining  
 - generic: vague planning ("let's meet", "what should we do") but no specific context
+- none: no actionable context OR already suggested recently
 
 Return JSON:
 {{
@@ -111,7 +106,7 @@ Return JSON:
     "reason": "brief explanation"
 }}
 
-BE CONSERVATIVE. Only suggest if conversation CLEARLY indicates a need.
+BE VERY CONSERVATIVE. Do NOT spam suggestions. Only suggest if truly needed and NOT already suggested.
 """)
     ])
     
@@ -139,20 +134,20 @@ async def cinema_agent_step(state: ProactiveState) -> ProactiveState:
     print(f"🤖 [PROACTIVE] Step {state['current_step']}/{state['total_steps']}: Cinema Agent...")
     
     # Mock movie suggestions (in production, call TMDb API)
-    suggestion = """🎬 **Sugestões de Filmes**
+    suggestion = """🎬 **Movie Suggestions**
 
-Baseado na conversa, aqui estão filmes em cartaz:
+Based on your conversation, here are some movies currently showing:
 
 1. **Dune: Part Two**
-   Sci-fi épico • 2h46min • ⭐9.0/10
+   Epic Sci-fi • 2h46min • ⭐9.0/10
    
 2. **Oppenheimer**
-   Drama biográfico • 3h00min • ⭐8.5/10
+   Biographical Drama • 3h00min • ⭐8.5/10
    
 3. **Poor Things**
-   Comédia dramática • 2h21min • ⭐8.2/10
+   Drama Comedy • 2h21min • ⭐8.2/10
 
-📍 Cinemas próximos: Cinemark, UCI, Kinoplex"""
+📍 Nearby theaters: Cinemark, UCI, Kinoplex"""
     
     state['suggestion_text'] = suggestion
     state['current_step'] += 1
@@ -166,20 +161,20 @@ async def restaurant_agent_step(state: ProactiveState) -> ProactiveState:
     print(f"🤖 [PROACTIVE] Step {state['current_step']}/{state['total_steps']}: Restaurant Agent...")
     
     # Mock restaurant suggestions (in production, call Google Places API)
-    suggestion = """🍽️ **Sugestões de Restaurantes**
+    suggestion = """🍽️ **Restaurant Suggestions**
 
-Próximos e bem avaliados:
+Highly rated nearby options:
 
 1. **Bella Italia**
-   Italiano • ⭐4.8/5 • $$ • 800m
+   Italian • ⭐4.8/5 • $$ • 800m
    
 2. **Sushi House**
-   Japonês • ⭐4.6/5 • $$$ • 1.2km
+   Japanese • ⭐4.6/5 • $$$ • 1.2km
    
 3. **BBQ Master**
-   Churrascaria • ⭐4.7/5 • $$$ • 1.5km
+   Steakhouse • ⭐4.7/5 • $$$ • 1.5km
 
-💡 Dica: Bella Italia aceita reservas online!"""
+💡 Tip: Bella Italia accepts online reservations!"""
     
     state['suggestion_text'] = suggestion
     state['current_step'] += 1
@@ -192,16 +187,16 @@ async def generic_agent_step(state: ProactiveState) -> ProactiveState:
     """Generate generic helpful suggestions"""
     print(f"🤖 [PROACTIVE] Step {state['current_step']}/{state['total_steps']}: Generic Agent...")
     
-    suggestion = """💡 **Posso ajudar!**
+    suggestion = """💡 **I can help!**
 
-Parece que vocês estão planejando algo. 
+It looks like you're planning something. 
 
-Posso sugerir:
-- 🎬 Filmes e entretenimento
-- 🍽️ Restaurantes e cafés
-- 🎯 Atividades e lugares
+I can suggest:
+- 🎬 Movies & entertainment
+- 🍽️ Restaurants & cafés
+- 🎯 Activities & places
 
-Me avisem se precisarem de sugestões específicas!"""
+Let me know if you need specific suggestions!"""
     
     state['suggestion_text'] = suggestion
     state['current_step'] += 1
@@ -280,17 +275,7 @@ async def run_proactive_assistant(
     workflow.set_entry_point("context_detector")
     
     # Conditional routing after context detection
-    workflow.add_conditional_edges(
-        "context_detector",
-        should_continue_after_detection,
-        {
-            "route_to_specialist": "context_detector",  # Needs second decision
-            "end": END
-        }
-    )
-    
-    # Actually, we need a cleaner approach - let me fix this
-    # After context_detector, route directly to specialist or END
+    # Routes to specialist agent if should_act=True, otherwise END
     workflow.add_conditional_edges(
         "context_detector",
         lambda state: route_to_specialist(state) if state["should_act"] else END,

@@ -317,7 +317,8 @@ class FirestoreMessageDataSource @Inject constructor(
     ): Int {
         val startTime = System.currentTimeMillis()
         Log.d(TAG, "🔢 Counting unread for conv=${conversationId.takeLast(6)}, userId=${userId.takeLast(6)}, lastSeenAt=$lastSeenAt")
-        
+
+        if (lastSeenAt.seconds == 0L && lastSeenAt.nanoseconds == 0) return 0
         return try {
             val snapshot = firestore.collection("conversations")
                 .document(conversationId)
@@ -331,15 +332,7 @@ class FirestoreMessageDataSource @Inject constructor(
             
             val count = snapshot.size()
             val elapsed = System.currentTimeMillis() - startTime
-            
-            // Debug: Show first few messages
-            if (snapshot.documents.isNotEmpty()) {
-                Log.d(TAG, "   📄 Sample messages:")
-                snapshot.documents.take(3).forEach { doc ->
-                    Log.d(TAG, "      - senderId=${doc.getString("senderId")?.takeLast(6)}, localTimestamp=${doc.getTimestamp("localTimestamp")}, deleted=${doc.getBoolean("isDeleted")}")
-                }
-            }
-            
+
             Log.d(TAG, "✅ Unread count: $count (${elapsed}ms)")
             
             count

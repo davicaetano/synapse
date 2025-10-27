@@ -88,6 +88,10 @@ class ConversationFragment : Fragment() {
         lifecycleScope.launch {
             viewModel.stopTyping()
         }
+        lifecycleScope.launch {
+            viewModel.setLatSeen()
+        }
+
     }
 }
 
