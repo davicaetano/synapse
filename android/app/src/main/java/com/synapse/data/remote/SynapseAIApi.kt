@@ -71,6 +71,18 @@ interface SynapseAIApi {
     suspend fun trackDecisions(
         @Body request: DecisionTrackingRequest
     ): DecisionTrackingResponse
+    
+    /**
+     * Proactive Assistant - Multi-Agent LangGraph System
+     * Analyzes conversation context and proactively suggests helpful information
+     * 
+     * @param request Proactive request with conversation_id
+     * @return Response with should_act, context_type, and message_id
+     */
+    @POST("proactive")
+    suspend fun triggerProactive(
+        @Body request: ProactiveRequest
+    ): ProactiveResponse
 }
 
 /**
@@ -188,5 +200,29 @@ data class DecisionTrackingResponse(
     val conversation_id: String,
     val decisions_count: Int,
     val processing_time_ms: Int
+)
+
+// ============================================================
+// PROACTIVE ASSISTANT (Advanced Multi-Agent)
+// ============================================================
+
+/**
+ * Request body for proactive assistant
+ */
+data class ProactiveRequest(
+    val conversation_id: String
+)
+
+/**
+ * Response from /api/proactive endpoint
+ */
+data class ProactiveResponse(
+    val success: Boolean,
+    val should_act: Boolean,  // Did AI decide to suggest something?
+    val context_type: String? = null,  // "cinema" | "restaurant" | "generic" | "none"
+    val confidence: Float? = null,  // 0.0 to 1.0
+    val message_id: String? = null,  // AI message ID if suggestion was created
+    val reason: String? = null,  // Why no action (anti_spam, stale_conversation, etc.)
+    val processing_time_ms: Int? = null
 )
 

@@ -323,6 +323,49 @@ class AIRepository @Inject constructor(
         }
     }
     
+    /**
+     * Trigger Proactive Assistant (Fire-and-forget)
+     * 
+     * LangGraph multi-agent system that analyzes conversation context and proactively
+     * suggests helpful information (movies, restaurants, etc.).
+     * 
+     * **Anti-spam**: Only triggers if no AI message in last 10 messages
+     * **Context detection**: LLM-based gatekeeper decides if suggestion is needed
+     * **Specialized agents**: Routes to Cinema/Restaurant/Generic based on context
+     * 
+     * Job runs in ApplicationScope but does NOT increment job count (silent, background)
+     * 
+     * @param conversationId Firestore conversation ID
+     */
+    fun triggerProactiveAsync(conversationId: String) {
+        applicationScope.launch {
+            val jobId = "proactive_${conversationId.takeLast(6)}_${System.currentTimeMillis()}"
+            
+            try {
+                Log.d(TAG, "🤖 [$jobId] Triggering Proactive Assistant")
+                
+                // Call backend API (no dev_summary needed)
+                val request = com.synapse.data.remote.ProactiveRequest(
+                    conversation_id = conversationId
+                )
+                
+                val response = api.triggerProactive(request)
+                
+                if (response.should_act) {
+                    Log.d(TAG, "✅ [$jobId] Proactive suggestion sent: context=${response.context_type}, " +
+                            "confidence=${response.confidence}, messageId=${response.message_id?.takeLast(6)}, " +
+                            "time=${response.processing_time_ms}ms")
+                } else {
+                    Log.d(TAG, "⏸️  [$jobId] Proactive: No action needed (${response.reason})")
+                }
+                
+            } catch (e: Exception) {
+                // Silent failure (proactive is background feature)
+                Log.w(TAG, "⚠️ [$jobId] Proactive Assistant failed (silent): ${e.message}")
+            }
+        }
+    }
+    
     companion object {
         private const val TAG = "AIRepository"
     }

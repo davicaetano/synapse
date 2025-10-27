@@ -126,6 +126,22 @@ class MeetingMinutesResponse(BaseModel):
     processing_time_ms: int
 
 # ============================================================
+# PROACTIVE ASSISTANT (Advanced Multi-Agent)
+# ============================================================
+
+class ProactiveRequest(BaseModel):
+    conversation_id: str = Field(..., description="Firestore conversation ID")
+
+class ProactiveResponse(BaseModel):
+    success: bool
+    should_act: bool
+    context_type: Optional[str] = None  # "cinema" | "restaurant" | "generic" | "none"
+    confidence: Optional[float] = None  # 0.0 to 1.0
+    message_id: Optional[str] = None  # AI message ID if created
+    reason: Optional[str] = None  # Why no action (anti_spam, stale_conversation, etc.)
+    processing_time_ms: Optional[int] = None
+
+# ============================================================
 # INTERNAL MODELS
 # ============================================================
 

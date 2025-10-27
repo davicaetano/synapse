@@ -26,18 +26,20 @@ class DevSettingsViewModel @Inject constructor(
         combine(
             devPreferences.forceAIError,
             devPreferences.showAIErrorToasts,
-            devPreferences.showAIProcessingTime
-        ) { forceAIError, showAIErrorToasts, showAIProcessingTime ->
-            Triple(forceAIError, showAIErrorToasts, showAIProcessingTime)
+            devPreferences.showAIProcessingTime,
+            devPreferences.proactiveAssistantEnabled
+        ) { forceAIError, showAIErrorToasts, showAIProcessingTime, proactiveEnabled ->
+            listOf(forceAIError, showAIErrorToasts, showAIProcessingTime, proactiveEnabled)
         }
     ) { first, second ->
         DevSettingsUIState(
             urlMode = first.first,
             customUrl = first.second,
             showBatchButtons = first.third,
-            forceAIError = second.first,
-            showAIErrorToasts = second.second,
-            showAIProcessingTime = second.third
+            forceAIError = second[0],
+            showAIErrorToasts = second[1],
+            showAIProcessingTime = second[2],
+            proactiveAssistantEnabled = second[3]
         )
     }.stateIn(
         scope = viewModelScope,
@@ -78,6 +80,12 @@ class DevSettingsViewModel @Inject constructor(
     fun toggleShowAIProcessingTime(show: Boolean) {
         viewModelScope.launch {
             devPreferences.setShowAIProcessingTime(show)
+        }
+    }
+    
+    fun toggleProactiveAssistant(enabled: Boolean) {
+        viewModelScope.launch {
+            devPreferences.setProactiveAssistantEnabled(enabled)
         }
     }
 }

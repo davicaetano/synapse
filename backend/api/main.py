@@ -10,7 +10,7 @@ from firebase_admin import auth as firebase_auth
 import os
 from dotenv import load_dotenv
 
-from routers import summarization, action_items, search, priority, decisions, agent
+from routers import summarization, action_items, search, priority, decisions, agent, proactive
 from version import API_VERSION
 
 # Load environment variables
@@ -69,7 +69,8 @@ async def root():
             "Smart Semantic Search",
             "Priority Detection",
             "Decision Tracking",
-            "Meeting Minutes Agent (Advanced)"
+            "Meeting Minutes Agent (Advanced)",
+            "Proactive Assistant (Advanced Multi-Agent)"
         ]
     }
 
@@ -84,6 +85,7 @@ app.include_router(search.router, prefix="/api", tags=["Smart Search"])
 app.include_router(priority.router, prefix="/api", tags=["Priority Detection"])
 app.include_router(decisions.router, prefix="/api", tags=["Decision Tracking"])
 app.include_router(agent.router, prefix="/api", tags=["Advanced Agent"])
+app.include_router(proactive.router, prefix="/api", tags=["Proactive Assistant"])
 
 if __name__ == "__main__":
     import uvicorn

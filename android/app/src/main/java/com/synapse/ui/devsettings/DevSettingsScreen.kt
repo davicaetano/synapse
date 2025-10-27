@@ -163,6 +163,30 @@ fun DevSettingsScreen(
             
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
             
+            // AI Features Section
+            Text(
+                text = "AI Features",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+            
+            // Proactive Assistant Toggle
+            SettingsItem(
+                title = "Proactive Assistant",
+                subtitle = if (state.proactiveAssistantEnabled) 
+                    "Enabled (AI suggests movies, restaurants, etc. based on conversation)" 
+                else 
+                    "Disabled",
+                trailing = {
+                    Switch(
+                        checked = state.proactiveAssistantEnabled,
+                        onCheckedChange = { vm.toggleProactiveAssistant(it) }
+                    )
+                }
+            )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
+            
             // Info Section
             Text(
                 text = "⚠️ Warning",

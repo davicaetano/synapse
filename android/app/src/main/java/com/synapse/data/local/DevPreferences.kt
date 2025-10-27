@@ -39,6 +39,7 @@ class DevPreferences @Inject constructor(
         private val FORCE_AI_ERROR = booleanPreferencesKey("force_ai_error")
         private val SHOW_AI_ERROR_TOASTS = booleanPreferencesKey("show_ai_error_toasts")
         private val SHOW_AI_PROCESSING_TIME = booleanPreferencesKey("show_ai_processing_time")
+        private val PROACTIVE_ASSISTANT_ENABLED = booleanPreferencesKey("proactive_assistant_enabled")
         
         // Default URLs
         const val PRODUCTION_URL = "https://synapse-ai-api-4wbf.onrender.com/api/"
@@ -85,6 +86,13 @@ class DevPreferences @Inject constructor(
      */
     val showAIProcessingTime: Flow<Boolean> = dataStore.data.map { prefs ->
         prefs[SHOW_AI_PROCESSING_TIME] ?: false
+    }
+    
+    /**
+     * Proactive Assistant enabled flag (LangGraph multi-agent suggestions)
+     */
+    val proactiveAssistantEnabled: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[PROACTIVE_ASSISTANT_ENABLED] ?: false
     }
     
     /**
@@ -150,6 +158,15 @@ class DevPreferences @Inject constructor(
     suspend fun setShowAIProcessingTime(show: Boolean) {
         dataStore.edit { prefs ->
             prefs[SHOW_AI_PROCESSING_TIME] = show
+        }
+    }
+    
+    /**
+     * Toggle proactive assistant (LangGraph multi-agent suggestions)
+     */
+    suspend fun setProactiveAssistantEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[PROACTIVE_ASSISTANT_ENABLED] = enabled
         }
     }
 }

@@ -350,7 +350,19 @@ class ConversationViewModel @Inject constructor(
     fun send(text: String) {
         viewModelScope.launch {
             val memberIds = uiState.value.members.map { it.id }
+            
+            // 1. Send message to Firestore (existing flow)
             messageSendCoordinator.sendMessage(conversationId, text, memberIds)
+            
+            // 2. Trigger proactive assistant IF enabled (async, non-blocking)
+            val proactiveEnabled = devPreferences.proactiveAssistantEnabled.stateIn(
+                viewModelScope
+            ).value
+            
+            if (proactiveEnabled) {
+                Log.d(TAG, "🤖 Proactive Assistant enabled, triggering...")
+                aiRepo.triggerProactiveAsync(conversationId)
+            }
         }
     }
     

@@ -6,6 +6,7 @@ data class DevSettingsUIState(
     val showBatchButtons: Boolean = false,
     val forceAIError: Boolean = false,
     val showAIErrorToasts: Boolean = false,
-    val showAIProcessingTime: Boolean = false
+    val showAIProcessingTime: Boolean = false,
+    val proactiveAssistantEnabled: Boolean = false
 )
 
