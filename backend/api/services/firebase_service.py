@@ -60,9 +60,10 @@ async def get_conversation_messages(
             if data.get('isDeleted', False):
                 continue
             
-            # Only analyze user text messages (ignore AI summaries, errors, bot messages)
+            # Include text messages AND ai_summary (for context awareness)
+            # Skip other AI types (ai_error, ai_action_items, etc.)
             message_type = data.get('type', 'text')
-            if message_type != 'text':
+            if message_type not in ['text', 'ai_summary']:
                 continue
             
             # Get localTimestamp (Firestore Timestamp object)
@@ -222,20 +223,36 @@ async def create_ai_message(
     """
     try:
         from google.cloud.firestore import SERVER_TIMESTAMP
+        from datetime import timedelta
         
         SYNAPSE_BOT_ID = "synapse-bot-system"
         
-        # Create message document
+        # Get the last message's timestamp to ensure bot message appears AFTER
         messages_ref = db.collection('conversations').document(conversation_id).collection('messages')
+        last_message_query = messages_ref.order_by('localTimestamp', direction='DESCENDING').limit(1).get()
+        
+        # Calculate timestamp: last message + 1 second (ensures bot message appears after user's message)
+        if last_message_query:
+            last_msg = last_message_query[0].to_dict()
+            last_timestamp = last_msg.get('localTimestamp')
+            if last_timestamp:
+                # Add 1 second to last message timestamp
+                bot_timestamp = last_timestamp + timedelta(seconds=1)
+            else:
+                bot_timestamp = SERVER_TIMESTAMP
+        else:
+            bot_timestamp = SERVER_TIMESTAMP
+        
+        # Create message document
         message_ref = messages_ref.document()  # Auto-generate ID
         
         message_data = {
             'id': message_ref.id,
             'text': text,
             'senderId': SYNAPSE_BOT_ID,
-            'localTimestamp': SERVER_TIMESTAMP,  # Server timestamp for consistency
+            'localTimestamp': bot_timestamp,  # Always AFTER last message
             'memberIdsAtCreation': member_ids + [SYNAPSE_BOT_ID],
-            'serverTimestamp': SERVER_TIMESTAMP,
+            'serverTimestamp': SERVER_TIMESTAMP,  # Still use server timestamp for authoritative time
             'type': message_type,
             'sendNotification': send_notification,
             'isDeleted': False,

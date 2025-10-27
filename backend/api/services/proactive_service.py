@@ -75,28 +75,43 @@ async def context_detector_step(state: ProactiveState) -> ProactiveState:
     # LLM decides EVERYTHING: context detection AND anti-spam
     last_50 = messages[-50:] if len(messages) >= 50 else messages
     conversation_text = "\n".join([
-        f"[{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
+        f"[{msg.created_at.strftime('%H:%M')}] {'🤖 AI ASSISTANT (YOU)' if msg.sender_id == 'synapse-bot-system' else msg.sender_name}: {msg.text}"
         for msg in last_50
     ])
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an intelligent context analyzer. You analyze conversations to decide if proactive suggestions would be helpful."),
+        ("system", "You are an intelligent context analyzer. You ONLY suggest when users have CLEAR INTENT to get recommendations. Be EXTREMELY conservative."),
         ("user", """Analyze this conversation history (up to 50 messages):
 
 {conversation}
 
 Should you provide a proactive suggestion?
 
-IMPORTANT ANTI-SPAM RULES:
-1. If you ALREADY provided suggestions recently (Movie Suggestions, Restaurant Suggestions, etc.), DO NOT suggest again
-2. If the conversation has moved to a different topic, DO NOT repeat previous suggestions
-3. Only suggest if there's a CLEAR, NEW need that hasn't been addressed
+IMPORTANT: Messages marked "🤖 AI ASSISTANT (YOU)" are YOUR OWN previous suggestions!
 
-CONTEXTS TO DETECT:
-- cinema: discussing movies, films, watching something, entertainment
-- restaurant: discussing food, eating, restaurants, dining  
-- generic: vague planning ("let's meet", "what should we do") but no specific context
-- none: no actionable context OR already suggested recently
+CRITICAL: ONLY suggest if users have CLEAR, EXPLICIT INTENT to get recommendations!
+
+❌ DON'T suggest if:
+- Just talking ABOUT movies/food (e.g. "I like comedies", "What do you think about burgers?")
+- Asking generic opinions (e.g. "Do you like Italian food?")
+- Already discussing details of YOUR previous suggestion (they already have it!)
+- Vague conversation without concrete plans
+
+✅ DO suggest ONLY if:
+- Actively planning to GO somewhere (e.g. "Let's watch a movie tonight", "Where should we eat?")
+- Explicitly ASKING for recommendations (e.g. "Any good restaurants nearby?", "What movies are showing?")
+- Clear decision-making moment (e.g. "Should we go to cinema or restaurant?")
+
+ANTI-SPAM RULES:
+1. If YOU (🤖 AI ASSISTANT) already suggested, DO NOT suggest again
+2. If users ask follow-up questions about YOUR suggestion, they already have it - DO NOT repeat
+3. Only suggest for CLEAR, NEW intent that YOU haven't addressed
+
+CONTEXTS (high confidence required):
+- cinema: ACTIVELY planning to watch a movie (not just discussing movies)
+- restaurant: ACTIVELY looking for a place to eat (not just talking about food)
+- generic: vague planning but clear intent to do something
+- none: no clear intent OR already suggested
 
 Return JSON:
 {{
@@ -106,7 +121,7 @@ Return JSON:
     "reason": "brief explanation"
 }}
 
-BE VERY CONSERVATIVE. Do NOT spam suggestions. Only suggest if truly needed and NOT already suggested.
+BE EXTREMELY CONSERVATIVE. Require HIGH confidence (0.8+) to act. Check YOUR previous suggestions.
 """)
     ])
     
