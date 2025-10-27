@@ -347,6 +347,15 @@ class ConversationViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Stop typing indicator.
+     * Called when user leaves conversation screen to prevent typing from staying active forever.
+     */
+    suspend fun stopTyping() {
+        typingTimeoutJob?.cancel()
+        typingRepo.removeTyping(conversationId)
+    }
+    
     fun send(text: String) {
         viewModelScope.launch {
             val memberIds = uiState.value.members.map { it.id }

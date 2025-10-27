@@ -8,12 +8,17 @@ import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.synapse.ui.theme.SynapseTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class ConversationFragment : Fragment() {
+    
+    private val viewModel: ConversationViewModel by viewModels()
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -72,6 +77,16 @@ class ConversationFragment : Fragment() {
                     )
                 }
             }
+        }
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        
+        // Remove typing indicator when user leaves the conversation screen
+        // This prevents typing indicator from staying active forever if user leaves before timeout
+        lifecycleScope.launch {
+            viewModel.stopTyping()
         }
     }
 }
