@@ -1,6 +1,5 @@
 package com.synapse.ui.conversation.summarize
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -11,8 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
@@ -21,19 +18,17 @@ enum class AIAgentMode {
     ACTION_ITEMS,
     PRIORITY_DETECTION,
     DECISION_TRACKING,
-    CUSTOM,
     FORCE_ERROR  // Dev only: Force backend to throw error
 }
 
 /**
  * Synapse AI Agent Screen
  * 
- * Provides 5 AI capabilities for Remote Team Professionals:
+ * Provides AI capabilities for Remote Team Professionals:
  * 1. Thread Summarization (Rubric Item 1)
  * 2. Action Item Extraction (Rubric Item 2)
  * 3. Priority Detection (Rubric Item 4)
  * 4. Decision Tracking (Rubric Item 5)
- * 5. Custom Instructions (flexible AI interaction)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,15 +39,6 @@ fun SummarizeInputScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedMode by remember { mutableStateOf(AIAgentMode.THREAD_SUMMARIZATION) }
-    var customText by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
-    
-    // Auto-focus TextField when Custom mode is selected
-    LaunchedEffect(selectedMode) {
-        if (selectedMode == AIAgentMode.CUSTOM) {
-            focusRequester.requestFocus()
-        }
-    }
     
     Scaffold(
         topBar = {
@@ -210,37 +196,7 @@ fun SummarizeInputScreen(
                     }
                 }
                 
-                // Option 5: Custom Instructions
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = selectedMode == AIAgentMode.CUSTOM,
-                            onClick = { selectedMode = AIAgentMode.CUSTOM },
-                            role = Role.RadioButton
-                        )
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = selectedMode == AIAgentMode.CUSTOM,
-                        onClick = null
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Custom Instructions",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = "Enter your own instructions for AI analysis",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                
-                // Option 4: Force Error (Dev only - shown if enabled in Dev Settings)
+                // Dev Option: Force Error (shown if enabled in Dev Settings)
                 if (forceAIErrorEnabled) {
                     Row(
                         modifier = Modifier
@@ -273,28 +229,6 @@ fun SummarizeInputScreen(
                     }
                 }
             }
-            
-            // Custom text field (always visible, enabled/disabled based on selection)
-            // Clicking on it when disabled automatically selects Custom mode
-            OutlinedTextField(
-                value = customText,
-                onValueChange = { customText = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .focusRequester(focusRequester)
-                    .then(
-                        if (selectedMode != AIAgentMode.CUSTOM) {
-                            Modifier.clickable { selectedMode = AIAgentMode.CUSTOM }
-                        } else {
-                            Modifier
-                        }
-                    ),
-                label = { Text("Your Instructions") },
-                placeholder = { Text("e.g., Create a timeline, List decisions, Extract key points...") },
-                maxLines = 6,
-                enabled = selectedMode == AIAgentMode.CUSTOM
-            )
             }
             
             // Generate button (fixed at bottom, outside scroll)
@@ -306,7 +240,6 @@ fun SummarizeInputScreen(
                         AIAgentMode.ACTION_ITEMS -> null  // Default action items extraction
                         AIAgentMode.PRIORITY_DETECTION -> null  // Default priority detection
                         AIAgentMode.DECISION_TRACKING -> null  // Default decision tracking
-                        AIAgentMode.CUSTOM -> customText.trim().takeIf { it.isNotEmpty() }
                         AIAgentMode.FORCE_ERROR -> "FORCE_ERROR"  // Special trigger for backend error testing
                     }
                     onGenerate(mode, instructions)
@@ -315,7 +248,6 @@ fun SummarizeInputScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .padding(top = 8.dp, bottom = 8.dp),  // Equal spacing top and bottom
-                enabled = selectedMode != AIAgentMode.CUSTOM || customText.isNotBlank(),
                 contentPadding = PaddingValues(vertical = 16.dp)  // Internal padding for text
             ) {
                 Text(
