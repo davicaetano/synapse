@@ -12,8 +12,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.fragment.findNavController
 import com.synapse.MainActivityViewModel
 import com.synapse.data.presence.PresenceManager
+import com.synapse.data.repository.UserRepository
 import com.synapse.ui.theme.SynapseTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -21,6 +26,11 @@ class InboxFragment : Fragment() {
     
     @Inject
     lateinit var presenceManager: PresenceManager
+    
+    @Inject
+    lateinit var userRepository: UserRepository
+    
+    private var presenceJob: Job? = null
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -66,6 +76,20 @@ class InboxFragment : Fragment() {
         super.onStart()
         // Mark user as online when entering inbox (after login)
         presenceManager.markOnline()
+        
+        // Force UserRepository to start observing presence (triggers reactive flow)
+        presenceJob = CoroutineScope(Dispatchers.IO).launch {
+            userRepository.observeUsersWithPresence().collect {
+                // This collection forces the reactive flow to start
+                // The actual data is used by ViewModels, not here
+            }
+        }
+    }
+    
+    override fun onStop() {
+        super.onStop()
+        // Cancel presence observation
+        presenceJob?.cancel()
     }
 }
 

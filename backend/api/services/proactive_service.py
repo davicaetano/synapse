@@ -102,10 +102,13 @@ CRITICAL: ONLY suggest if users have CLEAR, EXPLICIT INTENT to get recommendatio
 - Explicitly ASKING for recommendations (e.g. "Any good restaurants nearby?", "What movies are showing?")
 - Clear decision-making moment (e.g. "Should we go to cinema or restaurant?")
 
-ANTI-SPAM RULES:
-1. If YOU (🤖 AI ASSISTANT) already suggested, DO NOT suggest again
+ANTI-SPAM RULES (PER CATEGORY):
+1. Check if YOU (🤖 AI ASSISTANT) already suggested the SAME CATEGORY:
+   - Already suggested cinema (🎬)? → DO NOT suggest cinema again
+   - Already suggested restaurant (🍽️)? → DO NOT suggest restaurant again
+   - But you CAN suggest a DIFFERENT category (cinema → restaurant is OK)
 2. If users ask follow-up questions about YOUR suggestion, they already have it - DO NOT repeat
-3. Only suggest for CLEAR, NEW intent that YOU haven't addressed
+3. Only suggest for CLEAR, NEW intent in a category YOU haven't addressed yet
 
 CONTEXTS (high confidence required):
 - cinema: ACTIVELY planning to watch a movie (not just discussing movies)
