@@ -59,8 +59,8 @@ async def detect_priority(
         else:
             priority_text = f"🚨 **Priority Detection** ({len(priority_results)})\n\n"
             
-            # TOP 5 only for speed
-            for i, result in enumerate(priority_results[:5], 1):
+            # TOP 3 only for speed
+            for i, result in enumerate(priority_results[:3], 1):
                 urgency_emoji = {
                     'urgent': '🔴',
                     'high': '🟠',

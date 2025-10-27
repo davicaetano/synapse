@@ -185,7 +185,7 @@ async def detect_priority(messages: List[Message]) -> List[Dict[str, Any]]:
 
 {conversation}
 
-Extract TOP 5 ONLY. For each:
+Extract TOP 3 ONLY. For each:
 - message_text (quoted, max 100 chars)
 - sender_name
 - urgency_level (urgent/high/medium)
