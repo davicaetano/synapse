@@ -35,7 +35,7 @@ async def detect_priority(
         # Fetch messages
         messages = await firebase_service.get_conversation_messages(
             conversation_id=request.conversation_id,
-            max_messages=100  # Analyze recent 100 messages
+            max_messages=50  # Analyze recent 50 messages (optimized for speed)
         )
         
         if not messages:
@@ -53,31 +53,22 @@ async def detect_priority(
         # Calculate processing time
         processing_time = int((time.time() - start_time) * 1000)
         
-        # Format priority messages as text
+        # Format priority messages as text (ULTRA compact)
         if len(priority_results) == 0:
-            priority_text = "🚨 **Priority Detection**\n\nNo high-priority messages found in the last 100 messages."
+            priority_text = "🚨 **Priority Detection**\n\nNo urgent messages found."
         else:
-            priority_text = f"🚨 **Priority Detection**\n\nFound {len(priority_results)} high-priority message(s):\n\n"
+            priority_text = f"🚨 **Priority Detection** ({len(priority_results)})\n\n"
             
-            for i, result in enumerate(priority_results[:10], 1):  # Show top 10
-                msg_id = result['message_id']
-                message = next((m for m in messages if m.id == msg_id), None)
+            # TOP 5 only for speed
+            for i, result in enumerate(priority_results[:5], 1):
+                urgency_emoji = {
+                    'urgent': '🔴',
+                    'high': '🟠',
+                    'medium': '🟡'
+                }.get(result.get('urgency_level', 'medium'), '🟡')
                 
-                if message:
-                    urgency_emoji = {
-                        'urgent': '🔴',
-                        'high': '🟠',
-                        'medium': '🟡',
-                        'low': '🟢'
-                    }.get(result['urgency_level'], '⚪')
-                    
-                    priority_text += f"{i}. {urgency_emoji} **{result['urgency_level'].upper()}** (Score: {result['priority_score']:.2f})\n"
-                    
-                    # Truncate long messages
-                    msg_preview = message.text[:150] + "..." if len(message.text) > 150 else message.text
-                    priority_text += f"   \"{msg_preview}\"\n"
-                    priority_text += f"   👤 {message.sender_name or 'Unknown'}\n"
-                    priority_text += f"   📍 Reasons: {', '.join(result['reasons'])}\n\n"
+                priority_text += f"{i}. {urgency_emoji} \"{result.get('message_text', 'N/A')}\"\n"
+                priority_text += f"   👤 {result.get('sender_name', 'Unknown')} • {result.get('reason', 'urgent')}\n\n"
         
         # Add metadata footer
         if request.dev_summary:

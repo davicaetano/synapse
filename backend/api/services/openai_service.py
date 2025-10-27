@@ -167,50 +167,52 @@ async def semantic_search(query: str, messages: List[Message], max_results: int 
 async def detect_priority(messages: List[Message]) -> List[Dict[str, Any]]:
     """
     Detect urgent/high-priority messages using LangChain
+    OPTIMIZED: Returns message content directly (not just IDs)
     """
+    # Include message content in conversation text
     conversation_text = "\n".join([
-        f"[MSG_ID:{msg.id}] [{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
+        f"[{msg.created_at.strftime('%H:%M')}] {msg.sender_name}: {msg.text}"
         for msg in messages
     ])
     
-    # Create prompt template
+    # OPTIMIZED prompt - returns message text directly
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert at identifying urgent and high-priority messages in team conversations."),
-        ("user", """Identify messages that are:
-- Urgent (ASAP, immediate, today, deadline)
-- Blocking issues
-- Questions that need quick answers
+        ("system", "Identify urgent messages. BE BRIEF."),
+        ("user", """Find urgent messages:
+- "ASAP", "urgent", "deadline", "blocker"
+- Direct questions needing quick answers
 - Critical decisions
-- Important announcements
 
-Conversation:
 {conversation}
 
-For each priority message, provide:
-- message_id
-- priority_score: 0.0 to 1.0 (1.0 = most urgent)
-- urgency_level: low/medium/high/urgent
-- reasons: list of why it's prioritized
+Extract TOP 5 ONLY. For each:
+- message_text (quoted, max 100 chars)
+- sender_name
+- urgency_level (urgent/high/medium)
+- reason (1-2 words)
 
-Respond in JSON format:
+JSON:
 {{
     "priority_messages": [
         {{
-            "message_id": "MSG_ID",
-            "priority_score": 0.9,
+            "message_text": "We need approval by EOD",
+            "sender_name": "Sarah",
             "urgency_level": "urgent",
-            "reasons": ["contains deadline", "blocking issue"]
+            "reason": "deadline"
         }}
     ]
 }}""")
     ])
     
-    # Create chain
-    llm_low_temp = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2)
+    # FAST limits (optimized for speed)
+    llm_low_temp = ChatOpenAI(
+        model="gpt-3.5-turbo", 
+        temperature=0.1,
+        max_tokens=250  # Reduced for faster response
+    )
     parser = JsonOutputParser()
     chain = prompt | llm_low_temp | parser
     
-    # Invoke chain
     result = await chain.ainvoke({"conversation": conversation_text})
     return result.get("priority_messages", [])
 
